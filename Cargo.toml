@@ -39,8 +39,9 @@ thiserror = "1"
 # Secrets
 keyring = "3"
 
-# HTTP (Anthropic streaming later)
-reqwest = { version = "0.12", features = ["json", "stream"] }
+# HTTP (Meta Graph API, Anthropic streaming later)
+reqwest = { version = "0.12", features = ["json", "stream", "blocking", "rustls-tls"] }
+# rustls-tls avoids the openssl-sys native dep on macOS
 
 # Workspace members
 moneyball-core = { path = "crates/moneyball-core" }

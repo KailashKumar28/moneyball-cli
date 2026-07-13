@@ -8,7 +8,11 @@
 pub mod brief;
 pub mod config;
 pub mod error;
+pub mod meta;
+pub mod secrets;
 pub mod snapshot;
+
+pub use meta::{list_ad_accounts, validate_token, AdAccount};
 
 pub use config::{AppConfig, WorkspaceConfig};
 pub use error::{Error, Result};

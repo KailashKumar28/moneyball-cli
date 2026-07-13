@@ -19,7 +19,7 @@ use ratatui::widgets::{Block, Borders, Clear, List, ListItem, Paragraph, Wrap};
 use ratatui::Terminal;
 
 use moneyball_core::brief::{self, ProductRowsAndFeasibility};
-use moneyball_core::{AppConfig, WorkspaceConfig};
+use moneyball_core::{list_ad_accounts, validate_token, AdAccount, AppConfig, WorkspaceConfig};
 
 pub type Tui = Terminal<CrosstermBackend<Stdout>>;
 
@@ -63,6 +63,20 @@ enum View { Setup(SetupState), Brief }
 pub struct SetupState {
     pub step: usize,
     pub workspace_path: String,
+    /// Step 1 (Meta connect): which substep we're on.
+    pub meta_substep: u8,
+    /// Step 1 buffer: token paste / "skip".
+    pub meta_input: String,
+    /// Step 1: discovered ad accounts after token validation.
+    pub meta_discovered: Vec<AdAccount>,
+    /// Step 1: index list (or `all`) the user typed at the select prompt.
+    pub meta_select_input: String,
+    /// Step 1: rename overrides, format `1=Name 2=OtherName`.
+    pub meta_rename_input: String,
+    /// Step 1: final selection (Vec of indices into meta_discovered).
+    pub meta_selected: Vec<usize>,
+    /// Step 1: whether the user pasted a valid token (true) or skipped (false).
+    pub meta_connected: bool,
     /// Step 2 entry buffer: "Name AdAccount" (space- or comma-separated).
     pub product_input: String,
     pub products: Vec<(String, String)>, // (name, ad_account)
@@ -77,6 +91,13 @@ impl SetupState {
         Self {
             step: 0,
             workspace_path: default.display().to_string(),
+            meta_substep: 0,
+            meta_input: String::new(),
+            meta_discovered: Vec::new(),
+            meta_select_input: String::new(),
+            meta_rename_input: String::new(),
+            meta_selected: Vec::new(),
+            meta_connected: false,
             product_input: String::new(),
             products: Vec::new(),
             goals_input: String::new(),
@@ -320,9 +341,10 @@ fn handle_setup_key(app: &mut App, mut state: SetupState, k: KeyEvent) {
 fn insert_setup(s: &mut SetupState, c: char) {
     match s.step {
         0 => { s.workspace_path.push(c); }
-        1 => { s.product_input.push(c); }
-        2 => { s.goals_input.push(c); }
-        3 => { s.target_rpq_input.push(c); }
+        1 => { meta_insert(s, c); }
+        2 => { s.product_input.push(c); }
+        3 => { s.goals_input.push(c); }
+        4 => { s.target_rpq_input.push(c); }
         _ => {}
     }
 }
@@ -330,9 +352,28 @@ fn insert_setup(s: &mut SetupState, c: char) {
 fn backspace_setup(s: &mut SetupState) {
     match s.step {
         0 => { s.workspace_path.pop(); }
-        1 => { s.product_input.pop(); }
-        2 => { s.goals_input.pop(); }
-        3 => { s.target_rpq_input.pop(); }
+        1 => { meta_backspace(s); }
+        2 => { s.product_input.pop(); }
+        3 => { s.goals_input.pop(); }
+        4 => { s.target_rpq_input.pop(); }
+        _ => {}
+    }
+}
+
+fn meta_insert(s: &mut SetupState, c: char) {
+    match s.meta_substep {
+        0 => { s.meta_input.push(c); }
+        1 => { s.meta_select_input.push(c); }
+        2 => { s.meta_rename_input.push(c); }
+        _ => {}
+    }
+}
+
+fn meta_backspace(s: &mut SetupState) {
+    match s.meta_substep {
+        0 => { s.meta_input.pop(); }
+        1 => { s.meta_select_input.pop(); }
+        2 => { s.meta_rename_input.pop(); }
         _ => {}
     }
 }
@@ -343,9 +384,8 @@ fn advance_setup(app: &mut App, s: &mut SetupState) {
         0 => {
             let p = PathBuf::from(s.workspace_path.trim());
             if !p.is_dir() {
-                // Try to create it. Most likely: parent exists, dir doesn't.
                 match std::fs::create_dir_all(&p) {
-                    Ok(()) => {} // created
+                    Ok(()) => {}
                     Err(e) => {
                         s.error = Some(format!("can't create {}: {}", p.display(), e));
                         return;
@@ -356,96 +396,222 @@ fn advance_setup(app: &mut App, s: &mut SetupState) {
             app.cfg.data_root = p;
             s.step = 1;
         }
-        1 => {
-            let raw = s.product_input.trim();
-            if raw.is_empty() {
-                // Blank + Enter advances only if we already have at least one.
-                if s.products.is_empty() {
-                    s.error = Some("add at least one product (try 'demo' to load Fincity example)".into());
-                    return;
-                }
+        1 => { advance_meta(app, s); }
+        2 => { advance_products(s); }
+        3 => { advance_goals(s); }
+        4 => { advance_save(app, s); }
+        _ => {}
+    }
+}
+
+fn advance_meta(app: &mut App, s: &mut SetupState) {
+    match s.meta_substep {
+        // Substep 0: paste token or 'skip'.
+        0 => {
+            let raw = s.meta_input.trim();
+            if raw.is_empty() || raw.eq_ignore_ascii_case("skip") {
+                // Skip Meta entirely. Continue to manual product entry.
+                s.meta_connected = false;
                 s.step = 2;
                 return;
             }
-            if raw.eq_ignore_ascii_case("demo") {
-                // Demo shortcut: load Fincity example products.
-                s.products = DEMO_PRODUCTS.iter()
-                    .map(|(n, a)| (n.to_string(), a.to_string()))
-                    .collect();
-                s.product_input.clear();
-                s.error = None;
+            // Validate token + list ad accounts.
+            if let Err(e) = validate_token(raw) {
+                s.error = Some(format!("token rejected: {}", e));
                 return;
             }
-            // Parse "Name AdAccount" or "Name,AdAccount".
-            let parts: Vec<&str> = raw.split(|c: char| c == ',' || c.is_whitespace())
-                .filter(|p| !p.is_empty())
-                .collect();
-            match parts.as_slice() {
-                [name, acct] => {
-                    if !acct.chars().all(|c| c.is_ascii_digit()) || acct.len() < 6 {
-                        s.error = Some(format!("ad account '{}' should be digits only (15-20 chars)", acct));
+            match list_ad_accounts(raw) {
+                Ok(accounts) => {
+                    if accounts.is_empty() {
+                        s.error = Some("token is valid but no ad accounts found (need ads_read + an ad account assigned to you)".into());
                         return;
                     }
-                    if s.products.iter().any(|(n, _)| n == name) {
-                        s.error = Some(format!("product '{}' already added", name));
+                    // Persist token to keychain immediately; we'll move it out of memory after.
+                    if let Err(e) = moneyball_core::secrets::store_meta_token(raw) {
+                        s.error = Some(format!("token accepted but keychain write failed: {}", e));
                         return;
                     }
-                    s.products.push((name.to_string(), acct.to_string()));
-                    s.product_input.clear();
-                    s.error = None;
+                    s.meta_discovered = accounts;
+                    s.meta_input.clear();
+                    s.meta_substep = 1;
                 }
-                _ => {
-                    s.error = Some(format!("expected 'Name AdAccount' - got '{}'", raw));
+                Err(e) => {
+                    s.error = Some(format!("couldn't list ad accounts: {}", e));
                 }
             }
         }
-        2 => {
-            // Parse goals_input - format "Prod1=10 Prod2=12"
-            // Blank + Enter advances with all products at default goal 10.
-            let raw = s.goals_input.trim();
+        // Substep 1: select accounts (numbers or "all").
+        1 => {
+            let raw = s.meta_select_input.trim();
             if raw.is_empty() {
-                // Defaults to 10 for every product.
-                s.goals_input = s.products.iter()
-                    .map(|(n, _)| format!("{}=10", n))
-                    .collect::<Vec<_>>().join(" ");
-                s.step = 3;
+                s.error = Some("enter 'all' or comma-separated numbers (e.g. 1,3,4)".into());
                 return;
             }
-            let parsed = parse_goals(&s.products, raw);
-            match parsed {
-                Ok(map) => {
-                    s.goals_input = format_goals(&map);
-                    s.step = 3;
+            let n = s.meta_discovered.len();
+            let chosen: Vec<usize> = if raw.eq_ignore_ascii_case("all") {
+                (0..n).collect()
+            } else {
+                let mut out = Vec::new();
+                for part in raw.split(',').map(|p| p.trim()).filter(|p| !p.is_empty()) {
+                    match part.parse::<usize>() {
+                        Ok(i) if i >= 1 && i <= n => out.push(i - 1),
+                        _ => {
+                            s.error = Some(format!("bad index: {} (valid: 1-{})", part, n));
+                            return;
+                        }
+                    }
                 }
-                Err(e) => s.error = Some(e),
-            }
-        }
-        3 => {
-            let rpq: f64 = s.target_rpq_input.trim().parse().unwrap_or(2500.0);
-            // Save config.
-            let products: Vec<_> = s.products.iter().map(|(n, a)| moneyball_core::config::Product {
-                name: n.clone(),
-                ad_account: a.clone(),
-            }).collect();
-            let goals_map = parse_goals(&s.products, &s.goals_input).unwrap_or_default();
-            let cfg = WorkspaceConfig {
-                products,
-                goals: goals_map,
-                target_rs_per_q: rpq,
-                crm: Default::default(),
+                out
             };
-            if let Err(e) = cfg.save(&app.cfg.data_root) {
-                s.error = Some(format!("save failed: {}", e));
+            if chosen.is_empty() {
+                s.error = Some("select at least one account".into());
                 return;
             }
-            // Reload config and switch to brief view.
-            app.cfg.workspace = Some(cfg);
-            app.view = View::Brief;
-            app.load_brief();
-            app.status = Some("setup complete - showing brief".into());
+            s.meta_selected = chosen;
+            s.meta_select_input.clear();
+            s.meta_substep = 2;
+        }
+        // Substep 2: rename overrides (or blank = use account names).
+        2 => {
+            let raw = s.meta_rename_input.trim();
+            // Build overrides from input.
+            let overrides = parse_renames(raw);
+            if let Err(e) = overrides {
+                s.error = Some(e);
+                return;
+            }
+            let overrides = overrides.unwrap_or_default();
+            // Build final products list.
+            let mut new_products: Vec<(String, String)> = Vec::new();
+            for (i, &idx) in s.meta_selected.iter().enumerate() {
+                let acct = &s.meta_discovered[idx];
+                let default_name = if overrides.is_empty() {
+                    acct.name.clone()
+                } else {
+                    acct.name.clone() // base for the index key below
+                };
+                let name = overrides.get(&(idx + 1)).cloned().unwrap_or(default_name);
+                let id = moneyball_core::meta::account_id_for_storage(&acct.id);
+                if new_products.iter().any(|(n, _)| n == &name) {
+                    s.error = Some(format!("duplicate product name '{}'", name));
+                    return;
+                }
+                new_products.push((name, id));
+                let _ = i;
+            }
+            // If user explicitly typed 'all' and used demo, skip auto-fills.
+            s.products = new_products;
+            s.meta_connected = true;
+            s.error = None;
+            s.meta_rename_input.clear();
+            s.step = 3; // skip the manual "add products" step; go to goals.
         }
         _ => {}
     }
+}
+
+fn parse_renames(raw: &str) -> std::result::Result<std::collections::HashMap<usize, String>, String> {
+    let mut out = std::collections::HashMap::new();
+    for part in raw.split_whitespace() {
+        let (idx_s, name) = part.split_once('=').ok_or_else(|| format!("bad rename '{}': expected N=Name", part))?;
+        let idx: usize = idx_s.parse().map_err(|_| format!("bad index '{}'", idx_s))?;
+        if idx < 1 {
+            return Err(format!("index must be >= 1 (got {})", idx));
+        }
+        if name.is_empty() {
+            return Err(format!("empty name at index {}", idx));
+        }
+        out.insert(idx, name.to_string());
+    }
+    Ok(out)
+}
+
+fn advance_products(s: &mut SetupState) {
+    let raw = s.product_input.trim();
+    if raw.is_empty() {
+        if s.products.is_empty() {
+            s.error = Some("add at least one product (try 'demo' to load Fincity example)".into());
+            return;
+        }
+        s.step = 3;
+        return;
+    }
+    if raw.eq_ignore_ascii_case("demo") {
+        s.products = DEMO_PRODUCTS.iter()
+            .map(|(n, a)| (n.to_string(), a.to_string()))
+            .collect();
+        s.product_input.clear();
+        return;
+    }
+    let parts: Vec<&str> = raw.split(|c: char| c == ',' || c.is_whitespace())
+        .filter(|p| !p.is_empty())
+        .collect();
+    match parts.as_slice() {
+        [name, acct] => {
+            if !acct.chars().all(|c| c.is_ascii_digit()) || acct.len() < 6 {
+                s.error = Some(format!("ad account '{}' should be digits only (15-20 chars)", acct));
+                return;
+            }
+            if s.products.iter().any(|(n, _)| n == name) {
+                s.error = Some(format!("product '{}' already added", name));
+                return;
+            }
+            s.products.push((name.to_string(), acct.to_string()));
+            s.product_input.clear();
+        }
+        _ => {
+            s.error = Some(format!("expected 'Name AdAccount' - got '{}'", raw));
+        }
+    }
+}
+
+fn advance_goals(s: &mut SetupState) {
+    let raw = s.goals_input.trim();
+    if raw.is_empty() {
+        s.goals_input = s.products.iter()
+            .map(|(n, _)| format!("{}=10", n))
+            .collect::<Vec<_>>().join(" ");
+        s.step = 4;
+        return;
+    }
+    match parse_goals(&s.products, raw) {
+        Ok(map) => {
+            s.goals_input = format_goals(&map);
+            s.step = 4;
+        }
+        Err(e) => s.error = Some(e),
+    }
+}
+
+fn advance_save(app: &mut App, s: &mut SetupState) {
+    let rpq: f64 = s.target_rpq_input.trim().parse().unwrap_or(2500.0);
+    let products: Vec<_> = s.products.iter().map(|(n, a)| moneyball_core::config::Product {
+        name: n.clone(),
+        ad_account: a.clone(),
+    }).collect();
+    let goals_map = parse_goals(&s.products, &s.goals_input).unwrap_or_default();
+    let cfg = WorkspaceConfig {
+        products,
+        goals: goals_map,
+        target_rs_per_q: rpq,
+        crm: Default::default(),
+    };
+    if let Err(e) = cfg.save(&app.cfg.data_root) {
+        s.error = Some(format!("save failed: {}", e));
+        return;
+    }
+    // If user skipped Meta, scrub any stale token from keychain.
+    if !s.meta_connected {
+        let _ = moneyball_core::secrets::clear_meta_token();
+    }
+    app.cfg.workspace = Some(cfg);
+    app.view = View::Brief;
+    app.load_brief();
+    app.status = Some(if s.meta_connected {
+        "setup complete - showing brief (Meta token in keychain)".into()
+    } else {
+        "setup complete - showing brief (Meta skipped)".into()
+    });
 }
 
 fn parse_goals(products: &[(String, String)], s: &str) -> std::result::Result<std::collections::HashMap<String, f64>, String> {
@@ -500,85 +666,11 @@ fn render_setup(f: &mut ratatui::Frame, area: Rect, s: &SetupState) {
     f.render_widget(header, chunks[0]);
 
     let body = match s.step {
-        0 => Paragraph::new(vec![
-            Line::from(Span::styled("Step 1 of 4: workspace path",
-                Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD))),
-            Line::from(""),
-            Line::from("  This is where moneyball will read snapshots + write ledger/runs."),
-            Line::from("  The directory will be auto-created if it does not exist."),
-            Line::from(""),
-            Line::from(Span::styled(format!("  > {}", s.workspace_path), Style::default().add_modifier(Modifier::BOLD))),
-            Line::from(""),
-            Line::from(Span::styled("  Press Enter to accept. Backspace to edit. Esc to quit.",
-                Style::default().fg(Color::DarkGray))),
-        ]),
-        1 => {
-            let mut lines = vec![
-                Line::from(Span::styled("Step 2 of 4: add your products",
-                    Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD))),
-                Line::from(""),
-                Line::from("  Type: ProductName AdAccountId, then press Enter."),
-                Line::from("  Examples:"),
-                Line::from(Span::styled("    Namma Mane 2087011578504572", Style::default().fg(Color::DarkGray))),
-                Line::from(Span::styled("    My Product,123456789012345", Style::default().fg(Color::DarkGray))),
-                Line::from(""),
-            ];
-            if s.products.is_empty() {
-                lines.push(Line::from(Span::styled("  (no products yet)", Style::default().fg(Color::DarkGray))));
-            } else {
-                lines.push(Line::from(Span::styled(format!("  {} product{} added:",
-                    s.products.len(), if s.products.len() == 1 { "" } else { "s" }),
-                    Style::default().fg(Color::Green))));
-                for (i, (n, a)) in s.products.iter().enumerate() {
-                    lines.push(Line::from(format!("    [{}] {} -> {}", i + 1, n, a)));
-                }
-            }
-            lines.push(Line::from(""));
-            lines.push(Line::from(Span::styled(
-                format!("  > {}", s.product_input),
-                Style::default().add_modifier(Modifier::BOLD))));
-            lines.push(Line::from(""));
-            lines.push(Line::from(Span::styled(
-                "  Type 'demo' to load the Fincity example (4 products).",
-                Style::default().fg(Color::Yellow))));
-            lines.push(Line::from(Span::styled(
-                "  Press Enter on blank line when done adding products.",
-                Style::default().fg(Color::DarkGray))));
-            Paragraph::new(lines)
-        }
-        2 => {
-            let mut lines = vec![
-                Line::from(Span::styled("Step 3 of 4: goals (qualified leads per day)",
-                    Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD))),
-                Line::from(""),
-                Line::from("  Format: ProductName=10 (space-separated). Defaults to 10 if omitted."),
-                Line::from("  Example: Namma Mane=10 Valmark CityVille=15"),
-                Line::from(""),
-            ];
-            for (n, _) in &s.products {
-                lines.push(Line::from(format!("    {} = 10 (default)", n)));
-            }
-            lines.push(Line::from(""));
-            lines.push(Line::from(Span::styled(format!("  > {}", s.goals_input),
-                Style::default().add_modifier(Modifier::BOLD))));
-            lines.push(Line::from(""));
-            lines.push(Line::from(Span::styled(
-                "  Press Enter on blank line to accept all defaults.",
-                Style::default().fg(Color::DarkGray))));
-            Paragraph::new(lines)
-        }
-        3 => Paragraph::new(vec![
-            Line::from(Span::styled("Step 4 of 4: target \u{20B9} per qualified lead",
-                Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD))),
-            Line::from(""),
-            Line::from("  Default 2500. Lower = stricter quality bar."),
-            Line::from(""),
-            Line::from(Span::styled(format!("  > {}", s.target_rpq_input),
-                Style::default().add_modifier(Modifier::BOLD))),
-            Line::from(""),
-            Line::from(Span::styled("  Press Enter to save and load your portfolio.",
-                Style::default().fg(Color::DarkGray))),
-        ]),
+        0 => render_step_workspace(s),
+        1 => render_step_meta(s),
+        2 => render_step_products(s),
+        3 => render_step_goals(s),
+        4 => render_step_target(s),
         _ => Paragraph::new("done"),
     };
     let body = body.block(Block::default().borders(Borders::ALL))
@@ -589,9 +681,162 @@ fn render_setup(f: &mut ratatui::Frame, area: Rect, s: &SetupState) {
     if let Some(e) = &s.error {
         footer_lines.push(Line::from(Span::styled(format!("  ! {}", e), Style::default().fg(Color::Red))));
     }
-    footer_lines.push(Line::from(format!("  step {} of 4 - Enter to continue, Esc to quit", s.step + 1)));
+    let total = 5;
+    footer_lines.push(Line::from(format!("  step {} of {} - Enter to continue, Esc to quit", s.step + 1, total)));
     let footer = Paragraph::new(footer_lines).block(Block::default().borders(Borders::ALL));
     f.render_widget(footer, chunks[2]);
+}
+
+fn styled_title(text: &str) -> Line<'_> {
+    Line::from(Span::styled(text,
+        Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)))
+}
+
+fn render_step_workspace(s: &SetupState) -> Paragraph<'static> {
+    let mut lines = vec![
+        styled_title("Step 1 of 5: workspace path"),
+        Line::from(""),
+        Line::from("  This is where moneyball will read snapshots + write ledger/runs."),
+        Line::from("  The directory will be auto-created if it does not exist."),
+        Line::from(""),
+    ];
+    lines.push(Line::from(Span::styled(format!("  > {}", s.workspace_path),
+        Style::default().add_modifier(Modifier::BOLD))));
+    lines.push(Line::from(""));
+    lines.push(Line::from(Span::styled("  Press Enter to accept. Backspace to edit. Esc to quit.",
+        Style::default().fg(Color::DarkGray))));
+    Paragraph::new(lines)
+}
+
+fn render_step_meta(s: &SetupState) -> Paragraph<'static> {
+    match s.meta_substep {
+        0 => {
+            let mut lines = vec![
+                styled_title("Step 2 of 5: connect to Meta (optional, recommended)"),
+                Line::from(""),
+                Line::from("  Paste a long-lived Meta Marketing API access token"),
+                Line::from("  (the one with ads_read permission; get one at"),
+                Line::from("  developers.facebook.com -> Tools -> Marketing API)."),
+                Line::from(""),
+                Line::from(Span::styled("  Or type 'skip' to enter ad accounts manually.",
+                    Style::default().fg(Color::Yellow))),
+                Line::from(""),
+                Line::from("  Token is saved to macOS Keychain / Linux Secret Service"),
+                Line::from(Span::styled("  via the OS keyring - never written to disk in plaintext.",
+                    Style::default().fg(Color::DarkGray))),
+                Line::from(""),
+            ];
+            lines.push(Line::from(Span::styled(format!("  > {}", s.meta_input),
+                Style::default().add_modifier(Modifier::BOLD))));
+            Paragraph::new(lines)
+        }
+        1 => {
+            let mut lines = vec![
+                styled_title("Found these ad accounts - which to track?"),
+                Line::from(""),
+            ];
+            for (i, a) in s.meta_discovered.iter().enumerate() {
+                let status = match a.account_status {
+                    Some(1) => "ACTIVE",
+                    Some(2) => "DISABLED",
+                    Some(3) => "UNSETTLED",
+                    Some(9) => "PENDING_RISK_REVIEW",
+                    Some(other) => Box::leak(format!("status{}", other).into_boxed_str()),
+                    None => "?",
+                };
+                lines.push(Line::from(format!("  [{}] {} - {} ({})",
+                    i + 1, a.id, a.name, status)));
+            }
+            lines.push(Line::from(""));
+            lines.push(Line::from(Span::styled("  Enter 'all' or comma-separated numbers (e.g. 1,3,4):",
+                Style::default().fg(Color::Yellow))));
+            lines.push(Line::from(Span::styled(format!("  > {}", s.meta_select_input),
+                Style::default().add_modifier(Modifier::BOLD))));
+            Paragraph::new(lines)
+        }
+        2 => {
+            let mut lines = vec![
+                styled_title("Name your products (optional)"),
+                Line::from(""),
+                Line::from("  Defaults: each product uses the account's display name."),
+                Line::from("  To rename, type e.g.  1=BrandName 3=OtherName"),
+                Line::from(Span::styled("  Press Enter on blank line to keep defaults.",
+                    Style::default().fg(Color::Yellow))),
+                Line::from(""),
+            ];
+            for (i, &idx) in s.meta_selected.iter().enumerate() {
+                let a = &s.meta_discovered[idx];
+                lines.push(Line::from(format!("  [{}] {} (default: {})",
+                    i + 1, a.id, a.name)));
+            }
+            lines.push(Line::from(""));
+            lines.push(Line::from(Span::styled(format!("  > {}", s.meta_rename_input),
+                Style::default().add_modifier(Modifier::BOLD))));
+            Paragraph::new(lines)
+        }
+        _ => Paragraph::new("done"),
+    }
+}
+
+fn render_step_products(s: &SetupState) -> Paragraph<'static> {
+    let mut lines = vec![
+        styled_title("Step 3 of 5: confirm your products"),
+        Line::from(""),
+        Line::from("  Add: 'ProductName AdAccountId' then Enter."),
+        Line::from(Span::styled("  Type 'demo' to load the Fincity example (4 products).",
+            Style::default().fg(Color::Yellow))),
+        Line::from(Span::styled("  Press Enter on blank line when done adding products.",
+            Style::default().fg(Color::DarkGray))),
+        Line::from(""),
+    ];
+    if s.products.is_empty() {
+        lines.push(Line::from(Span::styled("  (no products yet)", Style::default().fg(Color::DarkGray))));
+    } else {
+        lines.push(Line::from(Span::styled(format!("  {} product{} added:",
+            s.products.len(), if s.products.len() == 1 { "" } else { "s" }),
+            Style::default().fg(Color::Green))));
+        for (i, (n, a)) in s.products.iter().enumerate() {
+            lines.push(Line::from(format!("    [{}] {} -> {}", i + 1, n, a)));
+        }
+    }
+    lines.push(Line::from(""));
+    lines.push(Line::from(Span::styled(format!("  > {}", s.product_input),
+        Style::default().add_modifier(Modifier::BOLD))));
+    Paragraph::new(lines)
+}
+
+fn render_step_goals(s: &SetupState) -> Paragraph<'static> {
+    let mut lines = vec![
+        styled_title("Step 4 of 5: goals (qualified leads per day)"),
+        Line::from(""),
+        Line::from("  Format: ProductName=10 (space-separated). Defaults to 10 if omitted."),
+        Line::from("  Example: Namma Mane=10 Valmark CityVille=15"),
+        Line::from(""),
+    ];
+    for (n, _) in &s.products {
+        lines.push(Line::from(format!("    {} = 10 (default)", n)));
+    }
+    lines.push(Line::from(""));
+    lines.push(Line::from(Span::styled(format!("  > {}", s.goals_input),
+        Style::default().add_modifier(Modifier::BOLD))));
+    lines.push(Line::from(Span::styled("  Press Enter on blank line to accept all defaults.",
+        Style::default().fg(Color::DarkGray))));
+    Paragraph::new(lines)
+}
+
+fn render_step_target(s: &SetupState) -> Paragraph<'static> {
+    let lines = vec![
+        styled_title("Step 5 of 5: target \u{20B9} per qualified lead"),
+        Line::from(""),
+        Line::from("  Default 2500. Lower = stricter quality bar."),
+        Line::from(""),
+        Line::from(Span::styled(format!("  > {}", s.target_rpq_input),
+            Style::default().add_modifier(Modifier::BOLD))),
+        Line::from(""),
+        Line::from(Span::styled("  Press Enter to save and load your portfolio.",
+            Style::default().fg(Color::DarkGray))),
+    ];
+    Paragraph::new(lines)
 }
 
 fn render_brief(f: &mut ratatui::Frame, area: Rect, app: &App) {

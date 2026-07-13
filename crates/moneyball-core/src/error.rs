@@ -28,4 +28,10 @@ pub enum Error {
 
     #[error("config: {0}")]
     Config(String),
+
+    #[error("meta api: {0}")]
+    Meta(String),
+
+    #[error("secrets: {0}")]
+    Secrets(String),
 }
