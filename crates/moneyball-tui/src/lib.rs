@@ -1,6 +1,8 @@
 //! moneyball-tui - ratatui REPL with brief view, slash-commands,
 //! completion, and first-run setup wizard.
 
+pub mod widgets;
+
 use std::io::{self, Stdout};
 use std::path::PathBuf;
 use std::time::{Duration, Instant};
@@ -139,6 +141,28 @@ impl App {
 
     pub fn force_setup_for_test(&mut self, state: SetupState) {
         self.view = View::Setup(state);
+    }
+
+    /// Test-only: route the app to the brief view with no brief loaded,
+    /// so the welcome screen (configured but no data) renders.
+    pub fn force_welcome_for_test(&mut self) {
+        self.view = View::Brief;
+        self.brief = None;
+        self.snap_date = None;
+    }
+
+    /// Test-only: synthesize a workspace config so the welcome screen
+    /// can render the configured-products list. Replaces whatever `cfg`
+    /// had with a fresh in-memory WorkspaceConfig (not saved to disk).
+    pub fn force_workspace_for_test(&mut self, products: Vec<(String, String)>) {
+        use moneyball_core::config::{Product, WorkspaceConfig};
+        let wc = WorkspaceConfig {
+            products: products.into_iter().map(|(n, a)| Product { name: n, ad_account: a }).collect(),
+            goals: Default::default(),
+            target_rs_per_q: None,
+            crm: Default::default(),
+        };
+        self.cfg.workspace = Some(wc);
     }
 
     pub fn render_to_string(&self, width: u16, height: u16) -> String {
@@ -617,25 +641,23 @@ fn advance_products(s: &mut SetupState) {
     }
 }
 
-fn advance_goals(s: &mut SetupState) {
+/// Parse the goals step. Returns false if validation fails; sets s.error.
+fn advance_goals(s: &mut SetupState) -> bool {
     let raw = s.goals_input.trim();
     if raw.is_empty() {
+        // Blank input -> defaults of 10 for every product.
         s.goals_input = s.products.iter()
             .map(|(n, _)| format!("{}=10", n))
             .collect::<Vec<_>>().join(" ");
-        s.step = 4;
-        return;
     }
-    match parse_goals(&s.products, raw) {
-        Ok(map) => {
-            s.goals_input = format_goals(&map);
-            s.step = 4;
-        }
-        Err(e) => s.error = Some(e),
+    match parse_goals(&s.products, &s.goals_input) {
+        Ok(_) => true,
+        Err(e) => { s.error = Some(e); false }
     }
 }
 
 fn advance_save(app: &mut App, s: &mut SetupState) {
+    if !advance_goals(s) { return; }  // validation failed - keep user on goals step
     let products: Vec<_> = s.products.iter().map(|(n, a)| moneyball_core::config::Product {
         name: n.clone(),
         ad_account: a.clone(),
@@ -689,35 +711,60 @@ fn parse_goals(products: &[(String, String)], s: &str) -> std::result::Result<st
     Ok(out)
 }
 
-fn format_goals(m: &std::collections::HashMap<String, f64>) -> String {
-    m.iter().map(|(k, v)| format!("{}={}", k, *v as i64)).collect::<Vec<_>>().join(" ")
-}
+
 
 // ---------- render ----------
 
 fn render(f: &mut ratatui::Frame, app: &App) {
     let area = f.area();
+    // Shared 4-band layout: logo + context + body + (commands+input).
+    // Each view fills in the body band differently.
+    let outer = Layout::default()
+        .direction(Direction::Vertical)
+        .margin(1)
+        .constraints([
+            Constraint::Length(2),    // logo (2 lines: brand line + spacer)
+            Constraint::Length(1),    // context bar
+            Constraint::Min(6),       // body
+        ])
+        .split(area);
+
+    // Logo + context bar (identical in both views).
+    f.render_widget(
+        Paragraph::new(crate::widgets::logo()),
+        outer[0],
+    );
+    let status = if app.brief.is_some() {
+        crate::widgets::Status::Ready
+    } else if app.cfg.has_workspace() {
+        crate::widgets::Status::NoData
+    } else {
+        crate::widgets::Status::Idle
+    };
+    let ctx_line = crate::widgets::context_line(
+        &app.cfg.data_root.display().to_string(),
+        app.snap_date.as_deref(),
+        status,
+    );
+    f.render_widget(Paragraph::new(ctx_line), outer[1]);
+
+    // Body band: view-specific.
     match &app.view {
-        View::Setup(s) => render_setup(f, area, s),
-        View::Brief => render_brief(f, area, app),
+        View::Setup(s) => render_setup(f, outer[2], s),
+        View::Brief => render_brief(f, outer[2], app),
     }
 }
 
 fn render_setup(f: &mut ratatui::Frame, area: Rect, s: &SetupState) {
+    // Body only - logo + context bar are rendered by the shared `render`.
+    // Setup has no commands panel + input bar (wizard blocks commands).
     let chunks = Layout::default()
         .direction(Direction::Vertical)
-        .margin(1)
         .constraints([
-            Constraint::Length(3),
             Constraint::Min(10),
-            Constraint::Length(3),
+            Constraint::Length(3),     // footer: error + step counter
         ])
         .split(area);
-    let header = Paragraph::new(Line::from(vec![
-        Span::styled("moneyball ", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)),
-        Span::raw("- first-time setup"),
-    ])).block(Block::default().borders(Borders::ALL));
-    f.render_widget(header, chunks[0]);
 
     let body = match s.step {
         0 => render_step_workspace(s),
@@ -726,18 +773,31 @@ fn render_setup(f: &mut ratatui::Frame, area: Rect, s: &SetupState) {
         3 => render_step_goals(s),
         _ => Paragraph::new("done"),
     };
-    let body = body.block(Block::default().borders(Borders::ALL))
+    let body = body.block(Block::default().borders(Borders::ALL).title(step_title(s)))
         .wrap(Wrap { trim: false });
-    f.render_widget(body, chunks[1]);
+    f.render_widget(body, chunks[0]);
 
     let mut footer_lines = vec![];
     if let Some(e) = &s.error {
         footer_lines.push(Line::from(Span::styled(format!("  ! {}", e), Style::default().fg(Color::Red))));
     }
     let total = 4;
-    footer_lines.push(Line::from(format!("  step {} of {} - Enter to continue, Esc to quit", s.step + 1, total)));
+    footer_lines.push(Line::from(Span::styled(
+        format!("  step {} of {} - Enter to continue, Esc to quit", s.step + 1, total),
+        Style::default().fg(Color::DarkGray),
+    )));
     let footer = Paragraph::new(footer_lines).block(Block::default().borders(Borders::ALL));
-    f.render_widget(footer, chunks[2]);
+    f.render_widget(footer, chunks[1]);
+}
+
+fn step_title(s: &SetupState) -> String {
+    match s.step {
+        0 => "moneyball - first-time setup ".into(),
+        1 => "moneyball - connect Meta (recommended) ".into(),
+        2 => "moneyball - confirm products ".into(),
+        3 => "moneyball - goals per product ".into(),
+        _ => "moneyball ".into(),
+    }
 }
 
 fn styled_title(text: &str) -> Line<'static> {
@@ -911,6 +971,7 @@ fn render_step_goals(s: &SetupState) -> Paragraph<'static> {
 }
 
 fn render_brief(f: &mut ratatui::Frame, area: Rect, app: &App) {
+    // Brief fills: body (table OR welcome) + commands + input. Logo + context live in `render`.
     let chunks = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
@@ -920,7 +981,7 @@ fn render_brief(f: &mut ratatui::Frame, area: Rect, app: &App) {
         ])
         .split(area);
 
-    // Body: brief table + feasibility, or status message
+    // Body: brief table + feasibility, OR the welcome screen.
     if let Some(b) = &app.brief {
         let mut lines: Vec<Line> = vec![
             Line::from(Span::styled(
@@ -968,8 +1029,14 @@ fn render_brief(f: &mut ratatui::Frame, area: Rect, app: &App) {
         let body = Paragraph::new(lines).block(Block::default().borders(Borders::ALL));
         f.render_widget(body, chunks[0]);
     } else {
-        let msg = app.status.clone().unwrap_or_else(|| "no brief loaded yet - press /brief to try loading".into());
-        let body = Paragraph::new(msg).block(Block::default().borders(Borders::ALL).title("status"));
+        // Welcome screen for "configured but no snapshot data yet" state.
+        let products: Vec<String> = app.cfg.workspace.as_ref()
+            .map(|w| w.products.iter().map(|p| p.name.clone()).collect())
+            .unwrap_or_default();
+        let lines = crate::widgets::welcome_text(&products);
+        let body = Paragraph::new(lines)
+            .block(Block::default().borders(Borders::ALL).title("welcome"))
+            .wrap(Wrap { trim: false });
         f.render_widget(body, chunks[0]);
     }
 
