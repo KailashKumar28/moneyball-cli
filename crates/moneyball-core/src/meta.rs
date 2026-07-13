@@ -13,7 +13,7 @@ const META_GRAPH_BASE: &str = "https://graph.facebook.com";
 // version configured in the user's Meta developer app, so we hit the base
 // URL with no version prefix.
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, PartialEq)]
 pub struct AdAccount {
     pub id: String,
     pub name: String,

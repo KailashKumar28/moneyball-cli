@@ -56,10 +56,10 @@ fn completions(prefix: &str) -> Vec<&'static str> {
 
 // ---------- app state ----------
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 enum View { Setup(SetupState), Brief }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct SetupState {
     pub step: usize,
     pub workspace_path: String,
@@ -86,7 +86,6 @@ pub struct SetupState {
     pub products: Vec<(String, String)>, // (name, ad_account)
     /// Step 3 entry buffer: "Prod1=10 Prod2=12".
     pub goals_input: String,
-    pub target_rpq_input: String,
     pub error: Option<String>,
 }
 
@@ -107,7 +106,6 @@ impl SetupState {
             product_input: String::new(),
             products: Vec::new(),
             goals_input: String::new(),
-            target_rpq_input: "2500".into(),
             error: None,
         }
     }
@@ -346,7 +344,10 @@ fn handle_setup_key(app: &mut App, mut state: SetupState, k: KeyEvent) {
         KeyCode::Char(c) => { insert_setup(&mut state, c); }
         _ => {}
     }
-    app.view = View::Setup(state);
+    // advance_save may have transitioned us out to View::Brief. Don't clobber that.
+    if app.view != View::Brief {
+        app.view = View::Setup(state);
+    }
 }
 
 /// Keyboard handler for the multi-account selection list (step 1 substep 1).
@@ -407,7 +408,6 @@ fn insert_setup(s: &mut SetupState, c: char) {
         1 => { meta_insert(s, c); }
         2 => { s.product_input.push(c); }
         3 => { s.goals_input.push(c); }
-        4 => { s.target_rpq_input.push(c); }
         _ => {}
     }
 }
@@ -418,7 +418,6 @@ fn backspace_setup(s: &mut SetupState) {
         1 => { meta_backspace(s); }
         2 => { s.product_input.pop(); }
         3 => { s.goals_input.pop(); }
-        4 => { s.target_rpq_input.pop(); }
         _ => {}
     }
 }
@@ -446,27 +445,28 @@ fn meta_backspace(s: &mut SetupState) {
 fn advance_setup(app: &mut App, s: &mut SetupState) {
     s.error = None;
     match s.step {
-        0 => {
-            let p = PathBuf::from(s.workspace_path.trim());
-            if !p.is_dir() {
-                match std::fs::create_dir_all(&p) {
-                    Ok(()) => {}
-                    Err(e) => {
-                        s.error = Some(format!("can't create {}: {}", p.display(), e));
-                        return;
-                    }
-                }
-            }
-            std::fs::create_dir_all(p.join("moneyball")).ok();
-            app.cfg.data_root = p;
-            s.step = 1;
-        }
-        1 => { advance_meta(app, s); }
-        2 => { advance_products(s); }
-        3 => { advance_goals(s); }
-        4 => { advance_save(app, s); }
+        0 => advance_workspace(app, s),
+        1 => advance_meta(app, s),
+        2 => advance_products(s),
+        3 => advance_save(app, s),  // step 3 (goals) is the final step now
         _ => {}
     }
+}
+
+fn advance_workspace(app: &mut App, s: &mut SetupState) {
+    let p = PathBuf::from(s.workspace_path.trim());
+    if !p.is_dir() {
+        match std::fs::create_dir_all(&p) {
+            Ok(()) => {}
+            Err(e) => {
+                s.error = Some(format!("can't create {}: {}", p.display(), e));
+                return;
+            }
+        }
+    }
+    std::fs::create_dir_all(p.join("moneyball")).ok();
+    app.cfg.data_root = p;
+    s.step = 1;
 }
 
 fn advance_meta(app: &mut App, s: &mut SetupState) {
@@ -636,16 +636,18 @@ fn advance_goals(s: &mut SetupState) {
 }
 
 fn advance_save(app: &mut App, s: &mut SetupState) {
-    let rpq: f64 = s.target_rpq_input.trim().parse().unwrap_or(2500.0);
     let products: Vec<_> = s.products.iter().map(|(n, a)| moneyball_core::config::Product {
         name: n.clone(),
         ad_account: a.clone(),
     }).collect();
     let goals_map = parse_goals(&s.products, &s.goals_input).unwrap_or_default();
+    // target_rs_per_q is intentionally NOT asked during setup - it's a
+    // derived/observed metric per product, not a hardcoded universal value.
+    // Stored as None; the advisor derives it from observed performance.
     let cfg = WorkspaceConfig {
         products,
         goals: goals_map,
-        target_rs_per_q: rpq,
+        target_rs_per_q: None,
         crm: Default::default(),
     };
     if let Err(e) = cfg.save(&app.cfg.data_root) {
@@ -722,7 +724,6 @@ fn render_setup(f: &mut ratatui::Frame, area: Rect, s: &SetupState) {
         1 => render_step_meta(s),
         2 => render_step_products(s),
         3 => render_step_goals(s),
-        4 => render_step_target(s),
         _ => Paragraph::new("done"),
     };
     let body = body.block(Block::default().borders(Borders::ALL))
@@ -733,7 +734,7 @@ fn render_setup(f: &mut ratatui::Frame, area: Rect, s: &SetupState) {
     if let Some(e) = &s.error {
         footer_lines.push(Line::from(Span::styled(format!("  ! {}", e), Style::default().fg(Color::Red))));
     }
-    let total = 5;
+    let total = 4;
     footer_lines.push(Line::from(format!("  step {} of {} - Enter to continue, Esc to quit", s.step + 1, total)));
     let footer = Paragraph::new(footer_lines).block(Block::default().borders(Borders::ALL));
     f.render_widget(footer, chunks[2]);
@@ -754,7 +755,7 @@ fn prompt_line(value: &str) -> Line<'static> {
 
 fn render_step_workspace(s: &SetupState) -> Paragraph<'static> {
     let mut lines = vec![
-        styled_title("Step 1 of 5: workspace path"),
+        styled_title("Step 1 of 4: workspace path"),
         Line::from(""),
         Line::from("  This is where moneyball will read snapshots + write ledger/runs."),
         Line::from("  The directory will be auto-created if it does not exist."),
@@ -773,7 +774,7 @@ fn render_step_meta(s: &SetupState) -> Paragraph<'static> {
     match s.meta_substep {
         0 => {
             let mut lines = vec![
-                styled_title("Step 2 of 5: connect to Meta (optional, recommended)"),
+                styled_title("Step 2 of 4: connect to Meta (optional, recommended)"),
                 Line::from(""),
                 Line::from("  Paste a long-lived Meta Marketing API access token"),
                 Line::from("  (the one with ads_read permission; get one at"),
@@ -797,7 +798,7 @@ fn render_step_meta(s: &SetupState) -> Paragraph<'static> {
             let n = s.meta_discovered.len();
             let selected = s.meta_selections.iter().filter(|&&b| b).count();
             let mut lines = vec![
-                styled_title(&format!("Step 2 of 5: select ad accounts ({} of {} chosen)",
+                styled_title(&format!("Step 2 of 4: select ad accounts ({} of {} chosen)",
                     selected, n)),
                 Line::from(""),
                 Line::from(Span::styled(
@@ -867,7 +868,7 @@ fn render_step_meta(s: &SetupState) -> Paragraph<'static> {
 
 fn render_step_products(s: &SetupState) -> Paragraph<'static> {
     let mut lines = vec![
-        styled_title("Step 3 of 5: confirm your products"),
+        styled_title("Step 3 of 4: confirm your products"),
         Line::from(""),
         Line::from("  Add: 'ProductName AdAccountId' then Enter."),
         Line::from(Span::styled("  Type 'demo' to load the Fincity example (4 products).",
@@ -893,7 +894,7 @@ fn render_step_products(s: &SetupState) -> Paragraph<'static> {
 
 fn render_step_goals(s: &SetupState) -> Paragraph<'static> {
     let mut lines = vec![
-        styled_title("Step 4 of 5: goals (qualified leads per day)"),
+        styled_title("Step 4 of 4: goals (qualified leads per day)"),
         Line::from(""),
         Line::from("  Format: ProductName=10 (space-separated). Defaults to 10 if omitted."),
         Line::from("  Example: Namma Mane=10 Valmark CityVille=15"),
@@ -904,22 +905,8 @@ fn render_step_goals(s: &SetupState) -> Paragraph<'static> {
     }
     lines.push(Line::from(""));
     lines.push(prompt_line(&s.goals_input));
-    lines.push(Line::from(Span::styled("  Press Enter on blank line to accept all defaults.",
+    lines.push(Line::from(Span::styled("  Press Enter on blank line to accept all defaults, then save.",
         Style::default().fg(Color::DarkGray))));
-    Paragraph::new(lines)
-}
-
-fn render_step_target(s: &SetupState) -> Paragraph<'static> {
-    let lines = vec![
-        styled_title("Step 5 of 5: target \u{20B9} per qualified lead"),
-        Line::from(""),
-        Line::from("  Default 2500. Lower = stricter quality bar."),
-        Line::from(""),
-        prompt_line(&s.target_rpq_input),
-        Line::from(""),
-        Line::from(Span::styled("  Press Enter to save and load your portfolio.",
-            Style::default().fg(Color::DarkGray))),
-    ];
     Paragraph::new(lines)
 }
 

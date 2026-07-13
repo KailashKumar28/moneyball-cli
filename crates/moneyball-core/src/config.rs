@@ -54,13 +54,15 @@ pub struct WorkspaceConfig {
     pub products: Vec<Product>,
     #[serde(default)]
     pub goals: std::collections::HashMap<String, f64>,
-    #[serde(default = "default_target_rpq")]
-    pub target_rs_per_q: f64,
+    /// Target ₹ per qualified lead per product. OPTIONAL - left unset by the
+    /// setup wizard. The advisor should derive this from observed performance
+    /// per product (industry varies wildly: ~₹100 e-commerce, ~₹2,500 real-estate,
+    /// far more for B2B). Tunable later via /goal propose or direct edit.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub target_rs_per_q: Option<f64>,
     #[serde(default)]
     pub crm: CrmConfig,
 }
-
-fn default_target_rpq() -> f64 { 2500.0 }
 
 impl WorkspaceConfig {
     /// Load from `<data_root>/moneyball/config.json`.

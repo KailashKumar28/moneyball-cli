@@ -19,16 +19,22 @@ thin ratatui front-end; `moneyball` binary = `clap` dispatcher. Same code
 path; TUI subscribes to typed event deltas. Only writes: `ledger.jsonl` and
 `runs/<date>/`. `MB_AGENT=1` = agent mode. Tests = `cargo test`, hermetic.
 
-## First-run wizard
-1. Workspace - `<cwd>/moneyball-data` default, auto-create on Enter. 2. Add
-products - `Name AdAccount` Enter, or `demo` for Fincity, blank to finish. 3.
-Goals per product - blank Enter accepts defaults of 10. 4. Target Rs/qualified
-- default 2500, blank accepts.
+## First-run wizard (4 steps)
+1. Workspace path - `<cwd>/moneyball-data` default, auto-create on Enter.
+2. Connect Meta (optional, recommended) - paste long-lived Marketing API
+   token or `skip`. Multi-select checkboxes: Up/Down/PgUp/PgDn/Home/End to
+   move, Space=toggle, `a`=all/none, Enter=confirm. Optional rename step
+   after. Token saved to OS keychain via `keyring` (macOS Keychain / Linux
+   Secret Service).
+3. Confirm products - auto-filled if Meta connected; `Name AdAccount` or
+   `demo` to add manually.
+4. Goals per product - blank Enter accepts defaults of 10.
 
-**Next:** insert "Connect Meta" step - paste a long-lived Marketing API token,
-`GET /me/adaccounts` validates + lists, user picks accounts, token saved to
-OS keychain via `keyring`. **Optional** (skip keeps manual entry). OAuth browser
-flow is future - needs a registered Meta App.
+**Removed:** the `target_rs_per_q` setup step. That value is per-product and
+per-industry (~₹100 e-commerce, ~₹2,500 real-estate, higher for B2B). The
+advisor should derive it from observed performance, not pin it in setup.
+Config field exists but stays `None` after setup; tunable later via
+`/goal propose` or direct JSON edit.
 
 ## Code style (Rust)
 - Snapshot numeric fields are `String` (Meta returns strings); use `parse_f64`/`parse_u64` helpers in `AdsDailyRow`.

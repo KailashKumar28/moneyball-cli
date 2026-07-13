@@ -61,7 +61,6 @@ pub fn compute(snap: &Snapshot, cfg: &AppConfig, history: &[HistoryRow]) -> Prod
     let mut rows = Vec::new();
     let mut best_rpq: Option<u64> = None;
     let workspace = cfg.workspace.as_ref().expect("brief called without workspace");
-    let target_rpq = workspace.target_rs_per_q;
     for prod in &workspace.products {
         let r = compute_product(
             prod.name.as_str(),
@@ -82,7 +81,6 @@ pub fn compute(snap: &Snapshot, cfg: &AppConfig, history: &[HistoryRow]) -> Prod
     let feasibility = compute_feasibility(&rows, cfg, best_rpq);
     let trend_rows = trend_rows_for(history, &rows);
     apply_trends(&mut rows, trend_rows);
-    let _ = target_rpq;
 
     ProductRowsAndFeasibility { rows, feasibility }
 }

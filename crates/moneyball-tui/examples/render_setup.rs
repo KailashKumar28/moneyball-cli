@@ -67,7 +67,7 @@ fn main() {
         s.goals_input = "".into();
     }
     if step >= 4 {
-        s.target_rpq_input = "2500".into();
+        // step 4 (target) removed; now only 4 steps (workspace, meta, products, goals)
     }
     app.force_setup_for_test(s);
     print!("{}", app.render_to_string(90, 26));
