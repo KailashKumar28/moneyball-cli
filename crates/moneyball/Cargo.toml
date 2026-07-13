@@ -1,0 +1,18 @@
+[package]
+name = "moneyball"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+
+[[bin]]
+name = "moneyball"
+path = "src/main.rs"
+
+[dependencies]
+moneyball-core.workspace = true
+moneyball-tui.workspace = true
+clap.workspace = true
+tokio.workspace = true
+anyhow.workspace = true
