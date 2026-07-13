@@ -24,36 +24,35 @@ fn main() {
 
     // Pre-populate state based on step.
     if step == 1 && substep >= 1 {
-        s.meta_discovered = vec![
-            AdAccount {
-                id: "act_2087011578504572".into(),
-                name: "Namma Mane - Brand".into(),
-                account_status: Some(1),
+        // Generate 26 dummy ad accounts (matching the user's real discovery).
+        s.meta_discovered = (1..=26).map(|i| AdAccount {
+            id: format!("act_{:016}", 10000000000000000i64 + (i as i64) * 100000000),
+            name: match i {
+                1 => "Lake and Bloom - Prepaid".into(),
+                2 => "Fincity Official".into(),
+                3 => "Fincity Akash".into(),
+                4 => "New Account 3".into(),
+                5 => "Akash Gupta".into(),
+                6 => "Purva - Prepaid".into(),
+                7 => "Fincity FB AdRoll".into(),
+                n if n <= 18 => format!("Fincity Account #{}", n),
+                n => format!("Old Account {}", n),
             },
-            AdAccount {
-                id: "act_852565919728055".into(),
-                name: "Valmark CityVille".into(),
-                account_status: Some(1),
-            },
-            AdAccount {
-                id: "act_1043714050577651".into(),
-                name: "Purva Sparkling Springs".into(),
-                account_status: Some(1),
-            },
-            AdAccount {
-                id: "act_405885579167395".into(),
-                name: "Primus by Fincity".into(),
-                account_status: Some(1),
-            },
-            AdAccount {
-                id: "act_999999999999999".into(),
-                name: "Old Test Account".into(),
-                account_status: Some(2),
-            },
-        ];
+            account_status: Some(if i == 7 || i == 17 { 2 } else { 1 }),
+        }).collect();
+        s.meta_selections = vec![false; s.meta_discovered.len()];
+        s.meta_highlight = 0;
+        s.meta_scroll = 0;
         if substep >= 2 {
-            s.meta_selected = vec![0, 1, 2, 3];
-            s.meta_rename_input = "1=Namma Mane 2=Valmark CityVille 3=Purva Springles 4=Primus".into();
+            // Pre-confirm selection so the rename view shows what the user picked.
+            let picks: Vec<usize> = vec![18, 19, 20, 23, 25];
+            for (i, sel) in s.meta_selections.iter_mut().enumerate() {
+                *sel = picks.contains(&i);
+            }
+            s.meta_highlight = 25;
+            s.meta_scroll = 14;
+            s.meta_selected = picks;
+            s.meta_rename_input = "1=Namma Mane 2=Valmark 3=Purva 4=Primus".into();
         }
     }
     if step >= 2 {

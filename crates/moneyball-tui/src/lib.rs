@@ -69,9 +69,13 @@ pub struct SetupState {
     pub meta_input: String,
     /// Step 1: discovered ad accounts after token validation.
     pub meta_discovered: Vec<AdAccount>,
-    /// Step 1: index list (or `all`) the user typed at the select prompt.
-    pub meta_select_input: String,
-    /// Step 1: rename overrides, format `1=Name 2=OtherName`.
+    /// Step 1 substep 1: per-account checkbox state.
+    pub meta_selections: Vec<bool>,
+    /// Step 1 substep 1: cursor row (0-based into meta_discovered).
+    pub meta_highlight: usize,
+    /// Step 1 substep 1: first visible row (scroll).
+    pub meta_scroll: usize,
+    /// Step 1 substep 2: rename overrides, format `1=Name 2=OtherName`.
     pub meta_rename_input: String,
     /// Step 1: final selection (Vec of indices into meta_discovered).
     pub meta_selected: Vec<usize>,
@@ -94,7 +98,9 @@ impl SetupState {
             meta_substep: 0,
             meta_input: String::new(),
             meta_discovered: Vec::new(),
-            meta_select_input: String::new(),
+            meta_selections: Vec::new(),
+            meta_highlight: 0,
+            meta_scroll: 0,
             meta_rename_input: String::new(),
             meta_selected: Vec::new(),
             meta_connected: false,
@@ -327,6 +333,12 @@ fn submit(app: &mut App) {
 // ---------- setup-wizard keys ----------
 
 fn handle_setup_key(app: &mut App, mut state: SetupState, k: KeyEvent) {
+    // Substep 1 of step 1 is a list-selection mode with its own keymap.
+    if state.step == 1 && state.meta_substep == 1 {
+        handle_select_keys(&mut state, k);
+        app.view = View::Setup(state);
+        return;
+    }
     match k.code {
         KeyCode::Esc => { app.quit = true; }
         KeyCode::Enter => { advance_setup(app, &mut state); }
@@ -334,8 +346,59 @@ fn handle_setup_key(app: &mut App, mut state: SetupState, k: KeyEvent) {
         KeyCode::Char(c) => { insert_setup(&mut state, c); }
         _ => {}
     }
-    // Keep view in sync.
     app.view = View::Setup(state);
+}
+
+/// Keyboard handler for the multi-account selection list (step 1 substep 1).
+fn handle_select_keys(s: &mut SetupState, k: KeyEvent) {
+    let n = s.meta_discovered.len();
+    if n == 0 { return; }
+    // Visible rows must match the renderer's visible_rows constant below.
+    const VISIBLE_ROWS: usize = 12;
+    match k.code {
+        KeyCode::Up => {
+            if s.meta_highlight > 0 {
+                s.meta_highlight -= 1;
+                if s.meta_highlight < s.meta_scroll { s.meta_scroll = s.meta_highlight; }
+            }
+        }
+        KeyCode::Down => {
+            if s.meta_highlight + 1 < n {
+                s.meta_highlight += 1;
+                if s.meta_highlight >= s.meta_scroll + VISIBLE_ROWS {
+                    s.meta_scroll = s.meta_highlight + 1 - VISIBLE_ROWS;
+                }
+            }
+        }
+        KeyCode::PageUp => {
+            s.meta_highlight = s.meta_highlight.saturating_sub(VISIBLE_ROWS);
+            s.meta_scroll = s.meta_scroll.saturating_sub(VISIBLE_ROWS);
+        }
+        KeyCode::PageDown => {
+            s.meta_highlight = (s.meta_highlight + VISIBLE_ROWS).min(n - 1);
+            s.meta_scroll = (s.meta_highlight + 1).saturating_sub(VISIBLE_ROWS);
+        }
+        KeyCode::Home => { s.meta_highlight = 0; s.meta_scroll = 0; }
+        KeyCode::End => { s.meta_highlight = n - 1; s.meta_scroll = n.saturating_sub(VISIBLE_ROWS); }
+        KeyCode::Char(' ') => {
+            s.meta_selections[s.meta_highlight] = !s.meta_selections[s.meta_highlight];
+        }
+        KeyCode::Char('a') | KeyCode::Char('A') => {
+            let any = s.meta_selections.iter().any(|&b| b);
+            for sel in s.meta_selections.iter_mut() { *sel = !any; }
+        }
+        KeyCode::Enter => {
+            let chosen: Vec<usize> = (0..n).filter(|&i| s.meta_selections[i]).collect();
+            if chosen.is_empty() {
+                s.error = Some("select at least one account (Space to toggle, 'a' for all)".into());
+                return;
+            }
+            s.meta_selected = chosen;
+            s.meta_substep = 2;
+            s.error = None;
+        }
+        _ => {}
+    }
 }
 
 fn insert_setup(s: &mut SetupState, c: char) {
@@ -363,7 +426,8 @@ fn backspace_setup(s: &mut SetupState) {
 fn meta_insert(s: &mut SetupState, c: char) {
     match s.meta_substep {
         0 => { s.meta_input.push(c); }
-        1 => { s.meta_select_input.push(c); }
+        // substep 1 is keyboard-driven (Up/Down/Space/'a'/Enter); ignore chars.
+        1 => {}
         2 => { s.meta_rename_input.push(c); }
         _ => {}
     }
@@ -372,7 +436,8 @@ fn meta_insert(s: &mut SetupState, c: char) {
 fn meta_backspace(s: &mut SetupState) {
     match s.meta_substep {
         0 => { s.meta_input.pop(); }
-        1 => { s.meta_select_input.pop(); }
+        // substep 1 ignored.
+        1 => {}
         2 => { s.meta_rename_input.pop(); }
         _ => {}
     }
@@ -432,6 +497,9 @@ fn advance_meta(app: &mut App, s: &mut SetupState) {
                         return;
                     }
                     s.meta_discovered = accounts;
+                    s.meta_selections = vec![false; s.meta_discovered.len()];
+                    s.meta_highlight = 0;
+                    s.meta_scroll = 0;
                     s.meta_input.clear();
                     s.meta_substep = 1;
                 }
@@ -440,35 +508,19 @@ fn advance_meta(app: &mut App, s: &mut SetupState) {
                 }
             }
         }
-        // Substep 1: select accounts (numbers or "all").
+        // Substep 1: multi-select list. Enter handler lives in handle_select_keys.
+        // (advance_setup is called for Enter; substep 1's Enter is handled there.)
         1 => {
-            let raw = s.meta_select_input.trim();
-            if raw.is_empty() {
-                s.error = Some("enter 'all' or comma-separated numbers (e.g. 1,3,4)".into());
-                return;
-            }
-            let n = s.meta_discovered.len();
-            let chosen: Vec<usize> = if raw.eq_ignore_ascii_case("all") {
-                (0..n).collect()
-            } else {
-                let mut out = Vec::new();
-                for part in raw.split(',').map(|p| p.trim()).filter(|p| !p.is_empty()) {
-                    match part.parse::<usize>() {
-                        Ok(i) if i >= 1 && i <= n => out.push(i - 1),
-                        _ => {
-                            s.error = Some(format!("bad index: {} (valid: 1-{})", part, n));
-                            return;
-                        }
-                    }
-                }
-                out
-            };
+            // Shouldn't usually hit this path (Enter is routed via handle_select_keys).
+            // Fall through: confirm whatever is currently selected.
+            let chosen: Vec<usize> = (0..s.meta_discovered.len())
+                .filter(|&i| s.meta_selections[i])
+                .collect();
             if chosen.is_empty() {
-                s.error = Some("select at least one account".into());
+                s.error = Some("select at least one account (Space to toggle, 'a' for all)".into());
                 return;
             }
             s.meta_selected = chosen;
-            s.meta_select_input.clear();
             s.meta_substep = 2;
         }
         // Substep 2: rename overrides (or blank = use account names).
@@ -687,9 +739,17 @@ fn render_setup(f: &mut ratatui::Frame, area: Rect, s: &SetupState) {
     f.render_widget(footer, chunks[2]);
 }
 
-fn styled_title(text: &str) -> Line<'_> {
-    Line::from(Span::styled(text,
+fn styled_title(text: &str) -> Line<'static> {
+    Line::from(Span::styled(text.to_string(),
         Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)))
+}
+
+/// Prompt line with a full-block cursor at the end of `value`.
+fn prompt_line(value: &str) -> Line<'static> {
+    Line::from(Span::styled(
+        format!("  > {}\u{2588}", value),
+        Style::default().add_modifier(Modifier::BOLD).fg(Color::Yellow),
+    ))
 }
 
 fn render_step_workspace(s: &SetupState) -> Paragraph<'static> {
@@ -700,7 +760,8 @@ fn render_step_workspace(s: &SetupState) -> Paragraph<'static> {
         Line::from("  The directory will be auto-created if it does not exist."),
         Line::from(""),
     ];
-    lines.push(Line::from(Span::styled(format!("  > {}", s.workspace_path),
+    lines.push(Line::from(Span::styled(
+        format!("  > {}\u{2588}", s.workspace_path),  // full-block cursor
         Style::default().add_modifier(Modifier::BOLD))));
     lines.push(Line::from(""));
     lines.push(Line::from(Span::styled("  Press Enter to accept. Backspace to edit. Esc to quit.",
@@ -726,16 +787,28 @@ fn render_step_meta(s: &SetupState) -> Paragraph<'static> {
                     Style::default().fg(Color::DarkGray))),
                 Line::from(""),
             ];
-            lines.push(Line::from(Span::styled(format!("  > {}", s.meta_input),
-                Style::default().add_modifier(Modifier::BOLD))));
+            lines.push(prompt_line(&s.meta_input));
             Paragraph::new(lines)
         }
         1 => {
+            // Multi-select list with scroll. Visible rows must match VISIBLE_ROWS
+            // in handle_select_keys.
+            const VISIBLE_ROWS: usize = 12;
+            let n = s.meta_discovered.len();
+            let selected = s.meta_selections.iter().filter(|&&b| b).count();
             let mut lines = vec![
-                styled_title("Found these ad accounts - which to track?"),
+                styled_title(&format!("Step 2 of 5: select ad accounts ({} of {} chosen)",
+                    selected, n)),
+                Line::from(""),
+                Line::from(Span::styled(
+                    "  \u{2191}\u{2193}/PgUp/PgDn move  Space=toggle  a=all/none  Enter=confirm  Esc=back",
+                    Style::default().fg(Color::DarkGray))),
                 Line::from(""),
             ];
-            for (i, a) in s.meta_discovered.iter().enumerate() {
+            let end = (s.meta_scroll + VISIBLE_ROWS).min(n);
+            let start = s.meta_scroll.min(end);
+            for i in start..end {
+                let a = &s.meta_discovered[i];
                 let status = match a.account_status {
                     Some(1) => "ACTIVE",
                     Some(2) => "DISABLED",
@@ -744,14 +817,29 @@ fn render_step_meta(s: &SetupState) -> Paragraph<'static> {
                     Some(other) => Box::leak(format!("status{}", other).into_boxed_str()),
                     None => "?",
                 };
-                lines.push(Line::from(format!("  [{}] {} - {} ({})",
-                    i + 1, a.id, a.name, status)));
+                let checkbox = if s.meta_selections[i] { "[x]" } else { "[ ]" };
+                let marker = if i == s.meta_highlight { ">" } else { " " };
+                let text = format!("  {} {} [{:>2}] {} - {} ({})",
+                    marker, checkbox, i + 1, a.id, a.name, status);
+                let style = if i == s.meta_highlight {
+                    Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD)
+                } else if s.meta_selections[i] {
+                    Style::default().fg(Color::Green)
+                } else {
+                    Style::default()
+                };
+                lines.push(Line::from(Span::styled(text, style)));
             }
-            lines.push(Line::from(""));
-            lines.push(Line::from(Span::styled("  Enter 'all' or comma-separated numbers (e.g. 1,3,4):",
-                Style::default().fg(Color::Yellow))));
-            lines.push(Line::from(Span::styled(format!("  > {}", s.meta_select_input),
-                Style::default().add_modifier(Modifier::BOLD))));
+            if end < n {
+                lines.push(Line::from(Span::styled(
+                    format!("  ... {} more below (PgDn to scroll)",
+                        n - end),
+                    Style::default().fg(Color::DarkGray))));
+            } else if start > 0 {
+                lines.push(Line::from(Span::styled(
+                    "  ... PgUp to scroll up",
+                    Style::default().fg(Color::DarkGray))));
+            }
             Paragraph::new(lines)
         }
         2 => {
@@ -770,8 +858,7 @@ fn render_step_meta(s: &SetupState) -> Paragraph<'static> {
                     i + 1, a.id, a.name)));
             }
             lines.push(Line::from(""));
-            lines.push(Line::from(Span::styled(format!("  > {}", s.meta_rename_input),
-                Style::default().add_modifier(Modifier::BOLD))));
+            lines.push(prompt_line(&s.meta_rename_input));
             Paragraph::new(lines)
         }
         _ => Paragraph::new("done"),
@@ -800,8 +887,7 @@ fn render_step_products(s: &SetupState) -> Paragraph<'static> {
         }
     }
     lines.push(Line::from(""));
-    lines.push(Line::from(Span::styled(format!("  > {}", s.product_input),
-        Style::default().add_modifier(Modifier::BOLD))));
+    lines.push(prompt_line(&s.product_input));
     Paragraph::new(lines)
 }
 
@@ -817,8 +903,7 @@ fn render_step_goals(s: &SetupState) -> Paragraph<'static> {
         lines.push(Line::from(format!("    {} = 10 (default)", n)));
     }
     lines.push(Line::from(""));
-    lines.push(Line::from(Span::styled(format!("  > {}", s.goals_input),
-        Style::default().add_modifier(Modifier::BOLD))));
+    lines.push(prompt_line(&s.goals_input));
     lines.push(Line::from(Span::styled("  Press Enter on blank line to accept all defaults.",
         Style::default().fg(Color::DarkGray))));
     Paragraph::new(lines)
@@ -830,8 +915,7 @@ fn render_step_target(s: &SetupState) -> Paragraph<'static> {
         Line::from(""),
         Line::from("  Default 2500. Lower = stricter quality bar."),
         Line::from(""),
-        Line::from(Span::styled(format!("  > {}", s.target_rpq_input),
-            Style::default().add_modifier(Modifier::BOLD))),
+        prompt_line(&s.target_rpq_input),
         Line::from(""),
         Line::from(Span::styled("  Press Enter to save and load your portfolio.",
             Style::default().fg(Color::DarkGray))),
@@ -919,7 +1003,16 @@ fn render_input_bar(f: &mut ratatui::Frame, area: Rect, app: &App) {
         .direction(Direction::Horizontal)
         .constraints([Constraint::Min(1), Constraint::Length(30)])
         .split(area);
-    let prompt = format!("> {}", app.input);
+    let prompt = {
+        let before = &app.input[..app.cursor];
+        let after = &app.input[app.cursor..];
+        Line::from(vec![
+            Span::raw("> "),
+            Span::styled(before.to_string(), Style::default()),
+            Span::styled("\u{2588}", Style::default().fg(Color::Yellow).add_modifier(Modifier::SLOW_BLINK)),
+            Span::styled(after.to_string(), Style::default()),
+        ])
+    };
     let p = Paragraph::new(prompt)
         .block(Block::default().borders(Borders::ALL).title("input (Enter send, Tab complete, Esc quit)"));
     f.render_widget(p, chunks[0]);

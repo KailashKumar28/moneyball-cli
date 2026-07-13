@@ -8,8 +8,10 @@ use serde::Deserialize;
 
 use crate::error::{Error, Result};
 
-const META_GRAPH_VERSION: &str = "v18.0";
 const META_GRAPH_BASE: &str = "https://graph.facebook.com";
+// NOTE: do NOT pin a version segment (e.g. /v18.0/) - calls should use the
+// version configured in the user's Meta developer app, so we hit the base
+// URL with no version prefix.
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct AdAccount {
@@ -39,10 +41,8 @@ struct ApiError {
 }
 
 /// Validate a Meta Marketing API access token by calling /me.
-///
-/// Cheap way to surface wrong/expired tokens without listing accounts.
 pub fn validate_token(token: &str) -> Result<()> {
-    let url = format!("{}/{}/me", META_GRAPH_BASE, META_GRAPH_VERSION);
+    let url = format!("{}/me", META_GRAPH_BASE);
     let client = http_client()?;
     let resp = client
         .get(&url)
@@ -59,7 +59,7 @@ pub fn validate_token(token: &str) -> Result<()> {
 
 /// List ad accounts the token can see.
 pub fn list_ad_accounts(token: &str) -> Result<Vec<AdAccount>> {
-    let url = format!("{}/{}/me/adaccounts", META_GRAPH_BASE, META_GRAPH_VERSION);
+    let url = format!("{}/me/adaccounts", META_GRAPH_BASE);
     let client = http_client()?;
     let resp = client
         .get(&url)
