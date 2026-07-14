@@ -658,74 +658,7 @@ fn submit(app: &mut App) {
                 let out = format_brief_as_lines(b);
                 app.chat
                     .push_tool("brief", "", out, true, started.elapsed().as_millis() as u64);
-
-                // Build a prompt with the same numbers and ask the LLM
-                // for a portfolio commentary. Blocking on the LLM keeps
-                // the simple sync event loop; future work can swap to
-                // streaming + a dedicated async task.
-                let (provider_id, provider, model) =
-                    match (app.cfg.workspace.as_ref(), app.cfg.workspace.as_ref()) {
-                        (Some(w), _) => (
-                            w.model_provider.clone().unwrap_or_default(),
-                            w.model_providers.clone(),
-                            w.model.clone().unwrap_or_default(),
-                        ),
-                        _ => (String::new(), Default::default(), String::new()),
-                    };
-                if provider_id.is_empty() || model.is_empty() {
-                    app.chat.push(Cell::AssistantText(cells::AssistantText {
-                        text: "no LLM configured. run /setup to configure a provider (required step).".into(),
-                        streaming: false,
-                    }));
-                } else if let Some(provider_info) = provider.get(&provider_id) {
-                    let client = moneyball_core::LlmClient::new();
-                    let prompt = build_brief_prompt(b);
-                    let system = BRIEF_SYSTEM_PROMPT;
-                    let llm_started = std::time::Instant::now();
-                    let rt = match tokio::runtime::Builder::new_current_thread()
-                        .enable_all()
-                        .build()
-                    {
-                        Ok(rt) => rt,
-                        Err(e) => {
-                            app.chat.push(Cell::AssistantText(cells::AssistantText {
-                                text: format!("llm runtime init failed: {}", e),
-                                streaming: false,
-                            }));
-                            return;
-                        }
-                    };
-                    let result = rt.block_on(client.complete(
-                        &provider_id,
-                        provider_info,
-                        &model,
-                        Some(system),
-                        &prompt,
-                    ));
-                    let llm_ms = llm_started.elapsed().as_millis() as u64;
-                    match result {
-                        Ok(text) => {
-                            app.chat.push(Cell::AssistantText(cells::AssistantText {
-                                text: format!("{} ({}ms via {})", text.trim(), llm_ms, provider_id),
-                                streaming: false,
-                            }));
-                        }
-                        Err(e) => {
-                            app.chat.push(Cell::AssistantText(cells::AssistantText {
-                                text: format!("llm call failed: {}", e),
-                                streaming: false,
-                            }));
-                        }
-                    }
-                } else {
-                    app.chat.push(Cell::AssistantText(cells::AssistantText {
-                        text: format!(
-                            "configured provider '{}' is not in model_providers map. re-run /setup.",
-                            provider_id
-                        ),
-                        streaming: false,
-                    }));
-                }
+                call_agent(app, BRIEF_SYSTEM_PROMPT, &build_brief_prompt(b));
             } else {
                 let err = app
                     .status
@@ -760,10 +693,12 @@ fn submit(app: &mut App) {
             }));
         }
         "/ask" => {
-            app.chat.push(Cell::AssistantText(cells::AssistantText {
-                text: "/ask - LLM streaming wires up in the next iteration. for now use slash commands.".into(),
-                streaming: false,
-            }));
+            // /ask is now equivalent to free-form chat (the LLM is the
+            // default). Strip the prefix and fall through to the free-
+            // form path below.
+            let question = if arg.is_empty() { line.clone() } else { arg.to_string() };
+            run_freeform(app, &question);
+            return;
         }
         "/snapshot" => {
             app.chat.push(Cell::AssistantText(cells::AssistantText {
@@ -784,10 +719,11 @@ fn submit(app: &mut App) {
             }));
         }
         _ => {
-            app.chat.push(Cell::System(cells::System(format!(
-                "unknown: {} (try /help)",
-                cmd
-            ))));
+            // Free-form chat. The LLM is the default; slash commands are
+            // optional shortcuts. We try to load the brief so the agent
+            // has portfolio context, but failure is silent (we still
+            // answer the question).
+            run_freeform(app, &line);
         }
     }
 }
@@ -801,6 +737,134 @@ Produce a concise commentary that:\n\
   3. Notes the BEST-OBSERVED Rs/qualified vs current - is the gap from inefficient spend or just volume?\n\
   4. Flags setup-debt items if any (they cost leads).\n\
 Keep it tight - 5-8 sentences, no preamble, no bullets unless the user asks.";
+
+/// System prompt for the free-form chat agent. Same persona, but the
+/// user is asking a free-form question rather than triggering /brief.
+const AGENT_SYSTEM_PROMPT: &str = "You are moneyball's portfolio advisor for Meta ads.\n\
+You have access to a 7-day snapshot of the portfolio (per-product spend, leads, qualified leads, L->Q, goal, gap, plus feasibility math).\n\
+Answer the user's question using that context. If the question can't be answered from the snapshot, say so plainly and suggest a slash command that would help (/brief, /funnel <product>, /diagnose <product>).\n\
+Keep the answer focused and concrete. Cite the numbers you use. 3-6 sentences unless the user explicitly asks for more.";
+
+/// Look up the active provider + model from `app.cfg.workspace` and run
+/// a single non-streaming completion. Pushes the response (or a red
+/// error cell) directly into `app.chat`. Returns the elapsed ms in
+/// the success case, or `None` if the call could not be made (no
+/// provider configured, runtime init failed, etc.). Used by /brief
+/// AND by the free-form chat fallback.
+fn call_agent(app: &mut App, system: &str, user_prompt: &str) {
+    use crate::chat::cells;
+    use crate::chat::Cell;
+    let (provider_id, model_providers, model) = match app.cfg.workspace.as_ref() {
+        Some(w) => (
+            w.model_provider.clone().unwrap_or_default(),
+            w.model_providers.clone(),
+            w.model.clone().unwrap_or_default(),
+        ),
+        None => (String::new(), Default::default(), String::new()),
+    };
+    if provider_id.is_empty() || model.is_empty() {
+        app.chat.push(Cell::AssistantText(cells::AssistantText {
+            text: "no LLM configured - run /setup (step 4) to pick a provider + paste a key.".into(),
+            streaming: false,
+        }));
+        return;
+    }
+    let provider_info = match model_providers.get(&provider_id) {
+        Some(p) => p,
+        None => {
+            app.chat.push(Cell::AssistantText(cells::AssistantText {
+                text: format!(
+                    "configured provider '{}' is not in the model_providers map - re-run /setup.",
+                    provider_id
+                ),
+                streaming: false,
+            }));
+            return;
+        }
+    };
+    let client = moneyball_core::LlmClient::new();
+    let llm_started = std::time::Instant::now();
+    let rt = match tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+    {
+        Ok(rt) => rt,
+        Err(e) => {
+            app.chat.push(Cell::AssistantText(cells::AssistantText {
+                text: format!("llm runtime init failed: {}", e),
+                streaming: false,
+            }));
+            return;
+        }
+    };
+    let result = rt.block_on(client.complete(
+        &provider_id,
+        provider_info,
+        &model,
+        Some(system),
+        user_prompt,
+    ));
+    let llm_ms = llm_started.elapsed().as_millis() as u64;
+    match result {
+        Ok(text) => {
+            app.chat.push(Cell::AssistantText(cells::AssistantText {
+                text: format!("{} ({}ms via {})", text.trim(), llm_ms, provider_id),
+                streaming: false,
+            }));
+        }
+        Err(e) => {
+            app.chat.push(Cell::AssistantText(cells::AssistantText {
+                text: format!("llm call failed: {}", e),
+                streaming: false,
+            }));
+        }
+    }
+}
+
+/// Free-form chat path. Tries to load the brief silently so the LLM has
+/// portfolio context; if no snapshot exists, we still answer with just
+/// the user's question. The slash commands (`/brief`, `/funnel`, etc.)
+/// are convenience shortcuts that bypass the LLM dispatch and emit a
+/// tool result directly. Plain text in the input bar falls into this
+/// function - the LLM is the default, mirroring how codex / claude
+/// code work.
+fn run_freeform(app: &mut App, question: &str) {
+    // Try to attach portfolio context. If load_brief fails (no snapshot,
+    // no workspace) we still call the agent - the prompt just won't
+    // include numbers and the agent should say so.
+    let context = match &app.brief {
+        Some(b) => Some(build_brief_prompt(b)),
+        None => match app.cfg.snap_for(app.cfg.date.as_deref()) {
+            Ok(path) => match crate::snapshot_load(&path) {
+                Ok(snap) => {
+                    let history =
+                        brief::load_history(&app.cfg.history_dir().join("scoreboard.csv"));
+                    let res = brief::compute(&snap, &app.cfg, &history);
+                    app.brief = Some(res.clone());
+                    Some(build_brief_prompt(&res))
+                }
+                Err(_) => None,
+            },
+            Err(_) => None,
+        },
+    };
+
+    let prompt = match context {
+        Some(ctx) => format!(
+            "{}\n\nQuestion: {}\n\nAnswer using the snapshot context above. \
+If the question can't be answered from the snapshot, say so and suggest \
+a slash command that would help (/brief, /funnel <product>, /diagnose <product>).",
+            ctx,
+            question
+        ),
+        None => format!(
+            "(no portfolio snapshot available - answer the question with general knowledge; suggest running /brief or /setup if a snapshot is needed)\n\nQuestion: {}",
+            question
+        ),
+    };
+
+    call_agent(app, AGENT_SYSTEM_PROMPT, &prompt);
+}
 
 /// Build the user-prompt context from the deterministic brief numbers.
 /// The LLM sees exactly the numbers that appear in the chat tool cell.
