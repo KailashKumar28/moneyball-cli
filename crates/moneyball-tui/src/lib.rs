@@ -23,6 +23,7 @@ use ratatui::Terminal;
 
 use moneyball_core::brief::{self, ProductRowsAndFeasibility};
 use moneyball_core::session::{Session, SessionCell};
+use moneyball_core::provider::{built_in_presets, models_for, ModelProviderInfo, WireApi};
 use moneyball_core::{list_ad_accounts, validate_token, AdAccount, AppConfig, WorkspaceConfig};
 
 // Two chrono types collide on import name; alias the plain Utc.
@@ -106,6 +107,26 @@ pub struct SetupState {
     pub products: Vec<(String, String)>, // (name, ad_account)
     /// Step 3 entry buffer: "Prod1=10 Prod2=12".
     pub goals_input: String,
+    /// Step 4 (LLM provider) substep: 0=provider pick, 1=API key paste,
+    /// 2=model pick, 3=custom URL entry.
+    pub llm_substep: u8,
+    /// Step 4: selected provider id ("openai", "minimax", "custom", ...).
+    pub llm_provider_id: String,
+    /// Step 4: API key paste buffer (raw, before keychain write).
+    pub llm_input: String,
+    /// Step 4: length of captured API key for collapsed-summary bullets.
+    pub llm_key_len: usize,
+    /// Step 4: selected model slug (e.g. "gpt-5", "MiniMax-M3").
+    pub llm_model: String,
+    /// Step 4: custom base URL (only when provider id is "custom").
+    pub llm_url: String,
+    /// Step 4 picker: cursor row in the provider/model list.
+    pub llm_highlight: usize,
+    /// Step 4 picker: first visible row (scroll).
+    pub llm_scroll: usize,
+    /// Resolved provider entry for the selected id. Built as the user
+    /// advances; persisted on save.
+    pub llm_provider: Option<ModelProviderInfo>,
     pub error: Option<String>,
 }
 
@@ -127,6 +148,15 @@ impl SetupState {
             product_input: String::new(),
             products: Vec::new(),
             goals_input: String::new(),
+            llm_substep: 0,
+            llm_provider_id: String::new(),
+            llm_input: String::new(),
+            llm_key_len: 0,
+            llm_model: String::new(),
+            llm_url: String::new(),
+            llm_highlight: 0,
+            llm_scroll: 0,
+            llm_provider: None,
             error: None,
         }
     }
@@ -772,6 +802,13 @@ fn handle_setup_key(app: &mut App, mut state: SetupState, k: KeyEvent) {
         app.view = View::Setup(state);
         return;
     }
+    // Step 4 picker substeps (provider pick, model pick) have their own
+    // arrow-key navigation.
+    if state.step == 4 && (state.llm_substep == 0 || state.llm_substep == 2) {
+        handle_llm_picker_keys(&mut state, k);
+        app.view = View::Setup(state);
+        return;
+    }
     // Substep 2 of step 1 is the rename buffer. Esc goes back to substep 1.
     if state.step == 1 && state.meta_substep == 2 && k.code == KeyCode::Esc {
         state.meta_substep = 1;
@@ -907,6 +944,61 @@ fn handle_select_keys(s: &mut SetupState, k: KeyEvent) {
     }
 }
 
+/// Arrow-key navigation for step 4 picker substeps (provider pick +
+/// model pick). Step 4 substep 1 (paste) and substep 3 (custom URL/model)
+/// accept free text via `insert_setup`, so this only handles the picker
+/// substeps.
+fn handle_llm_picker_keys(s: &mut SetupState, k: KeyEvent) {
+    // Visible rows in step 4 picker lists. Keep in sync with the renderer.
+    const VISIBLE_ROWS: usize = 6;
+    let total = match s.llm_substep {
+        0 => built_in_presets().len() + 1, // presets + custom
+        2 => {
+            let preset = if s.llm_provider_id == "custom" {
+                ModelProviderInfo {
+                    name: "custom".into(),
+                    base_url: s.llm_url.clone(),
+                    ..Default::default()
+                }
+            } else {
+                s.llm_provider.clone().unwrap_or_else(ModelProviderInfo::openai)
+            };
+            models_for(&preset).len()
+        }
+        _ => 0,
+    };
+    if total == 0 {
+        return;
+    }
+    match k.code {
+        KeyCode::Up => {
+            if s.llm_highlight > 0 {
+                s.llm_highlight -= 1;
+                if s.llm_highlight < s.llm_scroll {
+                    s.llm_scroll = s.llm_highlight;
+                }
+            }
+        }
+        KeyCode::Down => {
+            if s.llm_highlight + 1 < total {
+                s.llm_highlight += 1;
+                if s.llm_highlight >= s.llm_scroll + VISIBLE_ROWS {
+                    s.llm_scroll = s.llm_highlight + 1 - VISIBLE_ROWS;
+                }
+            }
+        }
+        KeyCode::Home => {
+            s.llm_highlight = 0;
+            s.llm_scroll = 0;
+        }
+        KeyCode::End => {
+            s.llm_highlight = total.saturating_sub(1);
+            s.llm_scroll = total.saturating_sub(VISIBLE_ROWS);
+        }
+        _ => {}
+    }
+}
+
 fn insert_setup(s: &mut SetupState, c: char) {
     match s.step {
         0 => {
@@ -920,6 +1012,24 @@ fn insert_setup(s: &mut SetupState, c: char) {
         }
         3 => {
             s.goals_input.push(c);
+        }
+        4 => {
+            // Step 4 substeps that accept free-text: paste-key (1) and
+            // custom URL/model (3). Picker substeps (0, 2) ignore chars.
+            match s.llm_substep {
+                1 => s.llm_input.push(c),
+                3 => {
+                    // First fill URL, then model. The first Enter advances
+                    // to the model phase; we toggle which buffer is active
+                    // by checking whether URL is set.
+                    if s.llm_url.is_empty() {
+                        s.llm_url.push(c);
+                    } else {
+                        s.llm_model.push(c);
+                    }
+                }
+                _ => {}
+            }
         }
         _ => {}
     }
@@ -939,6 +1049,19 @@ fn backspace_setup(s: &mut SetupState) {
         3 => {
             s.goals_input.pop();
         }
+        4 => match s.llm_substep {
+            1 => {
+                s.llm_input.pop();
+            }
+            3 => {
+                if s.llm_model.is_empty() {
+                    s.llm_url.pop();
+                } else {
+                    s.llm_model.pop();
+                }
+            }
+            _ => {}
+        },
         _ => {}
     }
 }
@@ -977,7 +1100,14 @@ fn advance_setup(app: &mut App, s: &mut SetupState) {
         0 => advance_workspace(app, s),
         1 => advance_meta(app, s),
         2 => advance_products(s),
-        3 => advance_save(app, s), // step 3 (goals) is the final step now
+        3 => {
+            // Goals is now step 3; advance goes to LLM (step 4), not save.
+            s.step = 4;
+            s.llm_substep = 0;
+            s.llm_highlight = 0;
+            s.llm_scroll = 0;
+        }
+        4 => advance_llm(app, s),
         _ => {}
     }
 }
@@ -1200,9 +1330,9 @@ fn advance_save(app: &mut App, s: &mut SetupState) {
         goals: goals_map,
         target_rs_per_q: None,
         crm: Default::default(),
-        model_provider: None,
-        model: None,
-        model_providers: Default::default(),
+        model_provider: s.llm_provider_id.clone().into(),
+        model: s.llm_model.clone().into(),
+        model_providers: llm_providers_map(s),
     };
     if let Err(e) = cfg.save(&app.cfg.data_root) {
         s.error = Some(format!("save failed: {}", e));
@@ -1215,11 +1345,118 @@ fn advance_save(app: &mut App, s: &mut SetupState) {
     app.cfg.workspace = Some(cfg);
     app.view = View::Brief;
     app.load_brief();
-    app.status = Some(if s.meta_connected {
-        "setup complete - showing brief (Meta token in keychain)".into()
-    } else {
-        "setup complete - showing brief (Meta skipped)".into()
-    });
+}
+
+/// Build the `model_providers` HashMap to persist. Includes the active
+/// provider entry plus any built-in presets that the user might want
+/// later when switching providers from /settings.
+fn llm_providers_map(s: &SetupState) -> std::collections::HashMap<String, ModelProviderInfo> {
+    let mut map = std::collections::HashMap::new();
+    for (id, p) in built_in_presets() {
+        map.insert(id.to_string(), p);
+    }
+    if let Some(active) = &s.llm_provider {
+        map.insert(s.llm_provider_id.clone(), active.clone());
+    }
+    map
+}
+
+/// Step 4 (LLM) advance logic. Dispatches on `llm_substep`:
+///   0 -> provider pick (Enter on highlighted row)
+///   1 -> API key paste -> writes to keychain, advances to model pick
+///   2 -> model pick -> persists + transitions to advance_save
+///   3 -> custom URL/model entry -> save
+fn advance_llm(app: &mut App, s: &mut SetupState) {
+    match s.llm_substep {
+        0 => {
+            // Pick the highlighted preset or "custom".
+            let presets = built_in_presets();
+            let total = presets.len() + 1;
+            if s.llm_highlight >= total {
+                s.error = Some("invalid provider selection".into());
+                return;
+            }
+            if s.llm_highlight < presets.len() {
+                let (id, provider) = &presets[s.llm_highlight];
+                s.llm_provider_id = (*id).to_string();
+                s.llm_provider = Some(provider.clone());
+            } else {
+                s.llm_provider_id = "custom".into();
+                s.llm_provider = Some(ModelProviderInfo {
+                    name: "custom".into(),
+                    base_url: String::new(),
+                    ..Default::default()
+                });
+            }
+            s.llm_substep = 1;
+            s.error = None;
+        }
+        1 => {
+            // Validate that a key was pasted; write to keychain.
+            let key = s.llm_input.trim();
+            if key.is_empty() {
+                s.error = Some("API key is required to continue".into());
+                return;
+            }
+            if let Err(e) = moneyball_core::secrets::store_llm_key(&s.llm_provider_id, key) {
+                s.error = Some(format!("keychain write failed: {}", e));
+                return;
+            }
+            s.llm_key_len = key.chars().count();
+            s.llm_input.clear();
+            // For "custom", ask for the base URL next (reuse substep 1 input).
+            if s.llm_provider_id == "custom" {
+                s.llm_substep = 3;
+            } else {
+                s.llm_substep = 2;
+                s.llm_highlight = 0;
+            }
+            s.error = None;
+        }
+        2 => {
+            // Pick the highlighted model.
+            let preset = if s.llm_provider_id == "custom" {
+                ModelProviderInfo {
+                    name: "custom".into(),
+                    base_url: s.llm_url.clone(),
+                    ..Default::default()
+                }
+            } else {
+                s.llm_provider.clone().unwrap_or_else(ModelProviderInfo::openai)
+            };
+            let models = models_for(&preset);
+            if s.llm_highlight >= models.len() {
+                s.error = Some("invalid model selection".into());
+                return;
+            }
+            s.llm_model = models[s.llm_highlight].to_string();
+            // If user picked the "custom" sentinel, fall through to a free-text
+            // URL substep instead of saving here.
+            if s.llm_model == "custom" && s.llm_provider_id == "custom" {
+                s.llm_model.clear();
+                s.llm_substep = 3;
+                return;
+            }
+            advance_save(app, s);
+        }
+        3 => {
+            // Custom substep: collects base URL + (optionally) model slug.
+            if s.llm_provider_id == "custom" && s.llm_url.trim().is_empty() {
+                s.error = Some("enter the provider's base URL".into());
+                return;
+            }
+            if s.llm_model.is_empty() {
+                s.error = Some("enter the model slug".into());
+                return;
+            }
+            // Refresh the provider entry with the URL the user typed.
+            if let Some(p) = s.llm_provider.as_mut() {
+                p.base_url = s.llm_url.trim().to_string();
+            }
+            advance_save(app, s);
+        }
+        _ => {}
+    }
 }
 
 fn parse_goals(
@@ -1547,9 +1784,9 @@ fn render_setup(f: &mut ratatui::Frame, area: Rect, s: &SetupState) {
 /// Top progress strip: `1 \u{00B7} workspace   2 \u{00B7} token   ...` with the current step highlighted.
 /// Labels match the collapsed-step summaries in `render_completed_steps`.
 fn render_step_indicator(s: &SetupState) -> Vec<Line<'static>> {
-    let total = 4;
+    let total = 5;
     let cur = s.step.min(total - 1);
-    let labels = ["workspace", "token", "products", "goals"];
+    let labels = ["workspace", "token", "products", "goals", "model"];
     let mut spans: Vec<Span<'static>> = vec![Span::styled(
         "  ",
         Style::default(),
@@ -1607,6 +1844,20 @@ fn render_completed_steps(s: &SetupState) -> Vec<Line<'static>> {
         )));
         i = 3;
     }
+    if s.step >= 4 {
+        let provider = s.llm_provider_id.as_str();
+        let model = if s.llm_model.is_empty() {
+            "?".to_string()
+        } else {
+            s.llm_model.clone()
+        };
+        let n = s.llm_key_len;
+        let bullets = "\u{2022}".repeat(n.min(10));
+        out.push(Line::from(Span::styled(
+            format!("  \u{2713} 4 \u{00B7} model               {} \u{00B7} {} ({})", provider, model, bullets),
+            Style::default().fg(Color::Green),
+        )));
+    }
     let _ = i;
     out
 }
@@ -1619,6 +1870,7 @@ fn render_active_step(s: &SetupState) -> Vec<Line<'static>> {
         1 => render_step_meta(s),
         2 => render_step_products(s),
         3 => render_step_goals(s),
+        4 => render_step_llm(s),
         _ => vec![Line::from("done")],
     }
 }
@@ -1884,6 +2136,164 @@ fn render_step_goals(s: &SetupState) -> Vec<Line<'static>> {
         Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD),
     )));
     lines.push(input_box_close());
+    lines
+}
+
+/// Step 4: LLM provider config. Required - /brief and /ask depend on this.
+///
+/// Substeps:
+///   0 -> pick a built-in preset (openai / anthropic / minimax / ollama)
+///        or "custom"
+///   1 -> paste the API key (masked + char count)
+///   2 -> pick a curated model from the provider's list
+///   3 -> (custom only) enter the base URL
+///
+/// Saves the API key to the OS keychain via `secrets::store_llm_key` on
+/// advance. The provider entry is persisted to config.json alongside the
+/// rest of the workspace config in advance_save.
+fn render_step_llm(s: &SetupState) -> Vec<Line<'static>> {
+    match s.llm_substep {
+        0 => render_llm_pick_provider(s),
+        1 => render_llm_paste_key(s),
+        2 => render_llm_pick_model(s),
+        _ => render_llm_pick_provider(s),
+    }
+}
+
+fn render_llm_pick_provider(s: &SetupState) -> Vec<Line<'static>> {
+    const VISIBLE_ROWS: usize = 6;
+    let presets = built_in_presets();
+    let total = presets.len() + 1; // +1 for "custom"
+    let mut lines = vec![
+        styled_title("LLM provider"),
+        Line::from(""),
+        Line::from("  Pick the model provider that drives /brief and /ask."),
+        Line::from("  Custom lets you point at any OpenAI/Anthropic-compatible URL."),
+        Line::from(""),
+        Line::from(Span::styled(
+            "  \u{2191}\u{2193} move  Enter=select  Esc=back",
+            Style::default().fg(Color::DarkGray),
+        )),
+        Line::from(""),
+    ];
+    let end = (s.llm_scroll + VISIBLE_ROWS).min(total);
+    let start = s.llm_scroll.min(end);
+    let mut rows: Vec<(String, String)> = presets
+        .iter()
+        .map(|(id, p)| {
+            let wire = match p.wire_api {
+                WireApi::Responses => "Responses",
+                WireApi::ChatCompletions => "Chat",
+                WireApi::Messages => "Messages",
+            };
+            (id.to_string(), format!("  {} - {} ({})", p.name, p.base_url, wire))
+        })
+        .collect();
+    rows.push(("custom".to_string(), "  custom - your own URL (any wire protocol)".to_string()));
+
+    for (i, (id, text)) in rows.iter().enumerate().skip(start).take(end - start) {
+        let marker = if i == s.llm_highlight { "\u{25B8}" } else { " " };
+        let style = if i == s.llm_highlight {
+            Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)
+        } else {
+            Style::default()
+        };
+        let line = format!("  {} {}", marker, text);
+        let _ = id; // silence unused warning; id is available for future row-action
+        lines.push(Line::from(Span::styled(line, style)));
+    }
+    if end < total {
+        lines.push(Line::from(Span::styled(
+            format!("  ... {} more below", total - end),
+            Style::default().fg(Color::DarkGray),
+        )));
+    }
+    lines
+}
+
+fn render_llm_paste_key(s: &SetupState) -> Vec<Line<'static>> {
+    let n = s.llm_input.chars().count();
+    let provider_label = if s.llm_provider_id == "custom" {
+        format!("custom ({})", s.llm_url)
+    } else {
+        s.llm_provider_id.clone()
+    };
+    let mut lines = vec![
+        styled_title("LLM API key"),
+        Line::from(""),
+        Line::from(format!("  Provider: {}", provider_label)),
+        Line::from(""),
+        Line::from("  Paste the API key for this provider."),
+        Line::from("  It is saved to the OS keychain (account: llm:<id>)"),
+        Line::from("  and never written to disk in plaintext."),
+        Line::from(""),
+    ];
+    let masked = "\u{2022}".repeat(n);
+    lines.push(input_box_open("api key"));
+    lines.push(Line::from(Span::styled(
+        format!("  \u{2502}  > {}{}", masked, "\u{2588}"),
+        Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD),
+    )));
+    lines.push(input_box_close());
+    lines.push(Line::from(Span::styled(
+        format!("  ({} chars)", n),
+        Style::default().fg(Color::DarkGray),
+    )));
+    lines.push(Line::from(""));
+    lines.push(Line::from(Span::styled(
+        "  enter to validate + continue  \u{00B7}  esc back",
+        Style::default().fg(Color::DarkGray),
+    )));
+    lines
+}
+
+fn render_llm_pick_model(s: &SetupState) -> Vec<Line<'static>> {
+    let preset = if s.llm_provider_id == "custom" {
+        ModelProviderInfo {
+            name: "custom".into(),
+            base_url: s.llm_url.clone(),
+            ..Default::default()
+        }
+    } else {
+        s.llm_provider.clone().unwrap_or_else(ModelProviderInfo::openai)
+    };
+    let models = models_for(&preset);
+    let total = models.len();
+    let mut lines = vec![
+        styled_title("Model"),
+        Line::from(""),
+        Line::from(format!("  Provider: {}", s.llm_provider_id)),
+        Line::from(""),
+        Line::from("  Pick the model. /brief and /ask will use it."),
+        Line::from(Span::styled(
+            "  \u{2191}\u{2193} move  Enter=select  Esc=back",
+            Style::default().fg(Color::DarkGray),
+        )),
+        Line::from(""),
+    ];
+    for (i, m) in models.iter().enumerate() {
+        let marker = if i == s.llm_highlight { "\u{25B8}" } else { " " };
+        let style = if i == s.llm_highlight {
+            Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)
+        } else {
+            Style::default()
+        };
+        lines.push(Line::from(Span::styled(
+            format!("  {} {}", marker, m),
+            style,
+        )));
+    }
+    if total == 1 && models[0] == "custom" {
+        // For custom provider, ask for the model slug via free text.
+        lines.push(Line::from(""));
+        lines.push(input_box_open("model"));
+        lines.push(Line::from(Span::styled(
+            format!("  \u{2502}  > {}\u{2588}", s.llm_model),
+            Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD),
+        )));
+        lines.push(input_box_close());
+        let _ = total; // silence unused
+    }
     lines
 }
 
