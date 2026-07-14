@@ -2043,17 +2043,19 @@ fn render_completed_steps(s: &SetupState) -> Vec<Line<'static>> {
         )));
         i = 3;
     }
-    if !s.llm_provider_id.is_empty() {
+    if !s.llm_provider_id.is_empty()
+        && !s.llm_model.is_empty()
+        && s.llm_key_len > 0
+    {
         let provider = s.llm_provider_id.as_str();
-        let model = if s.llm_model.is_empty() {
-            "?".to_string()
-        } else {
-            s.llm_model.clone()
-        };
+        let model = s.llm_model.clone();
         let n = s.llm_key_len;
         let bullets = "\u{2022}".repeat(n.min(10));
         out.push(Line::from(Span::styled(
-            format!("  \u{2713} 5 \u{00B7} model               {} \u{00B7} {} ({})", provider, model, bullets),
+            format!(
+                "  \u{2713} 5 \u{00B7} model               {} \u{00B7} {} ({})",
+                provider, model, bullets
+            ),
             Style::default().fg(Color::Green),
         )));
     }
@@ -2091,8 +2093,13 @@ const INPUT_BOX_INNER: usize = 60;
 
 fn input_box_open(title: &str) -> Line<'static> {
     let title_len = title.chars().count();
-    // Interior: " " + title + " " + "─"×fill  (total = INPUT_BOX_INNER)
-    let fill = INPUT_BOX_INNER.saturating_sub(title_len + 2);
+    // Open-border width: "  ╭ <space>title<space>──...──<space>╮"
+    // = 2 + 1 + 1 + title_len + 1 + fill + 1 + 1 = 7 + title_len + fill.
+    // Close-border width: "  ╰──...──╯" = 2 + 1 + INPUT_BOX_INNER + 1
+    // = 4 + INPUT_BOX_INNER. To make corners line up, fill must
+    // satisfy 7 + title_len + fill = 4 + INPUT_BOX_INNER, i.e.
+    // fill = INPUT_BOX_INNER - title_len - 3.
+    let fill = INPUT_BOX_INNER.saturating_sub(title_len + 3);
     Line::from(Span::styled(
         format!(
             "  \u{256D} {} {} \u{256E}",
@@ -2427,10 +2434,13 @@ fn render_llm_paste_key(s: &SetupState) -> Vec<Line<'static>> {
         Line::from("  and never written to disk in plaintext."),
         Line::from(""),
     ];
-    let masked = "\u{2022}".repeat(n);
+    // Cap masked at 48 bullets so the line never overflows the box's
+    // 60-char interior. Anything longer than 48 shows "..." suffix.
+    let masked: String = "\u{2022}".repeat(n.min(48));
+    let suffix: String = if n > 48 { "+".into() } else { String::new() };
     lines.push(input_box_open("api key"));
     lines.push(Line::from(Span::styled(
-        format!("  \u{2502}  > {}{}", masked, "\u{2588}"),
+        format!("  \u{2502}  > {}{}\u{2588}", masked, suffix),
         Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD),
     )));
     lines.push(input_box_close());

@@ -48,9 +48,24 @@ pub fn store_llm_key(provider_id: &str, api_key: &str) -> Result<()> {
 
 /// Read the API key for `provider_id`. Returns `None` if no entry exists
 /// or the keychain is unavailable (e.g. headless test environments).
+/// On keychain errors we emit a warning to stderr so the user can
+/// diagnose why their stored key isn't being read.
 pub fn load_llm_key(provider_id: &str) -> Option<String> {
-    let entry = keyring::Entry::new(SERVICE, &llm_account(provider_id)).ok()?;
-    entry.get_password().ok()
+    let entry = match keyring::Entry::new(SERVICE, &llm_account(provider_id)) {
+        Ok(e) => e,
+        Err(e) => {
+            eprintln!("[moneyball] keychain entry init failed for llm:{}: {}", provider_id, e);
+            return None;
+        }
+    };
+    match entry.get_password() {
+        Ok(s) => Some(s),
+        Err(keyring::Error::NoEntry) => None,
+        Err(e) => {
+            eprintln!("[moneyball] keychain read failed for llm:{}: {}", provider_id, e);
+            None
+        }
+    }
 }
 
 /// Remove the API key for `provider_id`. Idempotent.
