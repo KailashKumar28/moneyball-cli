@@ -693,20 +693,62 @@ fn advance_save(app: &mut App, s: &mut SetupState) {
 fn parse_goals(products: &[(String, String)], s: &str) -> std::result::Result<std::collections::HashMap<String, f64>, String> {
     let mut out = std::collections::HashMap::new();
     let known: std::collections::HashSet<&str> = products.iter().map(|(n, _)| n.as_str()).collect();
-    for part in s.split_whitespace() {
-        let (name, val) = part.split_once('=').ok_or_else(|| format!("expected ProdName=Number, got '{}'", part))?;
-        if !known.contains(name) {
-            return Err(format!("unknown product '{}' (known: {:?})", name, products.iter().map(|(n,_)| n.as_str()).collect::<Vec<_>>()));
+
+    // Smart parser: scan for the next '=' which separates a product name
+    // from its number. Multi-word product names work because the name is
+    // everything up to that '=' (trimmed). Separators between pairs can be
+    // any combination of spaces and/or commas.
+    let mut rest = s;
+    while !rest.trim().is_empty() {
+        // Skip leading whitespace/commas between pairs
+        let trimmed = rest.trim_start();
+        if trimmed.len() != rest.len() {
+            rest = trimmed;
         }
-        let v: f64 = val.parse().map_err(|_| format!("not a number: '{}' in {}", val, part))?;
+        if rest.is_empty() { break; }
+
+        // Find the '=' that ends this product's name.
+        let eq = rest.find('=').ok_or_else(|| {
+            let snippet: String = rest.chars().take(40).collect();
+            format!("expected 'ProdName=Number', no '=' found in: '{}...'", snippet)
+        })?;
+
+        // Name = chars from start to '=' (trim trailing whitespace).
+        let name = rest[..eq].trim();
+        if name.is_empty() {
+            return Err("empty product name before '='".into());
+        }
+        if !known.contains(name) {
+            return Err(format!(
+                "unknown product '{}' (known: {:?})",
+                name,
+                products.iter().map(|(n, _)| n.as_str()).collect::<Vec<_>>()
+            ));
+        }
+
+        // Number = chars after '=' until next whitespace/comma or end-of-input.
+        let after_eq = &rest[eq + 1..];
+        let val_end = after_eq
+            .find(|c: char| c.is_whitespace() || c == ',')
+            .unwrap_or(after_eq.len());
+        let val = after_eq[..val_end].trim();
+
+        let v: f64 = val.parse().map_err(|_| {
+            format!("not a number: '{}' in '{}={}{}'",
+                val, name, val, after_eq[val_end..].chars().take(20).collect::<String>())
+        })?;
         if v <= 0.0 || v > 1000.0 {
-            return Err(format!("goal {} out of range (1-1000)", v));
+            return Err(format!("goal {} out of range (1-1000) for '{}'", v, name));
         }
         out.insert(name.to_string(), v);
+
+        // Advance past the number (and any whitespace/comma immediately after).
+        rest = after_eq[val_end..].trim_start();
     }
-    // Fill in defaults for any missing products.
-    for n in known {
-        out.entry(n.to_string()).or_insert(10.0);
+
+    // Fill in defaults for any missing products so partial input still saves.
+    for (n, _) in products {
+        out.entry(n.clone()).or_insert(10.0);
     }
     Ok(out)
 }
@@ -956,8 +998,9 @@ fn render_step_goals(s: &SetupState) -> Paragraph<'static> {
     let mut lines = vec![
         styled_title("Step 4 of 4: goals (qualified leads per day)"),
         Line::from(""),
-        Line::from("  Format: ProductName=10 (space-separated). Defaults to 10 if omitted."),
-        Line::from("  Example: Namma Mane=10 Valmark CityVille=15"),
+        Line::from("  Format: ProdName=Number, space- or comma-separated. Multi-word"),
+        Line::from("  product names are fine: the parser reads up to the '='."),
+        Line::from("  Example: Namma Mane=10 Valmark CityVille=15 Primus by Fincity=8"),
         Line::from(""),
     ];
     for (n, _) in &s.products {
