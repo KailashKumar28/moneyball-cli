@@ -25,6 +25,7 @@ use moneyball_core::brief::{self, ProductRowsAndFeasibility};
 use moneyball_core::session::{Session, SessionCell};
 use moneyball_core::provider::{built_in_presets, models_for, ModelProviderInfo, WireApi};
 use moneyball_core::{list_ad_accounts, validate_token, AdAccount, AppConfig, WorkspaceConfig};
+use std::path::Path;
 
 // Two chrono types collide on import name; alias the plain Utc.
 use chrono::Utc as ChronoUtc;
@@ -159,6 +160,70 @@ impl SetupState {
             llm_provider: None,
             error: None,
         }
+    }
+
+    /// Build a SetupState that mirrors an existing WorkspaceConfig so
+    /// /setup re-runs as an "edit current settings" flow instead of a
+    /// blank-slate wizard. The user can hit Enter through each step
+    /// to keep the current values, or change one step and re-Enter.
+    ///
+    /// What we can restore from config:
+    ///   - workspace path (data_root)
+    ///   - products (name + ad_account)
+    ///   - goals_input (re-serialized as "Prod1=10 Prod2=12")
+    ///   - llm_provider_id, llm_model, llm_provider
+    ///   - llm_key_len (read from keychain; 0 if not present)
+    ///   - meta_connected (true if products were configured)
+    ///
+    /// What we cannot restore (user must redo if they want to change):
+    ///   - meta_input (the Meta API token itself - not in memory or config)
+    ///   - meta_discovered / meta_selections (require live API call)
+    ///   - llm_input (the LLM API key - in keychain only)
+    pub fn prefilled_from(cfg: &WorkspaceConfig, data_root: &Path) -> Self {
+        let mut s = Self::new(data_root.to_path_buf());
+        s.workspace_path = data_root.display().to_string();
+        s.products = cfg
+            .products
+            .iter()
+            .map(|p| (p.name.clone(), p.ad_account.clone()))
+            .collect();
+        // Serialize goals HashMap back to "Prod1=10 Prod2=12" format.
+        s.goals_input = cfg
+            .goals
+            .iter()
+            .map(|(name, n)| format!("{}={}", name, *n as u64))
+            .collect::<Vec<_>>()
+            .join(" ");
+        // Meta: connected if products exist (meaning setup was completed
+        // at some point). Token itself must be re-pasted.
+        s.meta_connected = !cfg.products.is_empty();
+        // LLM
+        if let Some(provider) = &cfg.model_provider {
+            s.llm_provider_id = provider.clone();
+        }
+        if let Some(model) = &cfg.model {
+            s.llm_model = model.clone();
+        }
+        if let Some(info) = cfg.model_providers.get(s.llm_provider_id.as_str()) {
+            s.llm_provider = Some(info.clone());
+        }
+        // Try the keychain so the collapsed summary shows bullet count.
+        if !s.llm_provider_id.is_empty() {
+            s.llm_key_len = moneyball_core::secrets::load_llm_key(&s.llm_provider_id)
+                .map(|k| k.chars().count())
+                .unwrap_or(0);
+        }
+        // If everything's configured, jump straight to the LLM step so
+        // the user can fix a broken key without re-walking the wizard.
+        // Otherwise start at the first unconfigured step.
+        s.step = if !s.llm_provider_id.is_empty() && !s.llm_model.is_empty() {
+            4
+        } else if !s.products.is_empty() {
+            3
+        } else {
+            0
+        };
+        s
     }
 }
 
@@ -675,10 +740,18 @@ fn submit(app: &mut App) {
         }
         "/setup" => {
             app.chat.push(Cell::AssistantText(cells::AssistantText {
-                text: "opening setup wizard.".into(),
+                text: "opening setup wizard (Enter to keep current values, edit + Enter to change).".into(),
                 streaming: false,
             }));
-            app.view = View::Setup(SetupState::new(app.cfg.data_root.clone()));
+            // Pre-populate from existing config so /setup re-runs as
+            // an "edit current settings" flow (Enter keeps values).
+            // The Meta token + LLM key are still re-required since
+            // they're not in memory - we keep them in the keychain.
+            let state = match app.cfg.workspace.as_ref() {
+                Some(w) => SetupState::prefilled_from(w, &app.cfg.data_root),
+                None => SetupState::new(app.cfg.data_root.clone()),
+            };
+            app.view = View::Setup(state);
         }
         "/funnel" => {
             app.chat.push(Cell::AssistantText(cells::AssistantText {
