@@ -24,6 +24,7 @@ use serde_json::{json, Value};
 
 use crate::error::{Error, Result};
 use crate::provider::{ModelProviderInfo, WireApi};
+use crate::tools::{Completion, Tool, ToolCall, tools_payload};
 
 /// Default request timeout. Long enough for a 7-day brief analysis but
 /// short enough that the REPL doesn't hang forever on a stalled socket.
@@ -139,6 +140,100 @@ impl Client {
         parse_assistant_text(provider.wire_api, &text).ok_or_else(|| {
             Error::Llm(format!(
                 "could not parse assistant text from '{}' response: {}",
+                wire_api_name(provider.wire_api),
+                truncate(&text, 200)
+            ))
+        })
+    }
+
+    /// Tool-calling completion. The provider may either return text
+    /// (final answer) or one-or-more tool calls. The agent loop in
+    /// moneyball-tui feeds the tool results back as another turn via
+    /// `complete_with_tools(..., prior_tool_results)`.
+    ///
+    /// `tools` is the full registry available to this turn. Pass an
+    /// empty slice to disable tool calling (the LLM still answers as
+    /// a normal chat completion).
+    pub async fn complete_with_tools(
+        &self,
+        provider_id: &str,
+        provider: &ModelProviderInfo,
+        model: &str,
+        system: Option<&str>,
+        user: &str,
+        tools: &[Tool],
+    ) -> Result<Completion> {
+        let api_key = provider
+            .api_key(provider_id)
+            .ok_or_else(|| Error::LlmAuth(format!("no API key for provider '{}'", provider_id)))?;
+
+        let url = endpoint_for(provider);
+        let mut req = self
+            .inner
+            .post(&url)
+            .header("Content-Type", "application/json");
+
+        req = match provider.wire_api {
+            WireApi::Messages => req
+                .header("x-api-key", &api_key)
+                .header("anthropic-version", "2023-06-01"),
+            _ => req.header("Authorization", format!("Bearer {}", api_key)),
+        };
+
+        if let Some(hh) = &provider.http_headers {
+            for (k, v) in hh {
+                req = req.header(k, v);
+            }
+        }
+        if let Some(eh) = &provider.env_http_headers {
+            for (k, var) in eh {
+                if let Ok(v) = std::env::var(var) {
+                    if !v.is_empty() {
+                        req = req.header(k, v);
+                    }
+                }
+            }
+        }
+
+        let body = match provider.wire_api {
+            WireApi::Responses => build_responses_body_with_tools(model, system, user, tools),
+            WireApi::ChatCompletions => build_chat_body_with_tools(model, system, user, tools),
+            WireApi::Messages => build_messages_body_with_tools(model, system, user, tools),
+        };
+        let req = req.json(&body);
+
+        let resp = req
+            .send()
+            .await
+            .map_err(|e| Error::Llm(format!("transport: {}", e)))?;
+        let status = resp.status();
+        let text = resp
+            .text()
+            .await
+            .map_err(|e| Error::Llm(format!("body read: {}", e)))?;
+
+        if status == reqwest::StatusCode::UNAUTHORIZED
+            || status == reqwest::StatusCode::FORBIDDEN
+        {
+            return Err(Error::LlmAuth(format!(
+                "provider '{}' rejected the key (HTTP {}): {}",
+                provider_id,
+                status,
+                truncate(&text, 200)
+            )));
+        }
+        if !status.is_success() {
+            return Err(Error::Llm(format!(
+                "provider '{}' returned HTTP {}: {}",
+                provider_id,
+                status,
+                truncate(&text, 200)
+            )));
+        }
+
+        parse_completion(provider.wire_api, &text).ok_or_else(|| {
+            Error::Llm(format!(
+                "could not parse completion from '{}' response: {}",
                 wire_api_name(provider.wire_api),
                 truncate(&text, 200)
             ))
@@ -288,6 +383,222 @@ fn wire_api_name(w: WireApi) -> &'static str {
     }
 }
 
+// ---------- tool-calling body builders ----------
+
+/// OpenAI Responses with tools. `tools` may be empty (omit the field).
+fn build_responses_body_with_tools(
+    model: &str,
+    system: Option<&str>,
+    user: &str,
+    tools: &[Tool],
+) -> Value {
+    let mut body = json!({
+        "model": model,
+        "instructions": system.unwrap_or(""),
+        "input": user,
+    });
+    if !tools.is_empty() {
+        body["tools"] = tools_payload(WireApi::Responses, tools);
+    }
+    body
+}
+
+/// OpenAI Chat Completions with tools.
+fn build_chat_body_with_tools(
+    model: &str,
+    system: Option<&str>,
+    user: &str,
+    tools: &[Tool],
+) -> Value {
+    let mut messages = Vec::new();
+    if let Some(s) = system {
+        messages.push(json!({ "role": "system", "content": s }));
+    }
+    messages.push(json!({ "role": "user", "content": user }));
+    let mut body = json!({
+        "model": model,
+        "messages": messages,
+    });
+    if !tools.is_empty() {
+        body["tools"] = tools_payload(WireApi::ChatCompletions, tools);
+    }
+    body
+}
+
+/// Anthropic Messages with tools. `tools` is always at the top level.
+fn build_messages_body_with_tools(
+    model: &str,
+    system: Option<&str>,
+    user: &str,
+    tools: &[Tool],
+) -> Value {
+    let mut body = json!({
+        "model": model,
+        "system": system.unwrap_or(""),
+        "max_tokens": DEFAULT_MAX_TOKENS,
+        "messages": [{"role": "user", "content": user}],
+    });
+    if !tools.is_empty() {
+        body["tools"] = tools_payload(WireApi::Messages, tools);
+    }
+    body
+}
+
+// ---------- tool-calling response parser ----------
+
+/// OpenAI Chat Completions tool_call shape.
+#[derive(Debug, Deserialize)]
+struct ChatToolCall {
+    #[serde(default)]
+    id: String,
+    function: ChatToolCallFn,
+}
+#[derive(Debug, Deserialize)]
+struct ChatToolCallFn {
+    #[serde(default)]
+    name: String,
+    #[serde(default)]
+    arguments: String,
+}
+
+/// Anthropic Messages tool_use block shape.
+#[derive(Debug, Deserialize)]
+struct AnthropicToolUse {
+    #[serde(default)]
+    id: String,
+    #[serde(default)]
+    name: String,
+    /// Anthropic sends `input` as a JSON object, not a string.
+    #[serde(default)]
+    input: Value,
+}
+
+/// Parse a completion response. Prefers tool_calls over text if both
+/// are present (the LLM is expected to either respond or call, not
+/// both at once - but if it does, the tool calls win).
+pub fn parse_completion(wire: WireApi, body: &str) -> Option<Completion> {
+    let v: Value = serde_json::from_str(body).ok()?;
+    match wire {
+        WireApi::Responses => parse_responses_completion(&v),
+        WireApi::ChatCompletions => parse_chat_completion(&v),
+        WireApi::Messages => parse_anthropic_completion(&v),
+    }
+}
+
+fn parse_responses_completion(v: &Value) -> Option<Completion> {
+    // Newer Responses API: output[] has both `message` (text) and
+    // `function_call` items at the same level. Walk output[] once.
+    #[derive(Deserialize)]
+    struct Out {
+        #[serde(default, rename = "type")]
+        kind: String,
+        #[serde(default)]
+        name: String,
+        #[serde(default)]
+        arguments: Value,
+        #[serde(default, alias = "call_id", alias = "id")]
+        id: String,
+        #[serde(default)]
+        content: Vec<Inner>,
+    }
+    #[derive(Deserialize)]
+    struct Inner {
+        #[serde(default, rename = "type")]
+        kind: String,
+        #[serde(default)]
+        text: String,
+    }
+    let outputs: Vec<Out> = serde_json::from_value(v.get("output")?.clone()).ok()?;
+    let mut calls = Vec::new();
+    let mut text = String::new();
+    for o in outputs {
+        if o.kind == "function_call" {
+            let args = if o.arguments.is_string() {
+                serde_json::from_str(&o.arguments.to_string()).unwrap_or(Value::Null)
+            } else {
+                o.arguments
+            };
+            calls.push(ToolCall { id: o.id, name: o.name, arguments: args });
+        } else {
+            // text or message
+            for c in o.content {
+                if (c.kind == "output_text" || c.kind.is_empty()) && !c.text.is_empty() {
+                    if !text.is_empty() {
+                        text.push('\n');
+                    }
+                    text.push_str(&c.text);
+                }
+            }
+        }
+    }
+    if !calls.is_empty() {
+        Some(Completion::ToolCalls(calls))
+    } else if !text.is_empty() {
+        Some(Completion::Text(text))
+    } else {
+        None
+    }
+}
+
+fn parse_chat_completion(v: &Value) -> Option<Completion> {
+    let choice = v.get("choices")?.as_array()?.first()?;
+    let msg = choice.get("message")?;
+    let text = msg
+        .get("content")
+        .and_then(|c| c.as_str())
+        .unwrap_or("")
+        .to_string();
+    let mut calls = Vec::new();
+    if let Some(tcs) = msg.get("tool_calls").and_then(|t| t.as_array()) {
+        for tc in tcs {
+            if let Ok(parsed) = serde_json::from_value::<ChatToolCall>(tc.clone()) {
+                let args: Value = serde_json::from_str(&parsed.function.arguments)
+                    .unwrap_or(Value::Null);
+                calls.push(ToolCall {
+                    id: parsed.id,
+                    name: parsed.function.name,
+                    arguments: args,
+                });
+            }
+        }
+    }
+    if !calls.is_empty() {
+        Some(Completion::ToolCalls(calls))
+    } else if !text.is_empty() {
+        Some(Completion::Text(text))
+    } else {
+        None
+    }
+}
+
+fn parse_anthropic_completion(v: &Value) -> Option<Completion> {
+    let content = v.get("content")?.as_array()?;
+    let mut calls = Vec::new();
+    let mut text = String::new();
+    for block in content {
+        let kind = block.get("type").and_then(|t| t.as_str()).unwrap_or("");
+        if kind == "tool_use" {
+            if let Ok(parsed) = serde_json::from_value::<AnthropicToolUse>(block.clone()) {
+                calls.push(ToolCall { id: parsed.id, name: parsed.name, arguments: parsed.input });
+            }
+        } else if kind == "text" || kind.is_empty() {
+            if let Some(t) = block.get("text").and_then(|t| t.as_str()) {
+                if !text.is_empty() {
+                    text.push('\n');
+                }
+                text.push_str(t);
+            }
+        }
+    }
+    if !calls.is_empty() {
+        Some(Completion::ToolCalls(calls))
+    } else if !text.is_empty() {
+        Some(Completion::Text(text))
+    } else {
+        None
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -413,5 +724,142 @@ mod tests {
         // Smoke test: just constructing the client must not panic.
         let _ = Client::new();
         let _ = Client::default();
+    }
+
+    // ---------- tool-calling body builders ----------
+
+    #[test]
+    fn responses_body_with_tools_includes_tools_array() {
+        let t = crate::tools::brief_tool();
+        let v = build_responses_body_with_tools("gpt-5", Some("sys"), "hi", &[t]);
+        assert_eq!(v["model"], "gpt-5");
+        assert!(v["tools"].is_array());
+        assert_eq!(v["tools"][0]["type"], "function");
+        assert_eq!(v["tools"][0]["function"]["name"], "brief");
+    }
+
+    #[test]
+    fn chat_body_with_tools_omits_field_when_empty() {
+        let v = build_chat_body_with_tools("gpt-4", None, "hi", &[]);
+        assert!(v.get("tools").is_none());
+    }
+
+    #[test]
+    fn anthropic_body_with_tools_uses_input_schema() {
+        let t = crate::tools::diagnose_tool();
+        let v = build_messages_body_with_tools("claude-sonnet-4-5", Some("sys"), "hi", &[t]);
+        assert!(v["tools"].is_array());
+        assert!(v["tools"][0].get("input_schema").is_some());
+        assert!(v["tools"][0]["name"].as_str().unwrap() == "diagnose");
+    }
+
+    // ---------- tool-calling response parsers ----------
+
+    #[test]
+    fn parse_responses_text_only() {
+        let body = r#"{
+            "output": [{
+                "type": "message",
+                "content": [{"type": "output_text", "text": "Hello"}]
+            }]
+        }"#;
+        match parse_completion(WireApi::Responses, body).unwrap() {
+            Completion::Text(t) => assert_eq!(t, "Hello"),
+            other => panic!("expected Text, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn parse_responses_function_call() {
+        let body = r#"{
+            "output": [{
+                "type": "function_call",
+                "name": "brief",
+                "arguments": "{}",
+                "call_id": "call_1"
+            }]
+        }"#;
+        match parse_completion(WireApi::Responses, body).unwrap() {
+            Completion::ToolCalls(calls) => {
+                assert_eq!(calls.len(), 1);
+                assert_eq!(calls[0].name, "brief");
+                assert_eq!(calls[0].id, "call_1");
+            }
+            other => panic!("expected ToolCalls, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn parse_responses_function_call_object_arguments() {
+        // Newer Responses API may send arguments as an object, not a string.
+        let body = r#"{
+            "output": [{
+                "type": "function_call",
+                "name": "diagnose",
+                "arguments": {"product": "Namma Mane"},
+                "call_id": "call_2"
+            }]
+        }"#;
+        match parse_completion(WireApi::Responses, body).unwrap() {
+            Completion::ToolCalls(calls) => {
+                assert_eq!(calls[0].name, "diagnose");
+                assert_eq!(calls[0].arguments["product"], "Namma Mane");
+            }
+            other => panic!("expected ToolCalls, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn parse_chat_completions_tool_calls() {
+        let body = r#"{
+            "choices": [{
+                "message": {
+                    "role": "assistant",
+                    "content": null,
+                    "tool_calls": [{
+                        "id": "tc_1",
+                        "type": "function",
+                        "function": {"name": "brief", "arguments": "{}"}
+                    }]
+                }
+            }]
+        }"#;
+        match parse_completion(WireApi::ChatCompletions, body).unwrap() {
+            Completion::ToolCalls(calls) => {
+                assert_eq!(calls.len(), 1);
+                assert_eq!(calls[0].id, "tc_1");
+                assert_eq!(calls[0].name, "brief");
+            }
+            other => panic!("expected ToolCalls, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn parse_anthropic_tool_use() {
+        let body = r#"{
+            "content": [
+                {"type": "text", "text": "let me check"},
+                {"type": "tool_use", "id": "toolu_1", "name": "brief", "input": {}}
+            ]
+        }"#;
+        match parse_completion(WireApi::Messages, body).unwrap() {
+            Completion::ToolCalls(calls) => {
+                assert_eq!(calls.len(), 1);
+                assert_eq!(calls[0].id, "toolu_1");
+                assert_eq!(calls[0].name, "brief");
+            }
+            other => panic!("expected ToolCalls (since tool_use present), got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn parse_anthropic_text_only() {
+        let body = r#"{
+            "content": [{"type": "text", "text": "All healthy."}]
+        }"#;
+        match parse_completion(WireApi::Messages, body).unwrap() {
+            Completion::Text(t) => assert_eq!(t, "All healthy."),
+            other => panic!("expected Text, got {:?}", other),
+        }
     }
 }

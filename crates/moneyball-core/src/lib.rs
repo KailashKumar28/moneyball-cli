@@ -15,6 +15,7 @@ pub mod provider;
 pub mod secrets;
 pub mod session;
 pub mod snapshot;
+pub mod tools;
 
 pub use logo::LOGO;
 pub use meta::{list_ad_accounts, validate_token, AdAccount};
@@ -25,3 +26,4 @@ pub use error::{Error, Result};
 pub use llm::Client as LlmClient;
 pub use provider::{ModelProviderInfo, WireApi};
 pub use snapshot::Snapshot;
+pub use tools::{Completion, Tool, ToolCall, ToolResult};
