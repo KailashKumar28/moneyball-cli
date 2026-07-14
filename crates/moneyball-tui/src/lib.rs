@@ -401,10 +401,11 @@ fn chat_cell_to_session(c: &chat::Cell) -> SessionCell {
             success: *success,
             duration_ms: *duration_ms,
         },
-        // BriefPlaceholder isn't used in the live path; /brief pushes
-        // a pre-formatted ToolResult. Kept for future width-aware swap.
+        // BriefPlaceholder is a no-op cell (renders as empty). Persist
+        // an empty assistant text so the session round-trips without
+        // losing cells.
         chat::Cell::BriefPlaceholder => SessionCell::AssistantText {
-            text: "(brief placeholder - rerun /brief to see fresh data)".into(),
+            text: String::new(),
             streaming: false,
         },
     }
@@ -650,15 +651,81 @@ fn submit(app: &mut App) {
                 streaming: false,
             }));
             app.load_brief();
-            // If brief loaded, push tool call + result.
+            // If brief loaded, push the deterministic numbers as a tool
+            // call (so the user can see the source data), then call the
+            // configured LLM for an interpretation.
             if let Some(b) = &app.brief {
                 let out = format_brief_as_lines(b);
                 app.chat
                     .push_tool("brief", "", out, true, started.elapsed().as_millis() as u64);
-                app.chat.push(Cell::AssistantText(cells::AssistantText {
-                    text: format_feasibility_summary(b),
-                    streaming: false,
-                }));
+
+                // Build a prompt with the same numbers and ask the LLM
+                // for a portfolio commentary. Blocking on the LLM keeps
+                // the simple sync event loop; future work can swap to
+                // streaming + a dedicated async task.
+                let (provider_id, provider, model) =
+                    match (app.cfg.workspace.as_ref(), app.cfg.workspace.as_ref()) {
+                        (Some(w), _) => (
+                            w.model_provider.clone().unwrap_or_default(),
+                            w.model_providers.clone(),
+                            w.model.clone().unwrap_or_default(),
+                        ),
+                        _ => (String::new(), Default::default(), String::new()),
+                    };
+                if provider_id.is_empty() || model.is_empty() {
+                    app.chat.push(Cell::AssistantText(cells::AssistantText {
+                        text: "no LLM configured. run /setup to configure a provider (required step).".into(),
+                        streaming: false,
+                    }));
+                } else if let Some(provider_info) = provider.get(&provider_id) {
+                    let client = moneyball_core::LlmClient::new();
+                    let prompt = build_brief_prompt(b);
+                    let system = BRIEF_SYSTEM_PROMPT;
+                    let llm_started = std::time::Instant::now();
+                    let rt = match tokio::runtime::Builder::new_current_thread()
+                        .enable_all()
+                        .build()
+                    {
+                        Ok(rt) => rt,
+                        Err(e) => {
+                            app.chat.push(Cell::AssistantText(cells::AssistantText {
+                                text: format!("llm runtime init failed: {}", e),
+                                streaming: false,
+                            }));
+                            return;
+                        }
+                    };
+                    let result = rt.block_on(client.complete(
+                        &provider_id,
+                        provider_info,
+                        &model,
+                        Some(system),
+                        &prompt,
+                    ));
+                    let llm_ms = llm_started.elapsed().as_millis() as u64;
+                    match result {
+                        Ok(text) => {
+                            app.chat.push(Cell::AssistantText(cells::AssistantText {
+                                text: format!("{} ({}ms via {})", text.trim(), llm_ms, provider_id),
+                                streaming: false,
+                            }));
+                        }
+                        Err(e) => {
+                            app.chat.push(Cell::AssistantText(cells::AssistantText {
+                                text: format!("llm call failed: {}", e),
+                                streaming: false,
+                            }));
+                        }
+                    }
+                } else {
+                    app.chat.push(Cell::AssistantText(cells::AssistantText {
+                        text: format!(
+                            "configured provider '{}' is not in model_providers map. re-run /setup.",
+                            provider_id
+                        ),
+                        streaming: false,
+                    }));
+                }
             } else {
                 let err = app
                     .status
@@ -725,6 +792,74 @@ fn submit(app: &mut App) {
     }
 }
 
+/// System prompt for the brief assistant. Persona + output contract.
+const BRIEF_SYSTEM_PROMPT: &str = "You are moneyball's portfolio advisor for Meta ads.\n\
+You will be given 7-day per-product numbers (spend, leads, qualified leads, qualified-per-day, Rs/qualified, L->Q %, goal, gap) plus portfolio feasibility math.\n\
+Produce a concise commentary that:\n\
+  1. Calls out which products are at/over goal and which are under (largest gap first).\n\
+  2. Identifies the best and worst Rs/qualified and what that implies for budget reallocation.\n\
+  3. Notes the BEST-OBSERVED Rs/qualified vs current - is the gap from inefficient spend or just volume?\n\
+  4. Flags setup-debt items if any (they cost leads).\n\
+Keep it tight - 5-8 sentences, no preamble, no bullets unless the user asks.";
+
+/// Build the user-prompt context from the deterministic brief numbers.
+/// The LLM sees exactly the numbers that appear in the chat tool cell.
+fn build_brief_prompt(b: &brief::ProductRowsAndFeasibility) -> String {
+    let mut s = String::new();
+    s.push_str("Snapshot portfolio (7d window). Goal = qualified leads per day.\n\n");
+    for r in &b.rows {
+        let l_to_q = r
+            .l_to_q
+            .map(|x| format!("{:.1}%", x))
+            .unwrap_or_else(|| "-".into());
+        let rs_per_q = r
+            .rs_per_q
+            .map(|x| format!("Rs.{}", x))
+            .unwrap_or_else(|| "-".into());
+        s.push_str(&format!(
+            "- {}: spend Rs.{}/day, m={}, l={}, q={} ({:.2}/day), {}, L->Q {}, goal={}, gap={:.1}\n",
+            r.product,
+            r.spend_per_day,
+            r.m7d,
+            r.l7d,
+            r.q7d,
+            r.q_per_day,
+            rs_per_q,
+            l_to_q,
+            r.goal,
+            r.gap,
+        ));
+    }
+    let f = &b.feasibility;
+    s.push_str(&format!(
+        "\nPortfolio: {:.1} q/day at Rs.{}/day = Rs.{}/q. Goal: {:.0}/day.\n",
+        f.tot_q_per_day, f.tot_spend_per_day, f.cur_rpq, f.tot_goal_per_day
+    ));
+    if let Some(req) = f.required_at_cur {
+        s.push_str(&format!(
+            "To hit goal at current efficiency: Rs.{}/day ({:.1}x today).\n",
+            req,
+            req as f64 / f.tot_spend_per_day.max(1) as f64
+        ));
+    }
+    if let (Some(b), Some(req)) = (f.best_rpq, f.required_at_best) {
+        s.push_str(&format!(
+            "To hit goal at best-observed Rs.{}/q: Rs.{}/day ({:.1}x today).\n",
+            b,
+            req,
+            req as f64 / f.tot_spend_per_day.max(1) as f64
+        ));
+    }
+    if !f.open_debt.is_empty() {
+        s.push_str(&format!(
+            "Open setup debt: {}\n",
+            f.open_debt.join(", ")
+        ));
+    }
+    s.push_str("\nWrite the commentary.");
+    s
+}
+
 fn format_brief_as_lines(b: &brief::ProductRowsAndFeasibility) -> Vec<String> {
     let mut out = Vec::new();
     // Header
@@ -779,18 +914,6 @@ fn format_brief_as_lines(b: &brief::ProductRowsAndFeasibility) -> Vec<String> {
     };
     out.push(format!("  setup debt: {}{}", f.open_debt.len(), suffix));
     out
-}
-
-fn format_feasibility_summary(b: &brief::ProductRowsAndFeasibility) -> String {
-    let f = &b.feasibility;
-    let best = f
-        .best_rpq
-        .map(|x| x.to_string())
-        .unwrap_or_else(|| "-".into());
-    format!(
-        "portfolio is at {:.1} q/day against a {}/day goal. at current Rs.{}/q you'd need Rs.{}/day; at the best-observed Rs.{}/q you still need Rs.{}/day.",
-        f.tot_q_per_day, f.tot_goal_per_day as u64, f.cur_rpq, f.required_at_cur.unwrap_or(0), best, f.required_at_best.unwrap_or(0),
-    )
 }
 
 // ---------- setup-wizard keys ----------
