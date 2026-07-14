@@ -1,238 +1,390 @@
 <!doctype html>
 <html lang="en">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<title>moneyball — desired state</title>
-<style>
-  :root {
-    --bg: #0e0e10; --panel: #16161a; --panel-2: #1f1f24;
-    --border: #2c2c34; --text: #d8d8dc; --muted: #8a8a93;
-    --accent: #38bdf8; --green: #10b981; --amber: #f59e0b; --red: #ef4444;
-  }
-  * { box-sizing: border-box; }
-  html, body {
-    margin: 0; padding: 0;
-    background: var(--bg); color: var(--text);
-    font: 14px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
-  }
-  .wrap { max-width: 1200px; margin: 0 auto; padding: 32px 24px 64px; }
-  header h1 { margin: 0 0 4px; font-size: 28px; font-weight: 700; }
-  header .sub { color: var(--muted); margin-bottom: 24px; }
-  .meta { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin: 24px 0; }
-  .meta .card {
-    background: var(--panel); border: 1px solid var(--border);
-    border-radius: 8px; padding: 14px;
-  }
-  .meta .card .label { color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: 0.05em; }
-  .meta .card .value { font-size: 22px; font-weight: 600; margin-top: 4px; }
-  .meta .card.green .value { color: var(--green); }
-  .meta .card.amber .value { color: var(--amber); }
-  .meta .card.red .value { color: var(--red); }
-  .filter-bar { display: flex; gap: 8px; flex-wrap: wrap; margin: 16px 0 24px; }
-  .filter-bar button {
-    background: var(--panel-2); color: var(--text);
-    border: 1px solid var(--border); border-radius: 999px;
-    padding: 6px 14px; cursor: pointer; font: inherit;
-  }
-  .filter-bar button.active {
-    background: var(--accent); color: #001020; border-color: var(--accent);
-  }
-  .filter-bar button:hover:not(.active) { border-color: var(--accent); }
-  .grid { display: grid; grid-template-columns: 1fr; gap: 16px; }
-  .feature {
-    background: var(--panel); border: 1px solid var(--border);
-    border-radius: 12px; padding: 18px;
-    display: grid; grid-template-columns: 1fr 1fr; gap: 18px;
-  }
-  .feature[data-status="passing"] { border-left: 3px solid var(--green); }
-  .feature[data-status="failing"] { border-left: 3px solid var(--red); }
-  .feature[data-status="pending"] { border-left: 3px solid var(--border); }
-  .feature[data-status="blocked"] { border-left: 3px solid var(--amber); }
-  .feature h3 { margin: 0 0 4px; font-size: 16px; font-weight: 600; }
-  .feature .area {
-    display: inline-block;
-    font-size: 11px; padding: 2px 8px; border-radius: 4px;
-    background: var(--panel-2); color: var(--muted);
-    text-transform: uppercase; letter-spacing: 0.05em;
-    margin-left: 8px;
-  }
-  .feature .expected { color: var(--text); margin: 12px 0 8px; }
-  .feature .notes { color: var(--muted); font-size: 12px; margin-top: 8px; }
-  .screenshot {
-    background: var(--panel-2); border: 1px solid var(--border);
-    border-radius: 8px; padding: 12px;
-    display: flex; flex-direction: column; align-items: center;
-    min-height: 220px; justify-content: center;
-  }
-  .screenshot img {
-    max-width: 100%; height: auto;
-    border-radius: 4px;
-    image-rendering: pixelated;
-  }
-  .screenshot .placeholder {
-    color: var(--muted); font-size: 13px;
-    text-align: center; padding: 32px;
-  }
-  .screenshot .caption {
-    color: var(--muted); font-size: 11px;
-    margin-top: 8px; font-family: ui-monospace, "SF Mono", Menlo, monospace;
-  }
-  .status-pill {
-    display: inline-block;
-    font-size: 11px; padding: 2px 8px; border-radius: 999px;
-    text-transform: uppercase; letter-spacing: 0.05em;
-    margin-left: 8px;
-  }
-  .status-pill.passing { background: rgba(16,185,129,0.15); color: var(--green); }
-  .status-pill.failing { background: rgba(239,68,68,0.15); color: var(--red); }
-  .status-pill.pending { background: rgba(138,138,147,0.15); color: var(--muted); }
-  .status-pill.blocked { background: rgba(245,158,11,0.15); color: var(--amber); }
-  footer {
-    margin-top: 48px; padding-top: 16px; border-top: 1px solid var(--border);
-    color: var(--muted); font-size: 12px;
-  }
-  code { background: var(--panel-2); padding: 1px 6px; border-radius: 3px; font-size: 12px; }
-  pre {
-    background: var(--panel-2); padding: 10px 12px; border-radius: 6px;
-    overflow-x: auto; font-size: 12px;
-  }
-</style>
-</head>
-<body>
-<div class="wrap">
-  <header>
-    <h1>moneyball — desired state</h1>
-    <div class="sub">Visual test harness · generated from <code>.test-harness/features.toml</code></div>
-  </header>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>moneyball — desired state</title>
+    <style>
+      :root {
+        --bg: #0e0e10;
+        --panel: #16161a;
+        --panel-2: #1f1f24;
+        --border: #2c2c34;
+        --text: #d8d8dc;
+        --muted: #8a8a93;
+        --accent: #38bdf8;
+        --green: #10b981;
+        --amber: #f59e0b;
+        --red: #ef4444;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      html,
+      body {
+        margin: 0;
+        padding: 0;
+        background: var(--bg);
+        color: var(--text);
+        font:
+          14px/1.5 -apple-system,
+          BlinkMacSystemFont,
+          "Segoe UI",
+          system-ui,
+          sans-serif;
+      }
+      .wrap {
+        max-width: 1200px;
+        margin: 0 auto;
+        padding: 32px 24px 64px;
+      }
+      header h1 {
+        margin: 0 0 4px;
+        font-size: 28px;
+        font-weight: 700;
+      }
+      header .sub {
+        color: var(--muted);
+        margin-bottom: 24px;
+      }
+      .meta {
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 12px;
+        margin: 24px 0;
+      }
+      .meta .card {
+        background: var(--panel);
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        padding: 14px;
+      }
+      .meta .card .label {
+        color: var(--muted);
+        font-size: 12px;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+      }
+      .meta .card .value {
+        font-size: 22px;
+        font-weight: 600;
+        margin-top: 4px;
+      }
+      .meta .card.green .value {
+        color: var(--green);
+      }
+      .meta .card.amber .value {
+        color: var(--amber);
+      }
+      .meta .card.red .value {
+        color: var(--red);
+      }
+      .filter-bar {
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+        margin: 16px 0 24px;
+      }
+      .filter-bar button {
+        background: var(--panel-2);
+        color: var(--text);
+        border: 1px solid var(--border);
+        border-radius: 999px;
+        padding: 6px 14px;
+        cursor: pointer;
+        font: inherit;
+      }
+      .filter-bar button.active {
+        background: var(--accent);
+        color: #001020;
+        border-color: var(--accent);
+      }
+      .filter-bar button:hover:not(.active) {
+        border-color: var(--accent);
+      }
+      .grid {
+        display: grid;
+        grid-template-columns: 1fr;
+        gap: 16px;
+      }
+      .feature {
+        background: var(--panel);
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        padding: 18px;
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 18px;
+      }
+      .feature[data-status="passing"] {
+        border-left: 3px solid var(--green);
+      }
+      .feature[data-status="failing"] {
+        border-left: 3px solid var(--red);
+      }
+      .feature[data-status="pending"] {
+        border-left: 3px solid var(--border);
+      }
+      .feature[data-status="blocked"] {
+        border-left: 3px solid var(--amber);
+      }
+      .feature h3 {
+        margin: 0 0 4px;
+        font-size: 16px;
+        font-weight: 600;
+      }
+      .feature .area {
+        display: inline-block;
+        font-size: 11px;
+        padding: 2px 8px;
+        border-radius: 4px;
+        background: var(--panel-2);
+        color: var(--muted);
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        margin-left: 8px;
+      }
+      .feature .expected {
+        color: var(--text);
+        margin: 12px 0 8px;
+      }
+      .feature .notes {
+        color: var(--muted);
+        font-size: 12px;
+        margin-top: 8px;
+      }
+      .screenshot {
+        background: var(--panel-2);
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        padding: 12px;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        min-height: 220px;
+        justify-content: center;
+      }
+      .screenshot img {
+        max-width: 100%;
+        height: auto;
+        border-radius: 4px;
+        image-rendering: pixelated;
+      }
+      .screenshot .placeholder {
+        color: var(--muted);
+        font-size: 13px;
+        text-align: center;
+        padding: 32px;
+      }
+      .screenshot .caption {
+        color: var(--muted);
+        font-size: 11px;
+        margin-top: 8px;
+        font-family: ui-monospace, "SF Mono", Menlo, monospace;
+      }
+      .status-pill {
+        display: inline-block;
+        font-size: 11px;
+        padding: 2px 8px;
+        border-radius: 999px;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        margin-left: 8px;
+      }
+      .status-pill.passing {
+        background: rgba(16, 185, 129, 0.15);
+        color: var(--green);
+      }
+      .status-pill.failing {
+        background: rgba(239, 68, 68, 0.15);
+        color: var(--red);
+      }
+      .status-pill.pending {
+        background: rgba(138, 138, 147, 0.15);
+        color: var(--muted);
+      }
+      .status-pill.blocked {
+        background: rgba(245, 158, 11, 0.15);
+        color: var(--amber);
+      }
+      footer {
+        margin-top: 48px;
+        padding-top: 16px;
+        border-top: 1px solid var(--border);
+        color: var(--muted);
+        font-size: 12px;
+      }
+      code {
+        background: var(--panel-2);
+        padding: 1px 6px;
+        border-radius: 3px;
+        font-size: 12px;
+      }
+      pre {
+        background: var(--panel-2);
+        padding: 10px 12px;
+        border-radius: 6px;
+        overflow-x: auto;
+        font-size: 12px;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <header>
+        <h1>moneyball — desired state</h1>
+        <div class="sub">
+          Visual test harness · generated from
+          <code>.test-harness/features.toml</code>
+        </div>
+      </header>
 
-  <div class="meta" id="meta">
-    <div class="card"><div class="label">Total features</div><div class="value" id="m-total">—</div></div>
-    <div class="card green"><div class="label">Passing</div><div class="value" id="m-pass">—</div></div>
-    <div class="card amber"><div class="label">Pending</div><div class="value" id="m-pend">—</div></div>
-    <div class="card red"><div class="label">Failing</div><div class="value" id="m-fail">—</div></div>
-  </div>
+      <div class="meta" id="meta">
+        <div class="card">
+          <div class="label">Total features</div>
+          <div class="value" id="m-total">—</div>
+        </div>
+        <div class="card green">
+          <div class="label">Passing</div>
+          <div class="value" id="m-pass">—</div>
+        </div>
+        <div class="card amber">
+          <div class="label">Pending</div>
+          <div class="value" id="m-pend">—</div>
+        </div>
+        <div class="card red">
+          <div class="label">Failing</div>
+          <div class="value" id="m-fail">—</div>
+        </div>
+      </div>
 
-  <div class="filter-bar">
-    <button data-filter="all" class="active">All</button>
-    <button data-filter="passing">Passing</button>
-    <button data-filter="pending">Pending</button>
-    <button data-filter="failing">Failing</button>
-    <button data-filter="cli">cli</button>
-    <button data-filter="tui">tui</button>
-    <button data-filter="wizard">wizard</button>
-    <button data-filter="slash">slash</button>
-    <button data-filter="session">session</button>
-    <button data-filter="subcommand">subcommand</button>
-  </div>
+      <div class="filter-bar">
+        <button data-filter="all" class="active">All</button>
+        <button data-filter="passing">Passing</button>
+        <button data-filter="pending">Pending</button>
+        <button data-filter="failing">Failing</button>
+        <button data-filter="cli">cli</button>
+        <button data-filter="tui">tui</button>
+        <button data-filter="wizard">wizard</button>
+        <button data-filter="slash">slash</button>
+        <button data-filter="session">session</button>
+        <button data-filter="subcommand">subcommand</button>
+      </div>
 
-  <div class="grid" id="grid"></div>
+      <div class="grid" id="grid"></div>
 
-  <footer>
-    <p><strong>How to capture a feature:</strong></p>
-    <pre>~/.pi/agent/harness/tui-test/capture.sh &lt;feature-id&gt; &lt;command...&gt; \
+      <footer>
+        <p><strong>How to capture a feature:</strong></p>
+        <pre>
+~/.pi/agent/harness/tui-test/capture.sh &lt;feature-id&gt; &lt;command...&gt; \
   .test-harness/screenshots/&lt;feature-id&gt;/latest.png</pre>
-    <p>Then update <code>features.toml</code>: set <code>status</code> to <code>passing</code> or <code>failing</code> and add notes. Then run <code>python3 .test-harness/build-html.py</code> to regenerate this page.</p>
-  </footer>
-</div>
+        <p>
+          Then update <code>features.toml</code>: set <code>status</code> to
+          <code>passing</code> or <code>failing</code> and add notes. Then run
+          <code>python3 .test-harness/build-html.py</code> to regenerate this
+          page.
+        </p>
+      </footer>
+    </div>
 
-<script>
-// AUTO-GENERATED from features.toml. Do not edit by hand.
-const FEATURES = [
-__FEATURES_JS__
-];
+    <script>
+      // AUTO-GENERATED from features.toml. Do not edit by hand.
+      const FEATURES = [__FEATURES_JS__];
 
-function render(filter) {
-  const grid = document.getElementById("grid");
-  while (grid.firstChild) grid.removeChild(grid.firstChild);
-  for (const f of FEATURES) {
-    if (filter !== "all" && filter !== f.status && filter !== f.area) continue;
-    const card = document.createElement("div");
-    card.className = "feature";
-    card.dataset.status = f.status;
+      function render(filter) {
+        const grid = document.getElementById("grid");
+        while (grid.firstChild) grid.removeChild(grid.firstChild);
+        for (const f of FEATURES) {
+          if (filter !== "all" && filter !== f.status && filter !== f.area)
+            continue;
+          const card = document.createElement("div");
+          card.className = "feature";
+          card.dataset.status = f.status;
 
-    const left = document.createElement("div");
-    const h3 = document.createElement("h3");
-    h3.textContent = f.name;
-    const areaSpan = document.createElement("span");
-    areaSpan.className = "area";
-    areaSpan.textContent = f.area;
-    const statusPill = document.createElement("span");
-    statusPill.className = "status-pill " + f.status;
-    statusPill.textContent = f.status;
-    h3.appendChild(areaSpan);
-    h3.appendChild(statusPill);
-    left.appendChild(h3);
+          const left = document.createElement("div");
+          const h3 = document.createElement("h3");
+          h3.textContent = f.name;
+          const areaSpan = document.createElement("span");
+          areaSpan.className = "area";
+          areaSpan.textContent = f.area;
+          const statusPill = document.createElement("span");
+          statusPill.className = "status-pill " + f.status;
+          statusPill.textContent = f.status;
+          h3.appendChild(areaSpan);
+          h3.appendChild(statusPill);
+          left.appendChild(h3);
 
-    const expected = document.createElement("div");
-    expected.className = "expected";
-    expected.textContent = f.expected;
-    left.appendChild(expected);
+          const expected = document.createElement("div");
+          expected.className = "expected";
+          expected.textContent = f.expected;
+          left.appendChild(expected);
 
-    if (f.notes) {
-      const notes = document.createElement("div");
-      notes.className = "notes";
-      notes.textContent = f.notes;
-      left.appendChild(notes);
-    }
-    const idLine = document.createElement("div");
-    idLine.className = "notes";
-    idLine.style.marginTop = "12px";
-    const idCode = document.createElement("code");
-    idCode.textContent = "id: " + f.id;
-    idLine.appendChild(idCode);
-    left.appendChild(idLine);
-    card.appendChild(left);
+          if (f.notes) {
+            const notes = document.createElement("div");
+            notes.className = "notes";
+            notes.textContent = f.notes;
+            left.appendChild(notes);
+          }
+          const idLine = document.createElement("div");
+          idLine.className = "notes";
+          idLine.style.marginTop = "12px";
+          const idCode = document.createElement("code");
+          idCode.textContent = "id: " + f.id;
+          idLine.appendChild(idCode);
+          left.appendChild(idLine);
+          card.appendChild(left);
 
-    const shot = document.createElement("div");
-    shot.className = "screenshot";
-    const img = document.createElement("img");
-    img.src = "../" + f.screenshot;
-    img.alt = f.name;
-    img.onerror = () => {
-      img.style.display = "none";
-      placeholder.style.display = "block";
-    };
-    shot.appendChild(img);
-    const placeholder = document.createElement("div");
-    placeholder.className = "placeholder";
-    placeholder.style.display = "none";
-    placeholder.textContent = "no screenshot yet";
-    const codeEl = document.createElement("code");
-    codeEl.textContent = f.screenshot;
-    placeholder.appendChild(codeEl);
-    shot.appendChild(placeholder);
-    const caption = document.createElement("div");
-    caption.className = "caption";
-    caption.textContent = f.screenshot;
-    shot.appendChild(caption);
-    card.appendChild(shot);
+          const shot = document.createElement("div");
+          shot.className = "screenshot";
+          const img = document.createElement("img");
+          img.src = "../" + f.screenshot;
+          img.alt = f.name;
+          img.onerror = () => {
+            img.style.display = "none";
+            placeholder.style.display = "block";
+          };
+          shot.appendChild(img);
+          const placeholder = document.createElement("div");
+          placeholder.className = "placeholder";
+          placeholder.style.display = "none";
+          placeholder.textContent = "no screenshot yet";
+          const codeEl = document.createElement("code");
+          codeEl.textContent = f.screenshot;
+          placeholder.appendChild(codeEl);
+          shot.appendChild(placeholder);
+          const caption = document.createElement("div");
+          caption.className = "caption";
+          caption.textContent = f.screenshot;
+          shot.appendChild(caption);
+          card.appendChild(shot);
 
-    grid.appendChild(card);
-  }
-}
+          grid.appendChild(card);
+        }
+      }
 
-function updateMeta() {
-  const total = FEATURES.length;
-  const pass = FEATURES.filter(f => f.status === "passing").length;
-  const pend = FEATURES.filter(f => f.status === "pending").length;
-  const fail = FEATURES.filter(f => f.status === "failing").length;
-  document.getElementById("m-total").textContent = total;
-  document.getElementById("m-pass").textContent = pass;
-  document.getElementById("m-pend").textContent = pend;
-  document.getElementById("m-fail").textContent = fail;
-}
+      function updateMeta() {
+        const total = FEATURES.length;
+        const pass = FEATURES.filter((f) => f.status === "passing").length;
+        const pend = FEATURES.filter((f) => f.status === "pending").length;
+        const fail = FEATURES.filter((f) => f.status === "failing").length;
+        document.getElementById("m-total").textContent = total;
+        document.getElementById("m-pass").textContent = pass;
+        document.getElementById("m-pend").textContent = pend;
+        document.getElementById("m-fail").textContent = fail;
+      }
 
-document.querySelectorAll(".filter-bar button").forEach(b => {
-  b.addEventListener("click", () => {
-    document.querySelectorAll(".filter-bar button").forEach(x => x.classList.remove("active"));
-    b.classList.add("active");
-    render(b.dataset.filter);
-  });
-});
+      document.querySelectorAll(".filter-bar button").forEach((b) => {
+        b.addEventListener("click", () => {
+          document
+            .querySelectorAll(".filter-bar button")
+            .forEach((x) => x.classList.remove("active"));
+          b.classList.add("active");
+          render(b.dataset.filter);
+        });
+      });
 
-updateMeta();
-render("all");
-</script>
-</body>
+      updateMeta();
+      render("all");
+    </script>
+  </body>
 </html>

@@ -372,8 +372,6 @@ fn chat_cell_to_session(c: &chat::Cell) -> SessionCell {
     }
 }
 
-
-
 /// Snapshot the current chat log + workspace into a Session and persist it.
 /// Overwrites if a session with the same id already exists (so the same
 /// session id can be updated across multiple invocations).
@@ -766,9 +764,49 @@ fn handle_setup_key(app: &mut App, mut state: SetupState, k: KeyEvent) {
         app.view = View::Setup(state);
         return;
     }
+    // Substep 2 of step 1 is the rename buffer. Esc goes back to substep 1.
+    if state.step == 1 && state.meta_substep == 2
+        && k.code == KeyCode::Esc {
+            state.meta_substep = 1;
+            state.meta_rename_input.clear();
+            state.error = None;
+            app.view = View::Setup(state);
+            return;
+        }
+        // Char / Enter / Backspace fall through to the default handler below.
     match k.code {
         KeyCode::Esc => {
-            app.quit = true;
+            // Esc clears the active input buffer (if any). It never quits the
+            // wizard or moneyball. /exit is the only way out.
+            let cleared = match state.step {
+                0 if !state.workspace_path.is_empty() => {
+                    state.workspace_path.clear();
+                    true
+                }
+                1 => match state.meta_substep {
+                    0 if !state.meta_input.is_empty() => {
+                        state.meta_input.clear();
+                        true
+                    }
+                    _ => false,
+                },
+                2 if !state.product_input.is_empty() => {
+                    state.product_input.clear();
+                    true
+                }
+                3 if !state.goals_input.is_empty() => {
+                    state.goals_input.clear();
+                    true
+                }
+                _ => false,
+            };
+            if !cleared {
+                state.error = Some(
+                    "esc clears input. use /exit to leave moneyball.".into(),
+                );
+            } else {
+                state.error = None;
+            }
         }
         KeyCode::Enter => {
             advance_setup(app, &mut state);
@@ -1452,18 +1490,50 @@ fn count_chat_lines(app: &App, width: u16) -> usize {
     n
 }
 
+/// Exact line count the current step will produce in its panel, mirroring
+/// the `lines.push(...)` sequence in `render_step_*`. Borders are added
+/// by the caller (+2).
+fn step_content_height(s: &SetupState) -> u16 {
+    const VISIBLE_ROWS: usize = 12;
+    match s.step {
+        0 => 8, // title + blank + 2 description + blank + prompt + blank + hint
+        1 => match s.meta_substep {
+            // title + blank + 4 description + blank + skip hint + blank +
+            // 2 keychain lines + blank + prompt
+            0 => 12,
+            // title + blank + hint + blank + VISIBLE_ROWS + optional "more below"
+            1 => (4 + VISIBLE_ROWS) as u16 + 1,
+            // title + blank + 3 description (skip or rename) + blank + N
+            // selected products + blank + prompt
+            2 => (7 + s.meta_selected.len()) as u16,
+            _ => 1,
+        },
+        // title + blank + 3 description + blank + (empty-notice OR "N added" + N)
+        // + blank + prompt
+        2 => {
+            let base = 6 + 1 + 1 + 1; // title..spacer..prompt
+            if s.products.is_empty() {
+                base as u16
+            } else {
+                (base + s.products.len()) as u16
+            }
+        }
+        // title + blank + 4 description + blank + N products + blank + prompt + hint
+        3 => (7 + s.products.len()) as u16,
+        _ => 1,
+    }
+}
+
 fn render_setup(f: &mut ratatui::Frame, area: Rect, s: &SetupState) {
     // Body only - logo + context bar are rendered by the shared `render`.
     // Setup has no commands panel + input bar (wizard blocks commands).
-    // Body height: each step has slightly different content; pick a
-    // natural height that fits the longest step without forcing huge
-    // padding on the short ones.
-    let body_h: u16 = match s.step {
-        0 | 3 => 11, // workspace / goals: ~7-8 content + spacing
-        1 => 14,     // meta connect: longer instructions
-        2 => 11,     // products: same shape
-        _ => 8,
-    };
+    // Body height: each step has slightly different content; size the
+    // panel to fit exactly the lines we'll render + 2 border rows.
+    // Previously hard-coded (11/14) caused the input prompt and bottom
+    // products to clip on step 2 (products) and step 3 (goals) once the
+    // user had >= 3 products. Keep this in sync with each render_step_*
+    // line-push sequence.
+    let body_h: u16 = step_content_height(s) + 2;
     let chunks = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
@@ -1494,7 +1564,7 @@ fn render_setup(f: &mut ratatui::Frame, area: Rect, s: &SetupState) {
     let total = 4;
     footer_lines.push(Line::from(Span::styled(
         format!(
-            "  step {} of {} - Enter to continue, Esc to quit",
+            "  step {} of {} - Enter to continue, Esc clears input, /exit to quit",
             s.step + 1,
             total
         ),
@@ -1547,7 +1617,7 @@ fn render_step_workspace(s: &SetupState) -> Paragraph<'static> {
     )));
     lines.push(Line::from(""));
     lines.push(Line::from(Span::styled(
-        "  Press Enter to accept. Backspace to edit. Esc to quit.",
+        "  Press Enter to accept. Backspace to edit. Esc clears input.",
         Style::default().fg(Color::DarkGray),
     )));
     Paragraph::new(lines)
@@ -1575,7 +1645,11 @@ fn render_step_meta(s: &SetupState) -> Paragraph<'static> {
                 )),
                 Line::from(""),
             ];
-            lines.push(prompt_line(&s.meta_input));
+            // Mask the token as bullets so it isn't echoed to the terminal
+            // while the user is typing or pasting it. Length is preserved so
+            // backspace still removes one bullet per keypress.
+            let masked = "\u{2022}".repeat(s.meta_input.chars().count());
+            lines.push(prompt_line(&masked));
             Paragraph::new(lines)
         }
         1 => {
@@ -1597,12 +1671,13 @@ fn render_step_meta(s: &SetupState) -> Paragraph<'static> {
             let start = s.meta_scroll.min(end);
             for i in start..end {
                 let a = &s.meta_discovered[i];
-                let status = match a.account_status {
+                let status: &'static str = match a.account_status {
                     Some(1) => "ACTIVE",
                     Some(2) => "DISABLED",
                     Some(3) => "UNSETTLED",
                     Some(9) => "PENDING_RISK_REVIEW",
-                    Some(other) => Box::leak(format!("status{}", other).into_boxed_str()),
+                    Some(101) => "PENDING_SETUP",
+                    Some(_) => "OTHER",
                     None => "?",
                 };
                 let checkbox = if s.meta_selections[i] { "[x]" } else { "[ ]" };
@@ -1714,6 +1789,10 @@ fn render_step_goals(s: &SetupState) -> Paragraph<'static> {
         Line::from("  Format: ProdName=Number, space- or comma-separated. Multi-word"),
         Line::from("  product names are fine: the parser reads up to the '='."),
         Line::from("  Example: Namma Mane=10 Valmark CityVille=15 Primus by Fincity=8"),
+        Line::from(Span::styled(
+            "  Press Enter on blank line to accept all defaults.",
+            Style::default().fg(Color::DarkGray),
+        )),
         Line::from(""),
     ];
     for (n, _) in &s.products {
@@ -1721,10 +1800,6 @@ fn render_step_goals(s: &SetupState) -> Paragraph<'static> {
     }
     lines.push(Line::from(""));
     lines.push(prompt_line(&s.goals_input));
-    lines.push(Line::from(Span::styled(
-        "  Press Enter on blank line to accept all defaults, then save.",
-        Style::default().fg(Color::DarkGray),
-    )));
     Paragraph::new(lines)
 }
 

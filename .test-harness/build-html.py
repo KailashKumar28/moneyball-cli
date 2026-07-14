@@ -50,7 +50,9 @@ def main():
         return 1
 
     # Load template
-    template_path = REPO_ROOT / ".test-harness" / "desired-state" / "index.template.html"
+    template_path = (
+        REPO_ROOT / ".test-harness" / "desired-state" / "index.template.html"
+    )
     if not template_path.exists():
         print(f"error: template not found at {template_path}", file=sys.stderr)
         return 1

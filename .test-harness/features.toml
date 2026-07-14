@@ -25,31 +25,34 @@ name = "Wizard step 1: workspace path"
 expected = "Form-style input with the current default path pre-filled. Pressing Enter accepts. Backspace edits. Esc clears the input (does NOT quit - see slash-exit-command). Help text visible at the bottom."
 screenshot = "screenshots/wizard-step-1-workspace/latest.png"
 status = "passing"
+notes = "Live-tested via pilotty: type text, Esc clears, second Esc shows hint, session stays running."
 
 [[features]]
 id = "wizard-step-2-meta"
 area = "wizard"
-name = "Wizard step 2: connect Meta"
-expected = "Multi-select checklist of discovered ad accounts. Up/Down/PgUp/PgDn/Home/End to move. Space toggles. 'a' selects all/none. Enter confirms. Question: is the optional 'rename selected accounts' substep kept? (user was unsure - ASK before declaring broken)."
+name = "Wizard step 2: connect Meta (token input + select list)"
+expected = "Substep 0: paste Meta Marketing API token (rendered as bullets for security) or type 'skip'. Substep 1: multi-select checklist of discovered ad accounts. Up/Down/PgUp/PgDn/Home/End to move. Space toggles. 'a' selects all/none. Enter confirms. Status 101 (PENDING_SETUP) shown explicitly. Unknown statuses show 'OTHER' not 'status101'. Substep 2 (rename) is still under review (user unsure)."
 screenshot = "screenshots/wizard-step-2-meta/latest.png"
-status = "pending"
-notes = "OPEN QUESTION for the loop driver: confirm rename substep with user."
+status = "passing"
+notes = "Token now masked as bullets (security fix). Status 101 -> PENDING_SETUP, unknown -> OTHER (was 'status101'). Footer fixed. Substep-1 Esc=back (correct, navigates back to substep 0)."
 
 [[features]]
 id = "wizard-step-3-products"
 area = "wizard"
 name = "Wizard step 3: confirm products"
-expected = "Auto-filled list of selected Meta ad accounts. 'Name AdAccount' or 'demo' adds manually. Each row shows product name + ad account ID."
+expected = "Auto-filled list of selected Meta ad accounts. 'Name AdAccount' or 'demo' adds manually. Each row shows product name + ad account ID. Esc clears the input instead of quitting."
 screenshot = "screenshots/wizard-step-3-products/latest.png"
-status = "pending"
+status = "passing"
+notes = "Footer fixed (was 'Esc to quit', now 'Esc clears input, /exit to quit')."
 
 [[features]]
 id = "wizard-step-4-goals"
 area = "wizard"
 name = "Wizard step 4: goals per product"
-expected = "For each product, prompt for daily qualified-lead goal. Default 10. Empty Enter accepts default."
+expected = "For each product, prompt for daily qualified-lead goal. Default 10. Empty Enter accepts default. Hint text appears BEFORE the input (not after). Esc clears input instead of quitting."
 screenshot = "screenshots/wizard-step-4-goals/latest.png"
-status = "pending"
+status = "passing"
+notes = "Reordered hint from after-input to before-input. Footer fixed."
 
 [[features]]
 id = "brief-command"
