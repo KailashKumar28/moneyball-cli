@@ -10,6 +10,7 @@ pub mod config;
 pub mod error;
 pub mod logo;
 pub mod meta;
+pub mod provider;
 pub mod secrets;
 pub mod session;
 pub mod snapshot;
@@ -20,4 +21,5 @@ pub use session::{Session, SessionCell, SessionMeta};
 
 pub use config::{AppConfig, WorkspaceConfig};
 pub use error::{Error, Result};
+pub use provider::{ModelProviderInfo, WireApi};
 pub use snapshot::Snapshot;

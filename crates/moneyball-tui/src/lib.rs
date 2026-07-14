@@ -195,6 +195,9 @@ impl App {
             goals: Default::default(),
             target_rs_per_q: None,
             crm: Default::default(),
+            model_provider: None,
+            model: None,
+            model_providers: Default::default(),
         };
         self.cfg.workspace = Some(wc);
     }
@@ -1197,6 +1200,9 @@ fn advance_save(app: &mut App, s: &mut SetupState) {
         goals: goals_map,
         target_rs_per_q: None,
         crm: Default::default(),
+        model_provider: None,
+        model: None,
+        model_providers: Default::default(),
     };
     if let Err(e) = cfg.save(&app.cfg.data_root) {
         s.error = Some(format!("save failed: {}", e));

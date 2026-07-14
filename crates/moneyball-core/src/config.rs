@@ -3,11 +3,13 @@
 //! Resolution: CLI flags > env > <data-root>/moneyball/config.json
 //! > ~/.moneyball/config.json > built-in defaults.
 
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
 
 use crate::error::{Error, Result};
+use crate::provider::ModelProviderInfo;
 
 const GLOBAL_CONFIG: &str = ".moneyball/config.json"; // relative to $HOME
 
@@ -62,6 +64,18 @@ pub struct WorkspaceConfig {
     pub target_rs_per_q: Option<f64>,
     #[serde(default)]
     pub crm: CrmConfig,
+    /// Active LLM provider id. Key into `model_providers`. Required for any
+    /// LLM-driven command (`/ask`, `/brief` once wired). Set by the wizard.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub model_provider: Option<String>,
+    /// Active model slug (e.g. "MiniMax-M3", "gpt-5", "claude-sonnet-4-5").
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub model: Option<String>,
+    /// Registry of provider entries (base URL, wire protocol, env_key, etc).
+    /// API keys live in the OS keychain keyed by provider id; this map only
+    /// holds non-secret config.
+    #[serde(default, skip_serializing_if = "HashMap::is_empty")]
+    pub model_providers: HashMap<String, ModelProviderInfo>,
 }
 
 impl WorkspaceConfig {
