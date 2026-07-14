@@ -62,6 +62,10 @@ fn main() {
             ("Purva Springles".into(), "1043714050577651".into()),
             ("Primus by Fincity".into(), "405885579167395".into()),
         ];
+        // Step 2 (products confirm) and beyond should reflect a completed
+        // Meta-connect so the collapsed summary shows the token step.
+        s.meta_connected = true;
+        s.meta_token_len = 124;
     }
     if step >= 3 {
         s.goals_input = "".into();

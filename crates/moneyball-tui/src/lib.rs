@@ -18,7 +18,7 @@ use ratatui::backend::CrosstermBackend;
 use ratatui::layout::{Constraint, Direction, Layout, Rect};
 use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
-use ratatui::widgets::{Block, Borders, Clear, Paragraph, Wrap};
+use ratatui::widgets::{Paragraph, Wrap};
 use ratatui::Terminal;
 
 use moneyball_core::brief::{self, ProductRowsAndFeasibility};
@@ -95,8 +95,12 @@ pub struct SetupState {
     pub meta_rename_input: String,
     /// Step 1: final selection (Vec of indices into meta_discovered).
     pub meta_selected: Vec<usize>,
-    /// Step 1: whether the user pasted a valid token (true) or skipped (false).
+    /// Step 1: whether the user pasted a valid token. Token is mandatory now -
+    /// we always validate, never skip.
     pub meta_connected: bool,
+    /// Length of the validated token in characters. Captured before
+    /// `meta_input` is cleared so the collapsed summary can show "••••• (N chars)".
+    pub meta_token_len: usize,
     /// Step 2 entry buffer: "Name AdAccount" (space- or comma-separated).
     pub product_input: String,
     pub products: Vec<(String, String)>, // (name, ad_account)
@@ -119,6 +123,7 @@ impl SetupState {
             meta_rename_input: String::new(),
             meta_selected: Vec::new(),
             meta_connected: false,
+            meta_token_len: 0,
             product_input: String::new(),
             products: Vec::new(),
             goals_input: String::new(),
@@ -765,15 +770,14 @@ fn handle_setup_key(app: &mut App, mut state: SetupState, k: KeyEvent) {
         return;
     }
     // Substep 2 of step 1 is the rename buffer. Esc goes back to substep 1.
-    if state.step == 1 && state.meta_substep == 2
-        && k.code == KeyCode::Esc {
-            state.meta_substep = 1;
-            state.meta_rename_input.clear();
-            state.error = None;
-            app.view = View::Setup(state);
-            return;
-        }
-        // Char / Enter / Backspace fall through to the default handler below.
+    if state.step == 1 && state.meta_substep == 2 && k.code == KeyCode::Esc {
+        state.meta_substep = 1;
+        state.meta_rename_input.clear();
+        state.error = None;
+        app.view = View::Setup(state);
+        return;
+    }
+    // Char / Enter / Backspace fall through to the default handler below.
     match k.code {
         KeyCode::Esc => {
             // Esc clears the active input buffer (if any). It never quits the
@@ -801,9 +805,7 @@ fn handle_setup_key(app: &mut App, mut state: SetupState, k: KeyEvent) {
                 _ => false,
             };
             if !cleared {
-                state.error = Some(
-                    "esc clears input. use /exit to leave moneyball.".into(),
-                );
+                state.error = Some("esc clears input. use /exit to leave moneyball.".into());
             } else {
                 state.error = None;
             }
@@ -995,13 +997,11 @@ fn advance_workspace(app: &mut App, s: &mut SetupState) {
 
 fn advance_meta(_app: &mut App, s: &mut SetupState) {
     match s.meta_substep {
-        // Substep 0: paste token or 'skip'.
+        // Substep 0: paste token. Mandatory.
         0 => {
             let raw = s.meta_input.trim();
-            if raw.is_empty() || raw.eq_ignore_ascii_case("skip") {
-                // Skip Meta entirely. Continue to manual product entry.
-                s.meta_connected = false;
-                s.step = 2;
+            if raw.is_empty() {
+                s.error = Some("a Meta Marketing API access token is required (paste it above)".into());
                 return;
             }
             // Validate token + list ad accounts.
@@ -1020,6 +1020,9 @@ fn advance_meta(_app: &mut App, s: &mut SetupState) {
                         s.error = Some(format!("token accepted but keychain write failed: {}", e));
                         return;
                     }
+                    // Capture token length for the collapsed summary ("••••• (N chars)")
+                    // BEFORE clearing the buffer.
+                    s.meta_token_len = s.meta_input.chars().count();
                     s.meta_discovered = accounts;
                     s.meta_selections = vec![false; s.meta_discovered.len()];
                     s.meta_highlight = 0;
@@ -1490,97 +1493,127 @@ fn count_chat_lines(app: &App, width: u16) -> usize {
     n
 }
 
-/// Exact line count the current step will produce in its panel, mirroring
-/// the `lines.push(...)` sequence in `render_step_*`. Borders are added
-/// by the caller (+2).
-fn step_content_height(s: &SetupState) -> u16 {
-    const VISIBLE_ROWS: usize = 12;
-    match s.step {
-        0 => 8, // title + blank + 2 description + blank + prompt + blank + hint
-        1 => match s.meta_substep {
-            // title + blank + 4 description + blank + skip hint + blank +
-            // 2 keychain lines + blank + prompt
-            0 => 12,
-            // title + blank + hint + blank + VISIBLE_ROWS + optional "more below"
-            1 => (4 + VISIBLE_ROWS) as u16 + 1,
-            // title + blank + 3 description (skip or rename) + blank + N
-            // selected products + blank + prompt
-            2 => (7 + s.meta_selected.len()) as u16,
-            _ => 1,
-        },
-        // title + blank + 3 description + blank + (empty-notice OR "N added" + N)
-        // + blank + prompt
-        2 => {
-            let base = 6 + 1 + 1 + 1; // title..spacer..prompt
-            if s.products.is_empty() {
-                base as u16
-            } else {
-                (base + s.products.len()) as u16
-            }
-        }
-        // title + blank + 4 description + blank + N products + blank + prompt + hint
-        3 => (7 + s.products.len()) as u16,
-        _ => 1,
-    }
-}
-
 fn render_setup(f: &mut ratatui::Frame, area: Rect, s: &SetupState) {
-    // Body only - logo + context bar are rendered by the shared `render`.
-    // Setup has no commands panel + input bar (wizard blocks commands).
-    // Body height: each step has slightly different content; size the
-    // panel to fit exactly the lines we'll render + 2 border rows.
-    // Previously hard-coded (11/14) caused the input prompt and bottom
-    // products to clip on step 2 (products) and step 3 (goals) once the
-    // user had >= 3 products. Keep this in sync with each render_step_*
-    // line-push sequence.
-    let body_h: u16 = step_content_height(s) + 2;
+    // Codex-style vertical stack (no boxed modal):
+    //   step indicator strip  (1 row)
+    //   completed-step lines  (1 row each)
+    //   active-step panel     (variable, plain text + rounded input border)
+    //   error/footer hint     (1-2 rows, single dim line)
+    //
+    // The previous boxed-modal layout clipped the input prompt on step 2
+    // (products) and step 3 (goals) once the user had >= 3 products.
+    // Composing manually lets each section size to its actual content.
+    let mut lines: Vec<Line<'static>> = Vec::new();
+
+    lines.extend(render_step_indicator(s));
+    lines.push(Line::from(""));
+    lines.extend(render_completed_steps(s));
+    lines.extend(render_active_step(s));
+
+    // Reserve 2 rows for footer (error line + key-hint line).
+    let hint_h: u16 = if s.error.is_some() { 2 } else { 1 };
+    let content_h = area.height.saturating_sub(hint_h).max(3);
     let chunks = Layout::default()
         .direction(Direction::Vertical)
-        .constraints([
-            Constraint::Length(body_h),
-            Constraint::Length(3), // footer: error + step counter
-        ])
+        .constraints([Constraint::Length(content_h), Constraint::Length(hint_h)])
         .split(area);
 
-    let body = match s.step {
-        0 => render_step_workspace(s),
-        1 => render_step_meta(s),
-        2 => render_step_products(s),
-        3 => render_step_goals(s),
-        _ => Paragraph::new("done"),
-    };
-    let body = body
-        .block(Block::default().borders(Borders::ALL).title(step_title(s)))
-        .wrap(Wrap { trim: false });
-    f.render_widget(body, chunks[0]);
+    f.render_widget(
+        Paragraph::new(lines).wrap(Wrap { trim: false }),
+        chunks[0],
+    );
 
-    let mut footer_lines = vec![];
+    // Footer: error (if any) + key hints as plain dim lines.
+    let mut footer_lines = Vec::new();
     if let Some(e) = &s.error {
         footer_lines.push(Line::from(Span::styled(
             format!("  ! {}", e),
             Style::default().fg(Color::Red),
         )));
     }
-    let total = 4;
     footer_lines.push(Line::from(Span::styled(
-        format!(
-            "  step {} of {} - Enter to continue, Esc clears input, /exit to quit",
-            s.step + 1,
-            total
-        ),
+        "  enter next  \u{00B7}  esc back  \u{00B7}  ctrl+c quit",
         Style::default().fg(Color::DarkGray),
     )));
-    let footer = Paragraph::new(footer_lines).block(Block::default().borders(Borders::ALL));
-    f.render_widget(footer, chunks[1]);
+    f.render_widget(Paragraph::new(footer_lines), chunks[1]);
 }
 
-fn step_title(s: &SetupState) -> String {
+/// Top progress strip: `1 \u{00B7} workspace   2 \u{00B7} token   ...` with the current step highlighted.
+/// Labels match the collapsed-step summaries in `render_completed_steps`.
+fn render_step_indicator(s: &SetupState) -> Vec<Line<'static>> {
+    let total = 4;
+    let cur = s.step.min(total - 1);
+    let labels = ["workspace", "token", "products", "goals"];
+    let mut spans: Vec<Span<'static>> = vec![Span::styled(
+        "  ",
+        Style::default(),
+    )];
+    for (i, label) in labels.iter().enumerate() {
+        let is_current = i == cur;
+        let style = if is_current {
+            Style::default()
+                .fg(Color::Cyan)
+                .add_modifier(Modifier::BOLD)
+        } else {
+            Style::default().fg(Color::DarkGray)
+        };
+        let marker = if is_current { "\u{25B8}" } else { " " };
+        spans.push(Span::styled(
+            format!("{} {} \u{00B7} {}",
+                marker,
+                i + 1,
+                label),
+            style,
+        ));
+        if i + 1 < total {
+            spans.push(Span::styled("   ", Style::default().fg(Color::DarkGray)));
+        }
+    }
+    vec![Line::from(spans)]
+}
+
+/// One-line summaries for completed steps (workspace / token / accounts / products / goals).
+fn render_completed_steps(s: &SetupState) -> Vec<Line<'static>> {
+    let mut out: Vec<Line<'static>> = Vec::new();
+    let mut i = 0usize;
+    if s.step >= 1 {
+        // step 0 (workspace) is completed
+        out.push(Line::from(Span::styled(
+            format!("  \u{2713} 1 \u{00B7} workspace         {}", s.workspace_path),
+            Style::default().fg(Color::Green),
+        )));
+        i = 1;
+    }
+    if s.step >= 2 && s.meta_connected {
+        let bullets = "\u{2022}".repeat(s.meta_token_len.min(10));
+        let n = s.meta_token_len;
+        out.push(Line::from(Span::styled(
+            format!("  \u{2713} 2 \u{00B7} meta token         {} ({} chars)", bullets, n),
+            Style::default().fg(Color::Green),
+        )));
+        i = 2;
+    }
+    if s.step >= 3 {
+        let n = s.products.len();
+        out.push(Line::from(Span::styled(
+            format!("  \u{2713} 3 \u{00B7} products            {} configured", n),
+            Style::default().fg(Color::Green),
+        )));
+        i = 3;
+    }
+    let _ = i;
+    out
+}
+
+/// Active step's content as plain lines. Each step helper returns a `Vec<Line>`
+/// so we don't pay the cost of a `Paragraph` block just to compose it.
+fn render_active_step(s: &SetupState) -> Vec<Line<'static>> {
     match s.step {
-        0 => "moneyball - first-time setup ".into(),
-        1 => "moneyball - connect Meta (recommended) ".into(),
-        2 => "moneyball - confirm products ".into(),
-        3 => "moneyball - goals per product ".into(),
-        _ => "moneyball ".into(),
+        0 => render_step_workspace(s),
+        1 => render_step_meta(s),
+        2 => render_step_products(s),
+        3 => render_step_goals(s),
+        _ => vec![Line::from("done")],
     }
 }
 
@@ -1593,64 +1626,96 @@ fn styled_title(text: &str) -> Line<'static> {
     ))
 }
 
-/// Prompt line with a full-block cursor at the end of `value`.
-fn prompt_line(value: &str) -> Line<'static> {
+/// Rounded cyan border opener for the active input field. The interior
+/// width is hardcoded to 60 chars; the closing border uses the same
+/// constant so they line up visually. Title appears on the top border
+/// (e.g. "╭ workspace path ────╮").
+const INPUT_BOX_INNER: usize = 60;
+
+fn input_box_open(title: &str) -> Line<'static> {
+    let title_len = title.chars().count();
+    // Interior: " " + title + " " + "─"×fill  (total = INPUT_BOX_INNER)
+    let fill = INPUT_BOX_INNER.saturating_sub(title_len + 2);
     Line::from(Span::styled(
-        format!("  > {}\u{2588}", value),
-        Style::default()
-            .add_modifier(Modifier::BOLD)
-            .fg(Color::Yellow),
+        format!(
+            "  \u{256D} {} {} \u{256E}",
+            title,
+            "\u{2500}".repeat(fill),
+        ),
+        Style::default().fg(Color::Cyan),
     ))
 }
 
-fn render_step_workspace(s: &SetupState) -> Paragraph<'static> {
+/// Closing border line for the active input field. Width matches
+/// `input_box_open` so the corners line up.
+fn input_box_close() -> Line<'static> {
+    Line::from(Span::styled(
+        format!(
+            "  \u{2570}{}\u{256F}",
+            "\u{2500}".repeat(INPUT_BOX_INNER)
+        ),
+        Style::default().fg(Color::Cyan),
+    ))
+}
+
+fn render_step_workspace(s: &SetupState) -> Vec<Line<'static>> {
     let mut lines = vec![
-        styled_title("Step 1 of 4: workspace path"),
+        styled_title("Workspace path"),
         Line::from(""),
         Line::from("  This is where moneyball will read snapshots + write ledger/runs."),
         Line::from("  The directory will be auto-created if it does not exist."),
         Line::from(""),
     ];
+    // Rounded cyan border around the input field (codex auth.rs pattern).
+    lines.push(input_box_open("workspace path"));
     lines.push(Line::from(Span::styled(
-        format!("  > {}\u{2588}", s.workspace_path), // full-block cursor
-        Style::default().add_modifier(Modifier::BOLD),
+        format!("  \u{2502}  > {}\u{2588}", s.workspace_path),
+        Style::default()
+            .fg(Color::Cyan)
+            .add_modifier(Modifier::BOLD),
     )));
+    lines.push(input_box_close());
     lines.push(Line::from(""));
     lines.push(Line::from(Span::styled(
-        "  Press Enter to accept. Backspace to edit. Esc clears input.",
+        "  enter to accept \u{00B7} backspace to edit \u{00B7} esc clears input",
         Style::default().fg(Color::DarkGray),
     )));
-    Paragraph::new(lines)
+    lines
 }
 
-fn render_step_meta(s: &SetupState) -> Paragraph<'static> {
+fn render_step_meta(s: &SetupState) -> Vec<Line<'static>> {
     match s.meta_substep {
         0 => {
+            let n = s.meta_input.chars().count();
             let mut lines = vec![
-                styled_title("Step 2 of 4: connect to Meta (optional, recommended)"),
+                styled_title("Meta API access token"),
                 Line::from(""),
                 Line::from("  Paste a long-lived Meta Marketing API access token"),
                 Line::from("  (the one with ads_read permission; get one at"),
                 Line::from("  developers.facebook.com -> Tools -> Marketing API)."),
                 Line::from(""),
-                Line::from(Span::styled(
-                    "  Or type 'skip' to enter ad accounts manually.",
-                    Style::default().fg(Color::Yellow),
-                )),
-                Line::from(""),
-                Line::from("  Token is saved to macOS Keychain / Linux Secret Service"),
-                Line::from(Span::styled(
-                    "  via the OS keyring - never written to disk in plaintext.",
-                    Style::default().fg(Color::DarkGray),
-                )),
-                Line::from(""),
             ];
-            // Mask the token as bullets so it isn't echoed to the terminal
-            // while the user is typing or pasting it. Length is preserved so
-            // backspace still removes one bullet per keypress.
-            let masked = "\u{2022}".repeat(s.meta_input.chars().count());
-            lines.push(prompt_line(&masked));
-            Paragraph::new(lines)
+            // Rounded cyan border around the token input.
+            lines.push(input_box_open("meta token"));
+            // Pad masked value to a fixed visual width so the box stays
+            // rectangular even when the token is short.
+            let masked: String = "\u{2022}".repeat(n.min(48));
+            let suffix: String = if n > 48 { "+".into() } else { String::new() };
+            lines.push(Line::from(Span::styled(
+                format!("  \u{2502}  > {}{}\u{2588}", masked, suffix),
+                Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD),
+            )));
+            lines.push(input_box_close());
+            lines.push(Line::from(Span::styled(
+                format!("  ({} chars)", n),
+                Style::default().fg(Color::DarkGray),
+            )));
+            lines.push(Line::from(""));
+            lines.push(Line::from(Span::styled(
+                "  Token is saved to OS keychain - never written to disk in plaintext.",
+                Style::default().fg(Color::DarkGray),
+            )));
+            lines
         }
         1 => {
             // Multi-select list with scroll. Visible rows must match VISIBLE_ROWS
@@ -1659,7 +1724,7 @@ fn render_step_meta(s: &SetupState) -> Paragraph<'static> {
             let n = s.meta_discovered.len();
             let selected = s.meta_selections.iter().filter(|&&b| b).count();
             let mut lines = vec![
-                styled_title(&format!("Step 2 of 4: select ad accounts ({} of {} chosen)",
+                styled_title(&format!("Select ad accounts ({} of {} chosen)",
                     selected, n)),
                 Line::from(""),
                 Line::from(Span::styled(
@@ -1681,7 +1746,7 @@ fn render_step_meta(s: &SetupState) -> Paragraph<'static> {
                     None => "?",
                 };
                 let checkbox = if s.meta_selections[i] { "[x]" } else { "[ ]" };
-                let marker = if i == s.meta_highlight { ">" } else { " " };
+                let marker = if i == s.meta_highlight { "\u{25B8}" } else { " " };
                 let text = format!(
                     "  {} {} [{:>2}] {} - {} ({})",
                     marker,
@@ -1693,7 +1758,7 @@ fn render_step_meta(s: &SetupState) -> Paragraph<'static> {
                 );
                 let style = if i == s.meta_highlight {
                     Style::default()
-                        .fg(Color::Yellow)
+                        .fg(Color::Cyan)
                         .add_modifier(Modifier::BOLD)
                 } else if s.meta_selections[i] {
                     Style::default().fg(Color::Green)
@@ -1713,7 +1778,7 @@ fn render_step_meta(s: &SetupState) -> Paragraph<'static> {
                     Style::default().fg(Color::DarkGray),
                 )));
             }
-            Paragraph::new(lines)
+            lines
         }
         2 => {
             let mut lines = vec![
@@ -1737,26 +1802,25 @@ fn render_step_meta(s: &SetupState) -> Paragraph<'static> {
                 )));
             }
             lines.push(Line::from(""));
-            lines.push(prompt_line(&s.meta_rename_input));
-            Paragraph::new(lines)
+            lines.push(input_box_open("rename"));
+            lines.push(Line::from(Span::styled(
+                format!("  \u{2502}  > {}\u{2588}", s.meta_rename_input),
+                Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD),
+            )));
+            lines.push(input_box_close());
+            lines
         }
-        _ => Paragraph::new("done"),
+        _ => vec![Line::from("done")],
     }
 }
 
-fn render_step_products(s: &SetupState) -> Paragraph<'static> {
+fn render_step_products(s: &SetupState) -> Vec<Line<'static>> {
+    // Step 3 is now mostly empty because token is mandatory; if meta
+    // succeeded, products were auto-populated. We just confirm here.
+    // The input box is hidden (read-only confirmation) and the Enter key
+    // proceeds to step 4 (goals).
     let mut lines = vec![
-        styled_title("Step 3 of 4: confirm your products"),
-        Line::from(""),
-        Line::from("  Add: 'ProductName AdAccountId' then Enter."),
-        Line::from(Span::styled(
-            "  Type 'demo' to load the Fincity example (4 products).",
-            Style::default().fg(Color::Yellow),
-        )),
-        Line::from(Span::styled(
-            "  Press Enter on blank line when done adding products.",
-            Style::default().fg(Color::DarkGray),
-        )),
+        styled_title("Confirm products"),
         Line::from(""),
     ];
     if s.products.is_empty() {
@@ -1767,28 +1831,34 @@ fn render_step_products(s: &SetupState) -> Paragraph<'static> {
     } else {
         lines.push(Line::from(Span::styled(
             format!(
-                "  {} product{} added:",
+                "  {} product{} configured:",
                 s.products.len(),
                 if s.products.len() == 1 { "" } else { "s" }
             ),
             Style::default().fg(Color::Green),
         )));
-        for (i, (n, a)) in s.products.iter().enumerate() {
-            lines.push(Line::from(format!("    [{}] {} -> {}", i + 1, n, a)));
+        for (n, a) in &s.products {
+            lines.push(Line::from(Span::styled(
+                format!("    \u{2713} {}  \u{2192}  {}", n, a),
+                Style::default(),
+            )));
         }
     }
     lines.push(Line::from(""));
-    lines.push(prompt_line(&s.product_input));
-    Paragraph::new(lines)
+    lines.push(Line::from(Span::styled(
+        "  press enter to continue \u{00B7} esc to go back",
+        Style::default().fg(Color::DarkGray),
+    )));
+    lines
 }
 
-fn render_step_goals(s: &SetupState) -> Paragraph<'static> {
+fn render_step_goals(s: &SetupState) -> Vec<Line<'static>> {
     let mut lines = vec![
-        styled_title("Step 4 of 4: goals (qualified leads per day)"),
+        styled_title("Goals per product"),
         Line::from(""),
         Line::from("  Format: ProdName=Number, space- or comma-separated. Multi-word"),
         Line::from("  product names are fine: the parser reads up to the '='."),
-        Line::from("  Example: Namma Mane=10 Valmark CityVille=15 Primus by Fincity=8"),
+        Line::from("  Example: Namma Mane=10 Valmark CityVille=15"),
         Line::from(Span::styled(
             "  Press Enter on blank line to accept all defaults.",
             Style::default().fg(Color::DarkGray),
@@ -1796,18 +1866,20 @@ fn render_step_goals(s: &SetupState) -> Paragraph<'static> {
         Line::from(""),
     ];
     for (n, _) in &s.products {
-        lines.push(Line::from(format!("    {} = 10 (default)", n)));
+        lines.push(Line::from(Span::styled(
+            format!("    {} = 10 (default)", n),
+            Style::default(),
+        )));
     }
     lines.push(Line::from(""));
-    lines.push(prompt_line(&s.goals_input));
-    Paragraph::new(lines)
+    lines.push(input_box_open("goals"));
+    lines.push(Line::from(Span::styled(
+        format!("  \u{2502}  > {}\u{2588}", s.goals_input),
+        Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD),
+    )));
+    lines.push(input_box_close());
+    lines
 }
-
-// Suppress unused warning for the small helper module.
-#[allow(dead_code)]
-const _: fn() = || {
-    let _ = Clear;
-};
 
 #[cfg(test)]
 mod paste_tests {
