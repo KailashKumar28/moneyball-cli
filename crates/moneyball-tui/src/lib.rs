@@ -2,6 +2,7 @@
 //! completion, and first-run setup wizard.
 
 pub mod widgets;
+pub mod chat;
 
 use std::io::{self, Stdout};
 use std::path::PathBuf;
@@ -21,7 +22,11 @@ use ratatui::widgets::{Block, Borders, Clear, List, ListItem, Paragraph, Wrap};
 use ratatui::Terminal;
 
 use moneyball_core::brief::{self, ProductRowsAndFeasibility};
+use moneyball_core::session::{Session, SessionCell};
 use moneyball_core::{list_ad_accounts, validate_token, AdAccount, AppConfig, WorkspaceConfig};
+
+// Two chrono types collide on import name; alias the plain Utc.
+use chrono::Utc as ChronoUtc;
 
 pub type Tui = Terminal<CrosstermBackend<Stdout>>;
 
@@ -132,6 +137,19 @@ pub struct App {
     pub brief: Option<ProductRowsAndFeasibility>,
     pub snap_date: Option<String>,
     pub quit: bool,
+    pub quit_emoji: String,
+    /// Chat-style message log. Every interaction (slash-command, free-form
+    /// question, tool output) is appended here. The main TUI body renders
+    /// from this log; the dashboard view was replaced.
+    pub chat: chat::ChatLog,
+    /// Session id for auto-save. Set on App::new (fresh) or load_session_into (resume).
+    pub session_id: Option<String>,
+    /// When this session was started.
+    pub session_started: Option<chrono::DateTime<chrono::Utc>>,
+    /// When the user first pressed Esc on empty input. If a second Esc
+    /// arrives within the window, we quit (matches codex's double-press
+    /// quit shortcut model).
+    pub esc_armed_at: Option<std::time::Instant>,
 }
 
 impl App {
@@ -184,6 +202,20 @@ impl App {
 
     fn new(cfg: AppConfig) -> Self {
         let view = if cfg.has_workspace() { View::Brief } else { View::Setup(SetupState::new(cfg.data_root.clone())) };
+        let mut chat = chat::ChatLog::new();
+        let now = ChronoUtc::now();
+        let session_id = format!("mb-{}", now.format("%Y%m%dT%H%M%SZ"));
+        // Push the moneyball ASCII logo as the first cell on every fresh session.
+        chat.push(chat::Cell::System(chat::cells::System(moneyball_core::LOGO.into())));
+        if cfg.has_workspace() {
+            chat.push(chat::Cell::System(chat::cells::System(
+                "workspace configured. try /brief, /funnel <product>, /ask or anything you want.".into(),
+            )));
+        } else {
+            chat.push(chat::Cell::System(chat::cells::System(
+                "no workspace yet - run /setup to configure.".into(),
+            )));
+        }
         Self {
             cfg,
             view,
@@ -195,6 +227,11 @@ impl App {
             brief: None,
             snap_date: None,
             quit: false,
+            quit_emoji: String::new(),
+            chat,
+            session_id: Some(session_id),
+            session_started: Some(now),
+            esc_armed_at: None,
         }
     }
 
@@ -230,15 +267,132 @@ fn snapshot_load(p: &std::path::Path) -> Result<moneyball_core::Snapshot> {
 // ---------- main entry ----------
 
 pub fn run() -> Result<()> {
+    run_with(None)
+}
+
+/// Entry point that optionally pre-loads a saved session into the chat log.
+pub fn run_with(resume_session: Option<Session>) -> Result<()> {
     let cfg = AppConfig::resolve_optional(None, None);
     let mut app = App::new(cfg);
+    if let Some(s) = resume_session {
+        load_session_into(&mut app, s);
+    }
     if matches!(app.view, View::Brief) {
         app.load_brief();
     }
     let mut terminal = init()?;
     let res = event_loop(&mut terminal, &mut app);
     restore()?;
+    // Auto-save the chat log so /quit or Ctrl-C still persists.
+    if let Err(e) = save_current_session(&app) {
+        eprintln!("warning: session save failed: {}", e);
+    }
     res
+}
+
+fn load_session_into(app: &mut App, s: Session) {
+    app.chat = chat::ChatLog::new();
+    app.chat.push(chat::Cell::System(chat::cells::System(format!(
+        "resumed session {} - started {}",
+        s.meta.id, s.meta.started_at.format("%Y-%m-%d %H:%M:%S UTC")
+    ))));
+    for sc in s.cells {
+        let c = session_cell_to_chat(&sc);
+        app.chat.push(c);
+    }
+}
+
+fn session_cell_to_chat(sc: &SessionCell) -> chat::Cell {
+    use chat::cells as c;
+    match sc {
+        SessionCell::System { text } => chat::Cell::System(c::System(text.clone())),
+        SessionCell::UserPrompt { text, at } => chat::Cell::UserPrompt(c::UserPrompt {
+            text: text.clone(),
+            // Session is UTC; Local::from(DateTime<Utc>) gives local time.
+            at: (*at).with_timezone(&chrono::Local),
+        }),
+        SessionCell::AssistantText { text, streaming } => chat::Cell::AssistantText(c::AssistantText {
+            text: text.clone(),
+            streaming: *streaming,
+        }),
+        SessionCell::ToolCall { name, args, status } => chat::Cell::ToolCall(c::ToolCall {
+            name: name.clone(),
+            args: args.clone(),
+            status: parse_status(status),
+        }),
+        SessionCell::ToolResult { name, output, success, duration_ms } => {
+            chat::Cell::ToolResult(c::ToolResult {
+                name: name.clone(),
+                output: output.clone(),
+                success: *success,
+                duration_ms: *duration_ms,
+            })
+        }
+    }
+}
+
+fn chat_cell_to_session(c: &chat::Cell) -> SessionCell {
+    use chat::cells as cc;
+    match c {
+        chat::Cell::System(cc::System(text)) => SessionCell::System { text: text.clone() },
+        chat::Cell::UserPrompt(cc::UserPrompt { text, at }) => SessionCell::UserPrompt {
+            text: text.clone(),
+            at: at.with_timezone(&ChronoUtc),
+        },
+        chat::Cell::AssistantText(cc::AssistantText { text, streaming }) => SessionCell::AssistantText {
+            text: text.clone(),
+            streaming: *streaming,
+        },
+        chat::Cell::ToolCall(cc::ToolCall { name, args, status }) => SessionCell::ToolCall {
+            name: name.clone(),
+            args: args.clone(),
+            status: match status {
+                cc::ToolStatus::Pending => "pending".into(),
+                cc::ToolStatus::Running => "running".into(),
+                cc::ToolStatus::Done => "done".into(),
+                cc::ToolStatus::Failed => "failed".into(),
+            },
+        },
+        chat::Cell::ToolResult(cc::ToolResult { name, output, success, duration_ms }) => SessionCell::ToolResult {
+            name: name.clone(),
+            output: output.clone(),
+            success: *success,
+            duration_ms: *duration_ms,
+        },
+    }
+}
+
+fn parse_status(s: &str) -> chat::cells::ToolStatus {
+    use chat::cells::ToolStatus;
+    match s {
+        "pending" => ToolStatus::Pending,
+        "running" => ToolStatus::Running,
+        "done" => ToolStatus::Done,
+        _ => ToolStatus::Failed,
+    }
+}
+
+/// Snapshot the current chat log + workspace into a Session and persist it.
+/// Overwrites if a session with the same id already exists (so the same
+/// session id can be updated across multiple invocations).
+fn save_current_session(app: &App) -> Result<()> {
+    let meta = moneyball_core::session::SessionMeta {
+        id: app.session_id.clone().unwrap_or_else(|| {
+            // Generate one if we don't have one (shouldn't happen at this point).
+            moneyball_core::session::list().ok()
+                .and_then(|mut v| v.pop().map(|m| m.id))
+                .unwrap_or_else(|| format!("mb-{}", ChronoUtc::now().format("%Y%m%dT%H%M%SZ")))
+        }),
+        started_at: app.session_started.unwrap_or_else(ChronoUtc::now),
+        ended_at: Some(ChronoUtc::now()),
+        data_root: app.cfg.data_root.clone(),
+        snap_date: app.snap_date.clone(),
+        label: None,
+    };
+    let cells: Vec<SessionCell> = app.chat.cells.iter().map(chat_cell_to_session).collect();
+    let s = Session { meta, cells };
+    moneyball_core::session::save(&s)?;
+    Ok(())
 }
 
 fn event_loop(t: &mut Tui, app: &mut App) -> Result<()> {
@@ -269,8 +423,9 @@ fn handle_key(app: &mut App, k: KeyEvent) {
 
 fn handle_brief_key(app: &mut App, k: KeyEvent) {
     match k.code {
-        KeyCode::Esc => { app.quit = true; }
+        KeyCode::Esc => handle_esc(app),
         KeyCode::Tab => {
+            arm_cancel(app);
             if app.input.starts_with('/') && app.completions.is_empty() {
                 app.completions = completions(&app.input);
                 app.completion_idx = if app.completions.is_empty() { None } else { Some(0) };
@@ -280,13 +435,45 @@ fn handle_brief_key(app: &mut App, k: KeyEvent) {
             }
             apply_completion(app);
         }
-        KeyCode::Backspace => { backspace(app); refresh_completions(app); }
-        KeyCode::Char(c) => { insert(app, c); refresh_completions(app); }
-        KeyCode::Enter => { submit(app); }
-        KeyCode::Left => { if app.cursor > 0 { app.cursor -= 1; } }
-        KeyCode::Right => { if app.cursor < app.input.len() { app.cursor += 1; } }
-        _ => {}
+        KeyCode::Backspace => { backspace(app); refresh_completions(app); arm_cancel(app); }
+        KeyCode::Char(c) => { insert(app, c); refresh_completions(app); arm_cancel(app); }
+        KeyCode::Enter => { arm_cancel(app); submit(app); }
+        KeyCode::Left => { arm_cancel(app); if app.cursor > 0 { app.cursor -= 1; } }
+        KeyCode::Right => { arm_cancel(app); if app.cursor < app.input.len() { app.cursor += 1; } }
+        _ => { arm_cancel(app); }
     }
+}
+
+/// Esc on the chat view is the universal "let me rethink" gesture:
+///   - Input non-empty: clear the input, drop completions. Status hint.
+///   - Input empty + first Esc: arm a quit shortcut. Status hint.
+///   - Input empty + second Esc within 1.5s: quit (session saved by run_with).
+///   - Any other key after arming: cancel the arming.
+fn handle_esc(app: &mut App) {
+    if !app.input.is_empty() {
+        app.input.clear();
+        app.cursor = 0;
+        app.completions.clear();
+        app.completion_idx = None;
+        app.esc_armed_at = None;
+        app.status = Some("input cleared - press esc again on empty input to quit".into());
+        return;
+    }
+    let now = std::time::Instant::now();
+    let within_window = app.esc_armed_at
+        .map(|t| now.duration_since(t) < std::time::Duration::from_millis(1500))
+        .unwrap_or(false);
+    if within_window {
+        app.status = Some("exiting moneyball.".into());
+        app.quit = true;
+        return;
+    }
+    app.esc_armed_at = Some(now);
+    app.status = Some("press esc again to quit (1.5s window)".into());
+}
+
+fn arm_cancel(app: &mut App) {
+    app.esc_armed_at = None;
 }
 
 fn insert(app: &mut App, c: char) {
@@ -328,27 +515,142 @@ fn apply_completion(app: &mut App) {
 }
 
 fn submit(app: &mut App) {
+    use crate::chat::cells;
+    use crate::chat::Cell;
+    use chrono::Local;
     let line = app.input.trim().to_string();
     app.input.clear();
     app.cursor = 0;
     app.completions.clear();
     app.completion_idx = None;
     if line.is_empty() { return; }
+
+    // User prompt cell (every input becomes part of the scrollback).
+    app.chat.push(Cell::UserPrompt(cells::UserPrompt {
+        text: line.clone(),
+        at: Local::now(),
+    }));
+
     let mut parts = line.splitn(2, ' ');
     let cmd = parts.next().unwrap_or("");
     let arg = parts.next().unwrap_or("").trim();
+
     match cmd {
-        "/quit" | "/exit" | "/q" => app.quit = true,
-        "/brief" => app.load_brief(),
+        "/quit" | "/exit" | "/q" => {
+            app.chat.push(Cell::System(cells::System("exiting moneyball.".into())));
+            app.quit = true;
+        }
+        "/brief" => {
+            let started = std::time::Instant::now();
+            app.chat.push(Cell::AssistantText(cells::AssistantText {
+                text: "loading portfolio snapshot...".into(),
+                streaming: false,
+            }));
+            app.load_brief();
+            // If brief loaded, push tool call + result.
+            if let Some(b) = &app.brief {
+                let out = format_brief_as_lines(b);
+                app.chat.push_tool("brief", "", out, true, started.elapsed().as_millis() as u64);
+                app.chat.push(Cell::AssistantText(cells::AssistantText {
+                    text: format_feasibility_summary(b),
+                    streaming: false,
+                }));
+            } else {
+                let err = app.status.clone().unwrap_or_else(|| "snapshot failed".into());
+                app.chat.push_tool("brief", "", vec![err], false, started.elapsed().as_millis() as u64);
+            }
+        }
         "/setup" => {
+            app.chat.push(Cell::AssistantText(cells::AssistantText {
+                text: "opening setup wizard.".into(),
+                streaming: false,
+            }));
             app.view = View::Setup(SetupState::new(app.cfg.data_root.clone()));
         }
-        "/funnel" => app.status = Some(format!("/funnel {} - coming next iteration", arg)),
-        "/diagnose" => app.status = Some(format!("/diagnose {} - coming next iteration", arg)),
-        "/ask" => app.status = Some("/ask - coming next iteration".into()),
-        "/snapshot" => app.status = Some("/snapshot - coming next iteration".into()),
-        "/ledger" => app.status = Some("/ledger - coming next iteration".into()),
-        _ => app.status = Some(format!("unknown command: {} (tab for completions)", cmd)),
+        "/funnel" => {
+            app.chat.push(Cell::AssistantText(cells::AssistantText {
+                text: format!("/funnel {} - wired in the next iteration. for now use /ask + this product name.", arg),
+                streaming: false,
+            }));
+        }
+        "/diagnose" => {
+            app.chat.push(Cell::AssistantText(cells::AssistantText {
+                text: format!("/diagnose {} - wired in the next iteration.", arg),
+                streaming: false,
+            }));
+        }
+        "/ask" => {
+            app.chat.push(Cell::AssistantText(cells::AssistantText {
+                text: "/ask - LLM streaming wires up in the next iteration. for now use slash commands.".into(),
+                streaming: false,
+            }));
+        }
+        "/snapshot" => {
+            app.chat.push(Cell::AssistantText(cells::AssistantText {
+                text: "/snapshot --check validates that <workspace>/moneyball/history/snap/<date>/*.json match schema. wiring next.".into(),
+                streaming: false,
+            }));
+        }
+        "/ledger" => {
+            app.chat.push(Cell::AssistantText(cells::AssistantText {
+                text: "/ledger shows prediction history. wiring next.".into(),
+                streaming: false,
+            }));
+        }
+        "/help" | "/?" => {
+            app.chat.push(Cell::AssistantText(cells::AssistantText {
+                text: "slash commands: /brief /funnel <product> /diagnose <product> /ask <question> /snapshot /ledger /setup /quit".into(),
+                streaming: false,
+            }));
+        }
+        _ => {
+            app.chat.push(Cell::System(cells::System(format!("unknown: {} (try /help)", cmd))));
+        }
+    }
+}
+
+fn format_brief_as_lines(b: &brief::ProductRowsAndFeasibility) -> Vec<String> {
+    let mut out = Vec::new();
+    for r in &b.rows {
+        out.push(format!(
+            "{:<24} {:>7}/d  m{:>4}  l{:>4}  q{:>3}  {:>5}/d  \u{20B9}{:>5}/q  L\u{2192}Q {:>4}%   gap {:>5}",
+            truncate_str(&r.product, 24),
+            r.spend_per_day,
+            r.m7d, r.l7d, r.q7d,
+            format!("{:.2}", r.q_per_day),
+            r.rs_per_q.map(|x| x.to_string()).unwrap_or_else(|| "-".into()),
+            r.l_to_q.map(|x| format!("{:.1}", x)).unwrap_or_else(|| "-".into()),
+            format!("{:.1}", r.gap),
+        ));
+    }
+    let f = &b.feasibility;
+    out.push(format!("FEASIBILITY  {:.1} q/day @ \u{20B9}{}/day = \u{20B9}{}/q \u{00B7} goal {:.0}/day",
+        f.tot_q_per_day, f.tot_spend_per_day, f.cur_rpq, f.tot_goal_per_day));
+    if let Some(req) = f.required_at_cur {
+        out.push(format!("  required @ current:  \u{20B9}{}/day ({:.1}x)", req, req as f64 / f.tot_spend_per_day.max(1) as f64));
+    }
+    if let (Some(b), Some(req)) = (f.best_rpq, f.required_at_best) {
+        out.push(format!("  required @ best \u{20B9}{}/q: \u{20B9}{}/day ({:.1}x)", b, req, req as f64 / f.tot_spend_per_day.max(1) as f64));
+    }
+    let suffix = if f.open_debt.is_empty() { String::new() } else { format!(" ({})", f.open_debt.join(", ")) };
+    out.push(format!("  setup debt: {}{}", f.open_debt.len(), suffix));
+    out
+}
+
+fn format_feasibility_summary(b: &brief::ProductRowsAndFeasibility) -> String {
+    let f = &b.feasibility;
+    let best = f.best_rpq.map(|x| x.to_string()).unwrap_or_else(|| "-".into());
+    format!(
+        "portfolio is at {:.1} q/day against a {}/day goal. at current \u{20B9}{}/q you'd need \u{20B9}{}/day; at the best-observed \u{20B9}{}/q you still need \u{20B9}{}/day.",
+        f.tot_q_per_day, f.tot_goal_per_day as u64, f.cur_rpq, f.required_at_cur.unwrap_or(0), best, f.required_at_best.unwrap_or(0),
+    )
+}
+
+fn truncate_str(s: &str, n: usize) -> String {
+    if s.chars().count() <= n { s.to_string() } else {
+        let mut out: String = s.chars().take(n.saturating_sub(1)).collect();
+        out.push('\u{2026}');
+        out
     }
 }
 
@@ -759,23 +1061,23 @@ fn parse_goals(products: &[(String, String)], s: &str) -> std::result::Result<st
 
 fn render(f: &mut ratatui::Frame, app: &App) {
     let area = f.area();
-    // Shared 4-band layout: logo + context + body + (commands+input).
-    // Each view fills in the body band differently.
+    // Layout (top to bottom):
+    //   logo (2) | context (1) | body (Min) | commands (0 - hidden) | input (3)
+    //
+    // For the setup wizard, body is the wizard panel (no commands shown).
+    // For the chat view (default), body is the chat log + commands + input.
     let outer = Layout::default()
         .direction(Direction::Vertical)
         .margin(1)
         .constraints([
-            Constraint::Length(2),    // logo (2 lines: brand line + spacer)
+            Constraint::Length(2),    // logo
             Constraint::Length(1),    // context bar
             Constraint::Min(6),       // body
         ])
         .split(area);
 
-    // Logo + context bar (identical in both views).
-    f.render_widget(
-        Paragraph::new(crate::widgets::logo()),
-        outer[0],
-    );
+    // Logo + context bar.
+    f.render_widget(Paragraph::new(crate::widgets::logo()), outer[0]);
     let status = if app.brief.is_some() {
         crate::widgets::Status::Ready
     } else if app.cfg.has_workspace() {
@@ -790,11 +1092,46 @@ fn render(f: &mut ratatui::Frame, app: &App) {
     );
     f.render_widget(Paragraph::new(ctx_line), outer[1]);
 
-    // Body band: view-specific.
     match &app.view {
         View::Setup(s) => render_setup(f, outer[2], s),
-        View::Brief => render_brief(f, outer[2], app),
+        View::Brief => render_chat_view(f, outer[2], app),
     }
+}
+
+/// Chat-style body: scrollable log + compact command hint + input bar.
+fn render_chat_view(f: &mut ratatui::Frame, area: Rect, app: &App) {
+    // Body has 3 sub-bands: chat log (Min), command hint (1), input (3).
+    // We don't show the full commands list (it was a dashboard-y thing);
+    // a one-line hint with /help is enough.
+    let chunks = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([
+            Constraint::Min(5),
+            Constraint::Length(1),
+            Constraint::Length(3),
+        ])
+        .split(area);
+
+    // Chat log
+    let log_lines: Vec<Line<'static>> = {
+        let width = chunks[0].width.max(20);
+        let height = chunks[0].height.max(5);
+        app.chat.render(width, height)
+    };
+    f.render_widget(
+        Paragraph::new(log_lines),
+        chunks[0],
+    );
+
+    // Compact command hint: `/brief /funnel /diagnose /ask /snapshot /ledger /setup /quit`
+    let hint = Span::styled(
+        "  /brief  /funnel  /diagnose  /ask  /snapshot  /ledger  /setup  /quit",
+        Style::default().fg(Color::DarkGray),
+    );
+    f.render_widget(Paragraph::new(Line::from(hint)), chunks[1]);
+
+    // Input bar
+    render_input_bar(f, chunks[2], app);
 }
 
 fn render_setup(f: &mut ratatui::Frame, area: Rect, s: &SetupState) {
