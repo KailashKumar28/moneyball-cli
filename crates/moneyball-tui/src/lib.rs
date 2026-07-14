@@ -990,11 +990,13 @@ fn handle_setup_key(app: &mut App, mut state: SetupState, k: KeyEvent) {
         return;
     }
     // Step 4 picker substeps (provider pick, model pick) have their own
-    // arrow-key navigation.
+    // arrow-key navigation. Other keys (Enter, Esc, Char) fall through
+    // to the default handler so Enter advances to the next substep.
     if state.step == 4 && (state.llm_substep == 0 || state.llm_substep == 2) {
-        handle_llm_picker_keys(&mut state, k);
-        app.view = View::Setup(state);
-        return;
+        if handle_llm_picker_keys(&mut state, k) {
+            app.view = View::Setup(state);
+            return;
+        }
     }
     // Substep 2 of step 1 is the rename buffer. Esc goes back to substep 1.
     if state.step == 1 && state.meta_substep == 2 && k.code == KeyCode::Esc {
@@ -1134,8 +1136,10 @@ fn handle_select_keys(s: &mut SetupState, k: KeyEvent) {
 /// Arrow-key navigation for step 4 picker substeps (provider pick +
 /// model pick). Step 4 substep 1 (paste) and substep 3 (custom URL/model)
 /// accept free text via `insert_setup`, so this only handles the picker
-/// substeps.
-fn handle_llm_picker_keys(s: &mut SetupState, k: KeyEvent) {
+/// substeps. Returns `true` if the key was consumed (arrow nav), so
+/// the caller can fall through to the default handler for Enter / Esc /
+/// Backspace / Char which need to reach advance_setup, etc.
+fn handle_llm_picker_keys(s: &mut SetupState, k: KeyEvent) -> bool {
     // Visible rows in step 4 picker lists. Keep in sync with the renderer.
     const VISIBLE_ROWS: usize = 6;
     let total = match s.llm_substep {
@@ -1155,7 +1159,7 @@ fn handle_llm_picker_keys(s: &mut SetupState, k: KeyEvent) {
         _ => 0,
     };
     if total == 0 {
-        return;
+        return false;
     }
     match k.code {
         KeyCode::Up => {
@@ -1165,6 +1169,7 @@ fn handle_llm_picker_keys(s: &mut SetupState, k: KeyEvent) {
                     s.llm_scroll = s.llm_highlight;
                 }
             }
+            true
         }
         KeyCode::Down => {
             if s.llm_highlight + 1 < total {
@@ -1173,16 +1178,23 @@ fn handle_llm_picker_keys(s: &mut SetupState, k: KeyEvent) {
                     s.llm_scroll = s.llm_highlight + 1 - VISIBLE_ROWS;
                 }
             }
+            true
         }
         KeyCode::Home => {
             s.llm_highlight = 0;
             s.llm_scroll = 0;
+            true
         }
         KeyCode::End => {
             s.llm_highlight = total.saturating_sub(1);
             s.llm_scroll = total.saturating_sub(VISIBLE_ROWS);
+            true
         }
-        _ => {}
+        // Other keys (Enter, Esc, Backspace, Char) are NOT consumed -
+        // the caller routes them to advance_setup / Esc / backspace_setup
+        // / insert_setup. Enter is the critical one: without it, the
+        // picker is dead because advance_setup never gets called.
+        _ => false,
     }
 }
 
@@ -2031,7 +2043,7 @@ fn render_completed_steps(s: &SetupState) -> Vec<Line<'static>> {
         )));
         i = 3;
     }
-    if s.step >= 4 {
+    if !s.llm_provider_id.is_empty() {
         let provider = s.llm_provider_id.as_str();
         let model = if s.llm_model.is_empty() {
             "?".to_string()
@@ -2041,7 +2053,7 @@ fn render_completed_steps(s: &SetupState) -> Vec<Line<'static>> {
         let n = s.llm_key_len;
         let bullets = "\u{2022}".repeat(n.min(10));
         out.push(Line::from(Span::styled(
-            format!("  \u{2713} 4 \u{00B7} model               {} \u{00B7} {} ({})", provider, model, bullets),
+            format!("  \u{2713} 5 \u{00B7} model               {} \u{00B7} {} ({})", provider, model, bullets),
             Style::default().fg(Color::Green),
         )));
     }
@@ -2692,6 +2704,57 @@ mod paste_tests {
             View::Setup(state) => {
                 assert_eq!(state.meta_substep, 1, "should be back on multi-select");
                 assert!(state.meta_rename_input.is_empty(), "rename input cleared");
+            }
+            _ => panic!("expected Setup view"),
+        }
+    }
+
+    /// Regression test: the LLM provider picker must NOT eat Enter /
+    /// Esc / Backspace / Char keys. Only Up/Down/Home/End belong to
+    /// the picker. If the picker consumed Enter, advance_setup never
+    /// ran and the user was stuck. This is the bug the user hit in
+    /// the initial setup.
+    #[test]
+    fn llm_picker_does_not_consume_enter() {
+        use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+        let mut s = make_state(4, 0);
+        s.llm_highlight = 0;
+        let snapshot = s.clone();
+        let mut app = app_with_setup(s);
+        handle_setup_key(
+            &mut app,
+            snapshot,
+            KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE),
+        );
+        match app.view {
+            View::Setup(state) => {
+                // Enter on the provider picker should pick "openai"
+                // (the first preset) and advance to substep 1 (key paste).
+                assert_eq!(state.llm_substep, 1, "should advance to key paste");
+                assert_eq!(state.llm_provider_id, "openai");
+            }
+            _ => panic!("expected Setup view"),
+        }
+    }
+
+    /// Picker nav (Up/Down) should still work and be consumed by the
+    /// picker (so it doesn't fall through to backspace/insert).
+    #[test]
+    fn llm_picker_down_arrow_advances_highlight() {
+        use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+        let mut s = make_state(4, 0);
+        s.llm_highlight = 0;
+        s.llm_scroll = 0;
+        let snapshot = s.clone();
+        let mut app = app_with_setup(s);
+        handle_setup_key(
+            &mut app,
+            snapshot,
+            KeyEvent::new(KeyCode::Down, KeyModifiers::NONE),
+        );
+        match app.view {
+            View::Setup(state) => {
+                assert_eq!(state.llm_highlight, 1, "Down should move highlight");
             }
             _ => panic!("expected Setup view"),
         }
