@@ -34,4 +34,10 @@ pub enum Error {
 
     #[error("secrets: {0}")]
     Secrets(String),
+
+    #[error("llm: {0}")]
+    Llm(String),
+
+    #[error("llm auth: {0}")]
+    LlmAuth(String),
 }
