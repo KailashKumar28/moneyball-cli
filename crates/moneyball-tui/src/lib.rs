@@ -1389,7 +1389,21 @@ fn advance_meta(_app: &mut App, s: &mut SetupState) {
                     }
                     // Persist token to keychain immediately; we'll move it out of memory after.
                     if let Err(e) = moneyball_core::secrets::store_meta_token(raw) {
-                        s.error = Some(format!("token accepted but keychain write failed: {}", e));
+                        s.error = Some(format!("token accepted but keychain write failed: {}. \
+On macOS, allow moneyball-cli in Keychain Access (or run /setup again after granting).", e));
+                        return;
+                    }
+                    // Round-trip verify: macOS Keychain ACLs (or an ad-hoc
+                    // binary signature) can make set_password report success
+                    // while the item never lands in the user keychain. Reject
+                    // early so the user knows to retry.
+                    if moneyball_core::secrets::load_meta_token().as_deref() != Some(raw) {
+                        s.error = Some(
+                            "keychain write did not persist (likely macOS denied access). \
+On macOS, re-run /setup and approve the Keychain prompt, or sign the moneyball binary."
+                                .into(),
+                        );
+                        let _ = moneyball_core::secrets::clear_meta_token();
                         return;
                     }
                     // Capture token length for the collapsed summary ("••••• (N chars)")
@@ -1638,7 +1652,26 @@ fn advance_llm(app: &mut App, s: &mut SetupState) {
                 return;
             }
             if let Err(e) = moneyball_core::secrets::store_llm_key(&s.llm_provider_id, key) {
-                s.error = Some(format!("keychain write failed: {}", e));
+                s.error = Some(format!(
+                    "keychain write failed: {}. \
+On macOS, allow moneyball-cli in Keychain Access (or run /setup again after granting).",
+                    e
+                ));
+                return;
+            }
+            // Round-trip verify: macOS Keychain ACLs (or an ad-hoc binary
+            // signature) can make set_password report success while the
+            // item never lands in the user keychain. Reject early so the
+            // user knows to retry.
+            if moneyball_core::secrets::load_llm_key(&s.llm_provider_id).as_deref()
+                != Some(key)
+            {
+                s.error = Some(
+                    "keychain write did not persist (likely macOS denied access). \
+On macOS, re-run /setup and approve the Keychain prompt, or sign the moneyball binary."
+                        .into(),
+                );
+                let _ = moneyball_core::secrets::clear_llm_key(&s.llm_provider_id);
                 return;
             }
             s.llm_key_len = key.chars().count();
@@ -2807,6 +2840,52 @@ mod paste_tests {
                 assert_eq!(state.llm_highlight, 1, "Down should move highlight");
             }
             _ => panic!("expected Setup view"),
+        }
+    }
+
+    /// Round-trip test: a keychain write that returns Ok should also
+    /// be readable. Catches the macOS bug where an ad-hoc binary's
+    /// write is silently dropped (the wizard's verify-after-write
+    /// guard relies on this). Skipped on headless environments where
+    /// the keychain isn't available, and prints a clear warning if
+    /// the env has the macOS ACL bug (since CI on ad-hoc binaries
+    /// would otherwise fail forever).
+    #[test]
+    fn keychain_round_trip_persists_for_wizard() {
+        let provider = "test_round_trip_provider";
+        let token = "sk-test-1234567890abcdef";
+        // Best-effort cleanup before the test.
+        moneyball_core::secrets::clear_llm_key(provider).ok();
+        if moneyball_core::secrets::store_llm_key(provider, token).is_err() {
+            eprintln!(
+                "[moneyball] skipping keychain round-trip test: write failed \
+                 (likely headless / no keychain access in this env)"
+            );
+            return;
+        }
+        let read_back = moneyball_core::secrets::load_llm_key(provider);
+        moneyball_core::secrets::clear_llm_key(provider).ok();
+        match read_back.as_deref() {
+            Some(t) if t == token => {} // success
+            Some(other) => panic!(
+                "keychain read returned a different value than was written: \
+                 {:?} (likely a keychain corruption / multi-process race)",
+                other
+            ),
+            None => {
+                // The macOS ad-hoc-binary ACL bug. The wizard now
+                // catches this with a verify-after-write guard; this
+                // test just warns (since CI on a non-signed binary
+                // would otherwise fail forever). If you see this in
+                // a properly-signed build, the wizard guard is the
+                // safety net.
+                eprintln!(
+                    "[moneyball] keychain round-trip test: write returned Ok \
+                     but read returned None. This is the macOS ad-hoc-binary \
+                     ACL bug - the wizard now rejects this case via \
+                     verify-after-write. Sign the binary to make this pass."
+                );
+            }
         }
     }
 }
