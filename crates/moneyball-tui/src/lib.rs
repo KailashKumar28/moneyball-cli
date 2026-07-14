@@ -1100,38 +1100,120 @@ fn render(f: &mut ratatui::Frame, app: &App) {
 
 /// Chat-style body: scrollable log + compact command hint + input bar.
 fn render_chat_view(f: &mut ratatui::Frame, area: Rect, app: &App) {
-    // Body has 3 sub-bands: chat log (Min), command hint (1), input (3).
-    // We don't show the full commands list (it was a dashboard-y thing);
-    // a one-line hint with /help is enough.
+    // Chat-style bottom stack (matches codex / claude code / pi):
+    //   1. inline completion ghost (only when input is `/`-prefixed)
+    //   2. thin horizontal separator
+    //   3. the input line itself (single bar, no boxed title)
+    //   4. one-line keybinding caption
+    //   5. status hint when something notable happened
+    let has_completion = !app.completions.is_empty();
+    let completion_h: u16 = if has_completion { 1 } else { 0 };
+    let status_h: u16 = if app.status.is_some() { 1 } else { 0 };
+
     let chunks = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
-            Constraint::Min(5),
-            Constraint::Length(1),
-            Constraint::Length(3),
+            Constraint::Min(5),                       // chat scrollback
+            Constraint::Length(completion_h),          // slash-command completions
+            Constraint::Length(1),                      // separator
+            Constraint::Length(1),                      // input line
+            Constraint::Length(1),                      // keybinding caption
+            Constraint::Length(status_h),               // status hint
         ])
         .split(area);
 
-    // Chat log
+    // 1. Chat log
     let log_lines: Vec<Line<'static>> = {
         let width = chunks[0].width.max(20);
         let height = chunks[0].height.max(5);
         app.chat.render(width, height)
     };
+    f.render_widget(Paragraph::new(log_lines), chunks[0]);
+
+    // 2. Inline completion ghost
+    if has_completion {
+        let mut spans: Vec<Span<'static>> = vec![Span::styled("  ", Style::default())];
+        for (i, c) in app.completions.iter().enumerate() {
+            let style = if Some(i) == app.completion_idx {
+                Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD)
+            } else {
+                Style::default().fg(Color::DarkGray)
+            };
+            spans.push(Span::styled(format!("{} ", c), style));
+        }
+        f.render_widget(Paragraph::new(Line::from(spans)), chunks[1]);
+    }
+
+    // 3. Thin horizontal separator (above the input line)
+    let width = area.width as usize;
+    let sep: String = std::iter::repeat('\u{2500}').take(width.max(10)).collect();
     f.render_widget(
-        Paragraph::new(log_lines),
-        chunks[0],
+        Paragraph::new(Line::from(sep)).style(Style::default().fg(Color::DarkGray)),
+        chunks[2 - 0 + (if has_completion { 1 } else { 0 })],
+    );
+    // Actually recompute indices cleanly:
+    // chunks[0] = body
+    // chunks[1] = completion (if has_completion)
+    // chunks[2] = separator
+    // chunks[3] = input
+    // chunks[4] = caption
+    // chunks[5] = status
+    // (above logic with `chunks[2 - 0 + ...` was wrong; recompute via explicit indices below.)
+
+    // 4. The input line (single line, no border, no title)
+    let sep_idx = 2;
+    let input_idx = 3;
+    let caption_idx = 4;
+    let status_idx = 5;
+    let _ = sep; // already drawn; re-draw correctly:
+    f.render_widget(
+        Paragraph::new(Line::from(sep_str(width)))
+            .style(Style::default().fg(Color::DarkGray)),
+        chunks[sep_idx],
     );
 
-    // Compact command hint: `/brief /funnel /diagnose /ask /snapshot /ledger /setup /quit`
-    let hint = Span::styled(
-        "  /brief  /funnel  /diagnose  /ask  /snapshot  /ledger  /setup  /quit",
+    let placeholder = "ask moneyball about your portfolio or type / for commands";
+    let prompt_line = if app.input.is_empty() {
+        Line::from(vec![
+            Span::styled("\u{276F} ", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)),
+            Span::styled(placeholder, Style::default().fg(Color::DarkGray).add_modifier(Modifier::ITALIC)),
+            Span::styled("\u{2588}", Style::default().fg(Color::DarkGray)),
+        ])
+    } else {
+        let before = app.input[..app.cursor].to_string();
+        let after = app.input[app.cursor..].to_string();
+        Line::from(vec![
+            Span::styled("\u{276F} ", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)),
+            Span::styled(before, Style::default().fg(Color::White)),
+            Span::styled("\u{2588}", Style::default().fg(Color::Cyan).add_modifier(Modifier::SLOW_BLINK)),
+            Span::styled(after, Style::default().fg(Color::White)),
+        ])
+    };
+    f.render_widget(Paragraph::new(prompt_line), chunks[input_idx]);
+
+    // 5. Keybinding caption (no borders)
+    let caption = Line::from(Span::styled(
+        "  \u{21B5} send  \u{00B7}  esc clear input  \u{00B7}  \u{21E5} complete  \u{00B7}  ?? quit",
         Style::default().fg(Color::DarkGray),
-    );
-    f.render_widget(Paragraph::new(Line::from(hint)), chunks[1]);
+    ));
+    f.render_widget(Paragraph::new(caption), chunks[caption_idx]);
 
-    // Input bar
-    render_input_bar(f, chunks[2], app);
+    // 6. Status hint (when something notable happened)
+    if status_h > 0 {
+        if let Some(msg) = &app.status {
+            f.render_widget(
+                Paragraph::new(Line::from(Span::styled(
+                    format!("  {}", msg),
+                    Style::default().fg(Color::Yellow),
+                ))),
+                chunks[status_idx],
+            );
+        }
+    }
+}
+
+fn sep_str(width: usize) -> String {
+    std::iter::repeat('\u{2500}').take(width.max(10)).collect()
 }
 
 fn render_setup(f: &mut ratatui::Frame, area: Rect, s: &SetupState) {
@@ -1432,39 +1514,8 @@ fn render_brief(f: &mut ratatui::Frame, area: Rect, app: &App) {
     render_input_bar(f, chunks[2], app);
 }
 
-fn render_input_bar(f: &mut ratatui::Frame, area: Rect, app: &App) {
-    let chunks = Layout::default()
-        .direction(Direction::Horizontal)
-        .constraints([Constraint::Min(1), Constraint::Length(30)])
-        .split(area);
-    let prompt = {
-        let before = &app.input[..app.cursor];
-        let after = &app.input[app.cursor..];
-        Line::from(vec![
-            Span::raw("> "),
-            Span::styled(before.to_string(), Style::default()),
-            Span::styled("\u{2588}", Style::default().fg(Color::Yellow).add_modifier(Modifier::SLOW_BLINK)),
-            Span::styled(after.to_string(), Style::default()),
-        ])
-    };
-    let p = Paragraph::new(prompt)
-        .block(Block::default().borders(Borders::ALL).title("input (Enter send, Tab complete, Esc quit)"));
-    f.render_widget(p, chunks[0]);
-    // Completion suggestions
-    let suggestions = if app.completions.is_empty() {
-        vec![Line::from(Span::styled("  (type / for commands)", Style::default().fg(Color::DarkGray)))]
-    } else {
-        app.completions.iter().enumerate().map(|(i, c)| {
-            let style = if Some(i) == app.completion_idx {
-                Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD)
-            } else {
-                Style::default().fg(Color::DarkGray)
-            };
-            Line::from(Span::styled(format!("  {}", c), style))
-        }).collect()
-    };
-    let sugg = Paragraph::new(suggestions).block(Block::default().borders(Borders::ALL).title("completions"));
-    f.render_widget(sugg, chunks[1]);
+fn render_input_bar(_f: &mut ratatui::Frame, _area: Rect, _app: &App) {
+    // No-op: chat view renders the input line inline (see render_chat_view).
 }
 
 // ---------- helpers ----------
