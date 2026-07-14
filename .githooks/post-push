@@ -1,0 +1,58 @@
+#!/usr/bin/env bash
+# moneyball-cli post-push hook: keep the installed `moneyball` binary in
+# ~/.cargo/bin in sync with the source we just pushed. Runs after every
+# successful `git push`, regardless of branch.
+#
+# Per AGENTS.md "definition of done", `cargo install --path
+# crates/moneyball --locked --quiet` is one of the steps; this hook
+# automates it so the binary on PATH never lags behind `master`.
+#
+# Why: `cargo install` writes to ~/.cargo/bin/moneyball, which is the
+# `moneyball` command on $PATH. Without this hook, the installed binary
+# drifts from the source every time you commit and forget to reinstall.
+#
+# When to delete: if you switch to a different deployment model
+# (e.g. CI-built releases, brew tap), drop this file and unset
+# `core.hooksPath`.
+
+set -euo pipefail
+
+# Only run when the push touched a branch that contains the moneyball
+# binary's source. Skips pushes of unrelated refs (tags, notes) to
+# avoid wasting ~30s on every `git push --tags`.
+remote="$1"
+url="$2"
+
+# Skip if this is a tag-only push (no branch ref updated on the remote).
+while read -r local_ref local_sha remote_ref remote_sha; do
+    case "$remote_ref" in
+        refs/heads/*) has_branch=1 ;;
+    esac
+done < /dev/stdin 2>/dev/null || true
+
+# `git push` feeds its ref-update lines on stdin to the hook. Read them.
+has_branch=0
+while IFS= read -r line; do
+    [ -z "$line" ] && continue
+    case "$line" in
+        refs/heads/*) has_branch=1 ;;
+    esac
+done
+
+if [ "$has_branch" -eq 0 ]; then
+    exit 0
+fi
+
+# Resolve repo root (this hook lives in <root>/.githooks/post-push).
+hook_dir="$(cd "$(dirname "$0")" && pwd)"
+repo_root="$(cd "$hook_dir/.." && pwd)"
+cd "$repo_root"
+
+printf '\033[2m[moneyball post-push]\033[0m cargo install --path crates/moneyball --locked --quiet ...\n'
+if cargo install --path crates/moneyball --locked --quiet 2>&1 | sed 's/^/\033[2m  | \033[0m/'; then
+    installed_path="${CARGO_HOME:-$HOME/.cargo}/bin/moneyball"
+    printf '\033[32m[moneyball post-push]\033[0m installed: %s\n' "$installed_path"
+else
+    printf '\033[31m[moneyball post-push]\033[0m install FAILED; check output above.\n' >&2
+    exit 1
+fi

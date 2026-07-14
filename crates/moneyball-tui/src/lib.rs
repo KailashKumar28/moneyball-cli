@@ -888,15 +888,15 @@ fn handle_select_keys(s: &mut SetupState, k: KeyEvent) {
             s.error = None;
         }
         KeyCode::Esc => {
-            // "back" - drop the discovered list and return to substep 0
-            // (token paste). The user can re-paste a token or type 'skip'.
-            s.meta_discovered.clear();
-            s.meta_selections.clear();
-            s.meta_selected.clear();
-            s.meta_input.clear();
+            // "back" - return to substep 0 (token paste) WITHOUT nuking the
+            // user's progress. The discovered account list and the per-row
+            // checkbox state survive so the user doesn't have to re-select
+            // after re-validating. The token itself was already cleared
+            // from `meta_input` after validation, so we restore a masked
+            // placeholder (N bullets of `meta_token_len`) so the input
+            // box doesn't look empty.
+            s.meta_input = "\u{2022}".repeat(s.meta_token_len);
             s.meta_rename_input.clear();
-            s.meta_highlight = 0;
-            s.meta_scroll = 0;
             s.meta_substep = 0;
             s.error = None;
         }
@@ -2019,6 +2019,77 @@ mod paste_tests {
         handle_paste(&mut app, "".into());
         match app.view {
             View::Setup(state) => assert!(state.meta_input.is_empty()),
+            _ => panic!("expected Setup view"),
+        }
+    }
+
+    /// Esc on the multi-select step (substep 1) returns to the token paste
+    /// (substep 0) WITHOUT nuking the discovered accounts or the user's
+    /// per-row selections. The token input is restored as N bullets so the
+    /// box doesn't look empty. Regression test for the bug where going
+    /// back from substep 1 dropped all of `meta_discovered` / selections.
+    #[test]
+    fn esc_from_multi_select_preserves_state() {
+        use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+        use moneyball_core::meta::AdAccount;
+        let mut s = make_state(1, 1);
+        s.meta_token_len = 124;
+        s.meta_discovered = vec![
+            AdAccount {
+                id: "act_1".into(),
+                name: "Acme".into(),
+                account_status: Some(1),
+            },
+            AdAccount {
+                id: "act_2".into(),
+                name: "Beta".into(),
+                account_status: Some(1),
+            },
+        ];
+        s.meta_selections = vec![true, false];
+        s.meta_selected = vec![0];
+        s.meta_highlight = 1;
+        let snapshot = s.clone();
+        let mut app = app_with_setup(s);
+        handle_setup_key(
+            &mut app,
+            snapshot,
+            KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE),
+        );
+        match app.view {
+            View::Setup(state) => {
+                assert_eq!(state.meta_substep, 0, "should be back on token paste");
+                assert_eq!(state.meta_discovered.len(), 2, "discovered list preserved");
+                assert_eq!(state.meta_selections, vec![true, false], "selections preserved");
+                assert_eq!(state.meta_selected, vec![0], "selected indices preserved");
+                // Token input restored as N bullets.
+                assert_eq!(state.meta_input.chars().count(), 124);
+                assert!(state.meta_input.chars().all(|c| c == '\u{2022}'));
+            }
+            _ => panic!("expected Setup view"),
+        }
+    }
+
+    /// Esc on the rename step (substep 2) returns to the multi-select
+    /// (substep 1) WITHOUT nuking selections; only the rename input is
+    /// cleared so the user can re-type.
+    #[test]
+    fn esc_from_rename_preserves_selections() {
+        use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+        let mut s = make_state(1, 2);
+        s.meta_rename_input = "1=Acme".into();
+        let snapshot = s.clone();
+        let mut app = app_with_setup(s);
+        handle_setup_key(
+            &mut app,
+            snapshot,
+            KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE),
+        );
+        match app.view {
+            View::Setup(state) => {
+                assert_eq!(state.meta_substep, 1, "should be back on multi-select");
+                assert!(state.meta_rename_input.is_empty(), "rename input cleared");
+            }
             _ => panic!("expected Setup view"),
         }
     }
