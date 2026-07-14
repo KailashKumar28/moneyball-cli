@@ -1,0 +1,248 @@
+# Moneyball TUI Feature Inventory
+#
+# Each feature has:
+#   id          - short kebab-case identifier
+#   area        - group: cli | tui | wizard | session | slash | subcommand
+#   name        - human-readable name
+#   expected    - description of correct behavior (the "desired state")
+#   screenshot  - path under .test-harness/screenshots/<id>/latest.png
+#   status      - pending | passing | failing | blocked
+#   notes       - any caveats or follow-up
+
+[[features]]
+id = "welcome-view"
+area = "tui"
+name = "Welcome view (no workspace)"
+expected = "When moneyball launches with no workspace configured, it shows: the MONEYBALL ASCII logo with a cyan diamond glyph, the workspace context line, and the first-run setup wizard step 1 (workspace path input). The cursor sits at the end of the input field. Box borders render cleanly."
+screenshot = "screenshots/welcome-view/latest.png"
+status = "passing"
+notes = "Captured at 120x40. Logo, wizard panel, cursor all visible."
+
+[[features]]
+id = "wizard-step-1-workspace"
+area = "wizard"
+name = "Wizard step 1: workspace path"
+expected = "Form-style input with the current default path pre-filled. Pressing Enter accepts. Backspace edits. Esc clears the input (does NOT quit - see slash-exit-command). Help text visible at the bottom."
+screenshot = "screenshots/wizard-step-1-workspace/latest.png"
+status = "passing"
+
+[[features]]
+id = "wizard-step-2-meta"
+area = "wizard"
+name = "Wizard step 2: connect Meta"
+expected = "Multi-select checklist of discovered ad accounts. Up/Down/PgUp/PgDn/Home/End to move. Space toggles. 'a' selects all/none. Enter confirms. Question: is the optional 'rename selected accounts' substep kept? (user was unsure - ASK before declaring broken)."
+screenshot = "screenshots/wizard-step-2-meta/latest.png"
+status = "pending"
+notes = "OPEN QUESTION for the loop driver: confirm rename substep with user."
+
+[[features]]
+id = "wizard-step-3-products"
+area = "wizard"
+name = "Wizard step 3: confirm products"
+expected = "Auto-filled list of selected Meta ad accounts. 'Name AdAccount' or 'demo' adds manually. Each row shows product name + ad account ID."
+screenshot = "screenshots/wizard-step-3-products/latest.png"
+status = "pending"
+
+[[features]]
+id = "wizard-step-4-goals"
+area = "wizard"
+name = "Wizard step 4: goals per product"
+expected = "For each product, prompt for daily qualified-lead goal. Default 10. Empty Enter accepts default."
+screenshot = "screenshots/wizard-step-4-goals/latest.png"
+status = "pending"
+
+[[features]]
+id = "brief-command"
+area = "subcommand"
+name = "moneyball brief"
+expected = "Prints a per-product 7-day brief table (spend/day, leads, qualified, q/day, Rs/q, lead-to-qualified rate, goal, gap) plus a FEASIBILITY section with portfolio totals and required-spend math. Parity-verified vs mb.py scoreboard."
+screenshot = "screenshots/brief-command/latest.png"
+status = "passing"
+notes = "Verified against fin_campaign_analysis 2026-07-13 snapshot."
+
+[[features]]
+id = "snapshot-command"
+area = "subcommand"
+name = "moneyball snapshot"
+expected = "Validates the JSON snapshot for a given date. Exits non-zero on schema errors. Prints which fields are missing or malformed."
+screenshot = "screenshots/snapshot-command/latest.png"
+status = "pending"
+
+[[features]]
+id = "repl-default"
+area = "cli"
+name = "moneyball (no args) -> REPL"
+expected = "Starts the interactive TUI. Default behavior of the binary."
+screenshot = "screenshots/repl-default/latest.png"
+status = "passing"
+
+[[features]]
+id = "repl-chat-bar"
+area = "tui"
+name = "Chat-style input bar (codex style)"
+expected = "Original-codex style chat input. NO bordered box. NO static command list. Inline completion ghost when typing '/'. Keybinding caption visible (e.g. 'enter to send, esc to clear'). Placeholder text shown when input is empty (e.g. 'Ask moneyball or type / for commands'). Bottom row sits flush against the terminal edge."
+screenshot = "screenshots/repl-chat-bar/latest.png"
+status = "passing"
+notes = "Implemented per AGENTS.md: 'chat-style input bar (no bordered box, no static command list, inline completion ghost, keybinding caption, placeholder text)'."
+
+# ESC BEHAVIOR
+# Per user: "ESE should not quit there should be an /exit command to get out of moneyball"
+# Esc on empty input -> shows 'press esc to clear' or similar (no quit arm).
+# Esc on non-empty input -> clears the input.
+# /exit (or /quit, /q) is the only way to quit.
+# The double-Esc-quit feature is REMOVED. There's no `repl-double-esc` feature here.
+
+[[features]]
+id = "repl-esc-clears"
+area = "tui"
+name = "Esc clears the input (no quit)"
+expected = "Pressing Esc on a non-empty input clears it. Pressing Esc on empty input shows a hint (e.g. 'use /exit to quit') but does NOT quit. The double-Esc quit shortcut from earlier codex-style implementations is removed. Only /exit (or /quit, /q) ends moneyball."
+screenshot = "screenshots/repl-esc-clears/latest.png"
+status = "passing"
+notes = "Removed handle_esc quit logic in lib.rs. Removed dead esc_armed_at field and arm_cancel function. Updated keybinding caption from 'esc esc to quit' to '/exit to quit'."
+
+[[features]]
+id = "repl-logo"
+area = "tui"
+name = "Moneyball ASCII logo on session start"
+expected = "The first cell on every fresh session is a System cell containing the MONEYBALL ASCII art with cyan diamond."
+screenshot = "screenshots/repl-logo/latest.png"
+status = "passing"
+
+# SLASH COMMANDS
+[[features]]
+id = "slash-help"
+area = "slash"
+name = "/help (or /?)"
+expected = "Lists every available slash command with one-line description. Matches the original codex /help output format (command + description, monospace)."
+screenshot = "screenshots/slash-help/latest.png"
+status = "passing"
+
+[[features]]
+id = "slash-exit"
+area = "slash"
+name = "/exit, /quit, /q"
+expected = "All three aliases exit moneyball cleanly. The session is auto-saved to ~/.moneyball/sessions/ before exit. A 'exiting moneyball.' System cell is appended to the chat log before quit."
+screenshot = "screenshots/slash-exit/latest.png"
+status = "passing"
+notes = "Already implemented in lib.rs:658: `/quit | /exit | /q => { ... app.quit = true }`."
+
+[[features]]
+id = "slash-clear"
+area = "slash"
+name = "/clear"
+expected = "Clears the visible chat log (does NOT delete the session file). Original codex-style. After clearing, a fresh System cell appears saying 'cleared.' or similar. Optional - confirm with user if wanted."
+screenshot = "screenshots/slash-clear/latest.png"
+status = "pending"
+notes = "Not yet implemented. Confirm with user: do we want /clear?"
+
+[[features]]
+id = "slash-brief"
+area = "slash"
+name = "/brief"
+expected = "Loads the portfolio brief and pushes a tool-call cell with the formatted output, plus an assistant summary cell with feasibility math. Same as the headless `moneyball brief` command but invoked live."
+screenshot = "screenshots/slash-brief/latest.png"
+status = "pending"
+
+[[features]]
+id = "slash-funnel"
+area = "slash"
+name = "/funnel <product>"
+expected = "Per-product funnel analysis: leads -> qualified -> closed conversion ratios. Currently a stub. Wired in the next iteration."
+screenshot = "screenshots/slash-funnel/latest.png"
+status = "failing"
+notes = "Currently returns 'wired in the next iteration'. Needs implementation."
+
+[[features]]
+id = "slash-diagnose"
+area = "slash"
+name = "/diagnose <product>"
+expected = "Runs the 5-command diagnostic synthesis for the named product. Currently a stub."
+screenshot = "screenshots/slash-diagnose/latest.png"
+status = "failing"
+notes = "Currently returns 'wired in the next iteration'. Needs implementation."
+
+[[features]]
+id = "slash-ask"
+area = "slash"
+name = "/ask <question>"
+expected = "Streams an LLM answer for free-form questions about the portfolio. Currently a stub."
+screenshot = "screenshots/slash-ask/latest.png"
+status = "failing"
+notes = "Currently returns 'LLM streaming wires up in the next iteration'. Needs implementation."
+
+[[features]]
+id = "slash-snapshot"
+area = "slash"
+name = "/snapshot --check"
+expected = "Validates the snapshot for the current (or named) date. Exits non-zero on schema errors with a clear report. Currently a stub."
+screenshot = "screenshots/slash-snapshot/latest.png"
+status = "failing"
+
+[[features]]
+id = "slash-ledger"
+area = "slash"
+name = "/ledger"
+expected = "Shows prediction history from ~/.moneyball/sessions/ledger.jsonl. Currently a stub."
+screenshot = "screenshots/slash-ledger/latest.png"
+status = "failing"
+
+[[features]]
+id = "slash-setup"
+area = "slash"
+name = "/setup"
+expected = "Re-opens the first-run setup wizard at step 1. Lets the user reconfigure workspace, products, goals. Does NOT clobber an existing session."
+screenshot = "screenshots/slash-setup/latest.png"
+status = "passing"
+
+# SESSIONS
+[[features]]
+id = "session-save"
+area = "session"
+name = "Session persistence on quit"
+expected = "On /exit (or /quit, /q), a Session JSON file is written to ~/.moneyball/sessions/. Includes all chat cells (System, UserPrompt, AssistantText, ToolCall)."
+screenshot = "screenshots/session-save/latest.png"
+status = "pending"
+
+[[features]]
+id = "session-resume"
+area = "session"
+name = "moneyball -c / --resume <id> (instant prompt)"
+expected = "Loads the latest session (or named id). Does NOT replay the full message log. The screen shows just the prompt input ready for new commands. (User clarification: 'instant prompt without reply'. Original codex style.)"
+screenshot = "screenshots/session-resume/latest.png"
+status = "passing"
+notes = "Fixed: load_session_into now resets chat to empty (no replay) but preserves session_id and session_started so new cells are appended to the same on-disk file. Removed dead session_cell_to_chat + parse_status helpers."
+
+[[features]]
+id = "session-list"
+area = "cli"
+name = "moneyball --list"
+expected = "Prints a table of saved sessions. Columns: id, created_at (UTC), message count, last_updated, working_directory, snapshot_date. Original codex-style table format."
+screenshot = "screenshots/session-list/latest.png"
+status = "pending"
+
+[[features]]
+id = "data-root-flag"
+area = "cli"
+name = "--data-root <DATA_ROOT>"
+expected = "Override the workspace path. Default: sibling fin_campaign_analysis/ next to the binary."
+screenshot = "screenshots/data-root-flag/latest.png"
+status = "passing"
+notes = "Fixed: main.rs was discarding the cfg for REPL. Added run_with_cfg() in lib.rs that takes Option<AppConfig>. main.rs now passes cfg to run_with_cfg."
+
+[[features]]
+id = "date-flag"
+area = "cli"
+name = "--date <DATE>"
+expected = "Pin snapshot date. Default: latest available."
+screenshot = "screenshots/date-flag/latest.png"
+status = "pending"
+
+# Loop-driver notes
+# To capture a feature's screenshot:
+#   ~/.pi/agent/harness/tui-test/capture.sh <feature-id> <command...> \
+#     .test-harness/screenshots/<feature-id>/latest.png
+# Then update this file: status = "passing" | "failing", and notes.
+#
+# OPEN QUESTIONS to ask the user when reached by the loop:
+#   - wizard-step-2-meta: is the rename substep kept?

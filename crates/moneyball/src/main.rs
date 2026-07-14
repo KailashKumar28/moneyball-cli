@@ -90,7 +90,7 @@ fn main() -> Result<()> {
 
     match cli.cmd.unwrap_or(Cmd::Repl) {
         Cmd::Repl => {
-            moneyball_tui::run_with(resume_session)?;
+            moneyball_tui::run_with_cfg(resume_session, Some(cfg))?;
         }
         Cmd::Brief { date } => {
             let strict = AppConfig::resolve(cli.data_root.as_deref(), cli.date.as_deref())?;

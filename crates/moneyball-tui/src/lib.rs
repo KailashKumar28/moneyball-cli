@@ -1,12 +1,12 @@
 //! moneyball-tui - ratatui REPL with brief view, slash-commands,
 //! completion, and first-run setup wizard.
 
-pub mod widgets;
 pub mod chat;
+pub mod widgets;
 
 use std::io::{self, Stdout};
 use std::path::PathBuf;
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
 use anyhow::Result;
 use crossterm::event::{self, Event, KeyCode, KeyEvent, KeyModifiers};
@@ -18,7 +18,7 @@ use ratatui::backend::CrosstermBackend;
 use ratatui::layout::{Constraint, Direction, Layout, Rect};
 use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
-use ratatui::widgets::{Block, Borders, Clear, List, ListItem, Paragraph, Wrap};
+use ratatui::widgets::{Block, Borders, Clear, Paragraph, Wrap};
 use ratatui::Terminal;
 
 use moneyball_core::brief::{self, ProductRowsAndFeasibility};
@@ -47,24 +47,33 @@ pub fn restore() -> Result<()> {
 // ---------- slash-command surface ----------
 
 const COMMANDS: &[(&str, &str)] = &[
-    ("/brief",         "7-day portfolio brief"),
-    ("/funnel",        "per-entity funnel for a product"),
-    ("/diagnose",      "run all 5 diagnostic commands for a product"),
-    ("/ask",           "free-form question (LLM picks commands)"),
-    ("/snapshot",      "list or validate snapshots"),
-    ("/ledger",        "prediction ledger view"),
-    ("/setup",         "re-run the setup wizard"),
-    ("/quit",          "exit moneyball"),
+    ("/brief", "7-day portfolio brief"),
+    ("/funnel", "per-entity funnel for a product"),
+    ("/diagnose", "run all 5 diagnostic commands for a product"),
+    ("/ask", "free-form question (LLM picks commands)"),
+    ("/snapshot", "list or validate snapshots"),
+    ("/ledger", "prediction ledger view"),
+    ("/setup", "re-run the setup wizard"),
+    ("/quit", "exit moneyball"),
 ];
 
 fn completions(prefix: &str) -> Vec<&'static str> {
-    COMMANDS.iter().map(|(c, _)| *c).filter(|c| c.starts_with(prefix)).collect()
+    COMMANDS
+        .iter()
+        .map(|(c, _)| *c)
+        .filter(|c| c.starts_with(prefix))
+        .collect()
 }
 
 // ---------- app state ----------
 
 #[derive(Debug, Clone, PartialEq)]
-enum View { Setup(SetupState), Brief }
+#[allow(clippy::large_enum_variant)] // Brief is a unit variant; SetupState is fat.
+                                     // Boxing the latter would force every match arm to deref.
+enum View {
+    Setup(SetupState),
+    Brief,
+}
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct SetupState {
@@ -146,10 +155,6 @@ pub struct App {
     pub session_id: Option<String>,
     /// When this session was started.
     pub session_started: Option<chrono::DateTime<chrono::Utc>>,
-    /// When the user first pressed Esc on empty input. If a second Esc
-    /// arrives within the window, we quit (matches codex's double-press
-    /// quit shortcut model).
-    pub esc_armed_at: Option<std::time::Instant>,
 }
 
 impl App {
@@ -175,7 +180,13 @@ impl App {
     pub fn force_workspace_for_test(&mut self, products: Vec<(String, String)>) {
         use moneyball_core::config::{Product, WorkspaceConfig};
         let wc = WorkspaceConfig {
-            products: products.into_iter().map(|(n, a)| Product { name: n, ad_account: a }).collect(),
+            products: products
+                .into_iter()
+                .map(|(n, a)| Product {
+                    name: n,
+                    ad_account: a,
+                })
+                .collect(),
             goals: Default::default(),
             target_rs_per_q: None,
             crm: Default::default(),
@@ -201,15 +212,22 @@ impl App {
     }
 
     fn new(cfg: AppConfig) -> Self {
-        let view = if cfg.has_workspace() { View::Brief } else { View::Setup(SetupState::new(cfg.data_root.clone())) };
+        let view = if cfg.has_workspace() {
+            View::Brief
+        } else {
+            View::Setup(SetupState::new(cfg.data_root.clone()))
+        };
         let mut chat = chat::ChatLog::new();
         let now = ChronoUtc::now();
         let session_id = format!("mb-{}", now.format("%Y%m%dT%H%M%SZ"));
         // Push the moneyball ASCII logo as the first cell on every fresh session.
-        chat.push(chat::Cell::System(chat::cells::System(moneyball_core::LOGO.into())));
+        chat.push(chat::Cell::System(chat::cells::System(
+            moneyball_core::LOGO.into(),
+        )));
         if cfg.has_workspace() {
             chat.push(chat::Cell::System(chat::cells::System(
-                "workspace configured. try /brief, /funnel <product>, /ask or anything you want.".into(),
+                "workspace configured. try /brief, /funnel <product>, /ask or anything you want."
+                    .into(),
             )));
         } else {
             chat.push(chat::Cell::System(chat::cells::System(
@@ -231,25 +249,23 @@ impl App {
             chat,
             session_id: Some(session_id),
             session_started: Some(now),
-            esc_armed_at: None,
         }
     }
 
     pub fn load_brief(&mut self) {
         // Try to load the brief; failure shouldn't kill the REPL.
         match self.cfg.snap_for(self.cfg.date.as_deref()) {
-            Ok(p) => {
-                match crate::snapshot_load(&p) {
-                    Ok(snap) => {
-                        let history = brief::load_history(&self.cfg.history_dir().join("scoreboard.csv"));
-                        let r = brief::compute(&snap, &self.cfg, &history);
-                        self.snap_date = Some(r::date_of(&snap));
-                        self.brief = Some(r);
-                        self.status = None;
-                    }
-                    Err(e) => self.status = Some(format!("snapshot load failed: {}", e)),
+            Ok(p) => match crate::snapshot_load(&p) {
+                Ok(snap) => {
+                    let history =
+                        brief::load_history(&self.cfg.history_dir().join("scoreboard.csv"));
+                    let r = brief::compute(&snap, &self.cfg, &history);
+                    self.snap_date = Some(r::date_of(&snap));
+                    self.brief = Some(r);
+                    self.status = None;
                 }
-            }
+                Err(e) => self.status = Some(format!("snapshot load failed: {}", e)),
+            },
             Err(e) => self.status = Some(format!("no snapshot: {}", e)),
         }
     }
@@ -257,7 +273,9 @@ impl App {
 
 mod r {
     use moneyball_core::Snapshot;
-    pub fn date_of(s: &Snapshot) -> String { s.date.clone() }
+    pub fn date_of(s: &Snapshot) -> String {
+        s.date.clone()
+    }
 }
 
 fn snapshot_load(p: &std::path::Path) -> Result<moneyball_core::Snapshot> {
@@ -272,7 +290,17 @@ pub fn run() -> Result<()> {
 
 /// Entry point that optionally pre-loads a saved session into the chat log.
 pub fn run_with(resume_session: Option<Session>) -> Result<()> {
-    let cfg = AppConfig::resolve_optional(None, None);
+    run_with_cfg(resume_session, None)
+}
+
+pub fn run_with_cfg(
+    resume_session: Option<Session>,
+    cfg_override: Option<AppConfig>,
+) -> Result<()> {
+    let cfg = match cfg_override {
+        Some(c) => c,
+        None => AppConfig::resolve_optional(None, None),
+    };
     let mut app = App::new(cfg);
     if let Some(s) = resume_session {
         load_session_into(&mut app, s);
@@ -291,44 +319,13 @@ pub fn run_with(resume_session: Option<Session>) -> Result<()> {
 }
 
 fn load_session_into(app: &mut App, s: Session) {
+    // Original-codex style: instant prompt, no message-log replay.
+    // The session_id and session_started are inherited so any new cells the
+    // user creates will be appended to the same on-disk session file
+    // (handled by save_current_session -> Session { id, started_at, cells }).
     app.chat = chat::ChatLog::new();
-    app.chat.push(chat::Cell::System(chat::cells::System(format!(
-        "resumed session {} - started {}",
-        s.meta.id, s.meta.started_at.format("%Y-%m-%d %H:%M:%S UTC")
-    ))));
-    for sc in s.cells {
-        let c = session_cell_to_chat(&sc);
-        app.chat.push(c);
-    }
-}
-
-fn session_cell_to_chat(sc: &SessionCell) -> chat::Cell {
-    use chat::cells as c;
-    match sc {
-        SessionCell::System { text } => chat::Cell::System(c::System(text.clone())),
-        SessionCell::UserPrompt { text, at } => chat::Cell::UserPrompt(c::UserPrompt {
-            text: text.clone(),
-            // Session is UTC; Local::from(DateTime<Utc>) gives local time.
-            at: (*at).with_timezone(&chrono::Local),
-        }),
-        SessionCell::AssistantText { text, streaming } => chat::Cell::AssistantText(c::AssistantText {
-            text: text.clone(),
-            streaming: *streaming,
-        }),
-        SessionCell::ToolCall { name, args, status } => chat::Cell::ToolCall(c::ToolCall {
-            name: name.clone(),
-            args: args.clone(),
-            status: parse_status(status),
-        }),
-        SessionCell::ToolResult { name, output, success, duration_ms } => {
-            chat::Cell::ToolResult(c::ToolResult {
-                name: name.clone(),
-                output: output.clone(),
-                success: *success,
-                duration_ms: *duration_ms,
-            })
-        }
-    }
+    app.session_id = Some(s.meta.id.clone());
+    app.session_started = Some(s.meta.started_at);
 }
 
 fn chat_cell_to_session(c: &chat::Cell) -> SessionCell {
@@ -339,10 +336,12 @@ fn chat_cell_to_session(c: &chat::Cell) -> SessionCell {
             text: text.clone(),
             at: at.with_timezone(&ChronoUtc),
         },
-        chat::Cell::AssistantText(cc::AssistantText { text, streaming }) => SessionCell::AssistantText {
-            text: text.clone(),
-            streaming: *streaming,
-        },
+        chat::Cell::AssistantText(cc::AssistantText { text, streaming }) => {
+            SessionCell::AssistantText {
+                text: text.clone(),
+                streaming: *streaming,
+            }
+        }
         chat::Cell::ToolCall(cc::ToolCall { name, args, status }) => SessionCell::ToolCall {
             name: name.clone(),
             args: args.clone(),
@@ -353,24 +352,27 @@ fn chat_cell_to_session(c: &chat::Cell) -> SessionCell {
                 cc::ToolStatus::Failed => "failed".into(),
             },
         },
-        chat::Cell::ToolResult(cc::ToolResult { name, output, success, duration_ms }) => SessionCell::ToolResult {
+        chat::Cell::ToolResult(cc::ToolResult {
+            name,
+            output,
+            success,
+            duration_ms,
+        }) => SessionCell::ToolResult {
             name: name.clone(),
             output: output.clone(),
             success: *success,
             duration_ms: *duration_ms,
         },
+        // BriefPlaceholder isn't used in the live path; /brief pushes
+        // a pre-formatted ToolResult. Kept for future width-aware swap.
+        chat::Cell::BriefPlaceholder => SessionCell::AssistantText {
+            text: "(brief placeholder - rerun /brief to see fresh data)".into(),
+            streaming: false,
+        },
     }
 }
 
-fn parse_status(s: &str) -> chat::cells::ToolStatus {
-    use chat::cells::ToolStatus;
-    match s {
-        "pending" => ToolStatus::Pending,
-        "running" => ToolStatus::Running,
-        "done" => ToolStatus::Done,
-        _ => ToolStatus::Failed,
-    }
-}
+
 
 /// Snapshot the current chat log + workspace into a Session and persist it.
 /// Overwrites if a session with the same id already exists (so the same
@@ -379,7 +381,8 @@ fn save_current_session(app: &App) -> Result<()> {
     let meta = moneyball_core::session::SessionMeta {
         id: app.session_id.clone().unwrap_or_else(|| {
             // Generate one if we don't have one (shouldn't happen at this point).
-            moneyball_core::session::list().ok()
+            moneyball_core::session::list()
+                .ok()
                 .and_then(|mut v| v.pop().map(|m| m.id))
                 .unwrap_or_else(|| format!("mb-{}", ChronoUtc::now().format("%Y%m%dT%H%M%SZ")))
         }),
@@ -399,19 +402,52 @@ fn event_loop(t: &mut Tui, app: &mut App) -> Result<()> {
     let tick = Duration::from_millis(100);
     loop {
         t.draw(|f| render(f, app))?;
-        if app.quit { break; }
+        if app.quit {
+            break;
+        }
         if event::poll(tick)? {
-            if let Event::Key(k) = event::read()? {
-                handle_key(app, k);
+            match event::read()? {
+                Event::Key(k) => handle_key(app, k),
+                // crossterm 0.28 emits Event::Paste for clipboard pastes; route
+                // to whichever input field is currently focused.
+                Event::Paste(text) => handle_paste(app, text),
+                _ => {}
             }
         }
     }
     Ok(())
 }
 
+/// Route a pasted string into the currently focused input field. Without this,
+/// clipboard pastes (e.g. the Meta access token in the setup wizard) are
+/// silently dropped because crossterm emits Event::Paste, not a stream of
+/// KeyEvents.
+fn handle_paste(app: &mut App, text: String) {
+    if text.is_empty() {
+        return;
+    }
+    match &mut app.view {
+        View::Setup(state) => {
+            // Strip whitespace and newlines so paste of a token works even if
+            // it was wrapped or had trailing whitespace in the clipboard.
+            let clean: String = text.chars().filter(|c| !c.is_control()).collect();
+            match (state.step, state.meta_substep) {
+                (1, 0) => state.meta_input.push_str(&clean),
+                (1, 2) => state.meta_rename_input.push_str(&clean),
+                (2, _) => state.product_input.push_str(&clean),
+                (3, _) => state.goals_input.push_str(&clean),
+                (0, _) => state.workspace_path.push_str(&clean),
+                _ => {}
+            }
+        }
+        View::Brief => app.input.push_str(&text),
+    }
+}
+
 fn handle_key(app: &mut App, k: KeyEvent) {
     if k.modifiers.contains(KeyModifiers::CONTROL) && k.code == KeyCode::Char('c') {
-        app.quit = true; return;
+        app.quit = true;
+        return;
     }
     match &app.view.clone() {
         View::Setup(state) => handle_setup_key(app, state.clone(), k),
@@ -428,52 +464,68 @@ fn handle_brief_key(app: &mut App, k: KeyEvent) {
             arm_cancel(app);
             if app.input.starts_with('/') && app.completions.is_empty() {
                 app.completions = completions(&app.input);
-                app.completion_idx = if app.completions.is_empty() { None } else { Some(0) };
+                app.completion_idx = if app.completions.is_empty() {
+                    None
+                } else {
+                    Some(0)
+                };
             } else if !app.completions.is_empty() {
                 let i = (app.completion_idx.unwrap_or(0) + 1) % app.completions.len();
                 app.completion_idx = Some(i);
             }
             apply_completion(app);
         }
-        KeyCode::Backspace => { backspace(app); refresh_completions(app); arm_cancel(app); }
-        KeyCode::Char(c) => { insert(app, c); refresh_completions(app); arm_cancel(app); }
-        KeyCode::Enter => { arm_cancel(app); submit(app); }
-        KeyCode::Left => { arm_cancel(app); if app.cursor > 0 { app.cursor -= 1; } }
-        KeyCode::Right => { arm_cancel(app); if app.cursor < app.input.len() { app.cursor += 1; } }
-        _ => { arm_cancel(app); }
+        KeyCode::Backspace => {
+            backspace(app);
+            refresh_completions(app);
+            arm_cancel(app);
+        }
+        KeyCode::Char(c) => {
+            insert(app, c);
+            refresh_completions(app);
+            arm_cancel(app);
+        }
+        KeyCode::Enter => {
+            arm_cancel(app);
+            submit(app);
+        }
+        KeyCode::Left => {
+            arm_cancel(app);
+            if app.cursor > 0 {
+                app.cursor -= 1;
+            }
+        }
+        KeyCode::Right => {
+            arm_cancel(app);
+            if app.cursor < app.input.len() {
+                app.cursor += 1;
+            }
+        }
+        _ => {
+            arm_cancel(app);
+        }
     }
 }
 
 /// Esc on the chat view is the universal "let me rethink" gesture:
 ///   - Input non-empty: clear the input, drop completions. Status hint.
-///   - Input empty + first Esc: arm a quit shortcut. Status hint.
-///   - Input empty + second Esc within 1.5s: quit (session saved by run_with).
-///   - Any other key after arming: cancel the arming.
+///   - Input empty: show a hint pointing to /exit. Never quits.
+///   - Use /exit (or /quit, /q) to leave moneyball.
 fn handle_esc(app: &mut App) {
     if !app.input.is_empty() {
         app.input.clear();
         app.cursor = 0;
         app.completions.clear();
         app.completion_idx = None;
-        app.esc_armed_at = None;
-        app.status = Some("input cleared - press esc again on empty input to quit".into());
+        app.status = Some("input cleared".into());
         return;
     }
-    let now = std::time::Instant::now();
-    let within_window = app.esc_armed_at
-        .map(|t| now.duration_since(t) < std::time::Duration::from_millis(1500))
-        .unwrap_or(false);
-    if within_window {
-        app.status = Some("exiting moneyball.".into());
-        app.quit = true;
-        return;
-    }
-    app.esc_armed_at = Some(now);
-    app.status = Some("press esc again to quit (1.5s window)".into());
+    app.status = Some("esc clears the input. use /exit to leave moneyball.".into());
 }
 
-fn arm_cancel(app: &mut App) {
-    app.esc_armed_at = None;
+fn arm_cancel(_app: &mut App) {
+    // Kept as a no-op for now so callers don't break. Esc no longer arms a
+    // quit shortcut in this build (user request: /exit is the only way out).
 }
 
 fn insert(app: &mut App, c: char) {
@@ -482,7 +534,9 @@ fn insert(app: &mut App, c: char) {
 }
 
 fn backspace(app: &mut App) {
-    if app.cursor == 0 { return; }
+    if app.cursor == 0 {
+        return;
+    }
     let prev = app.input[..app.cursor].chars().next_back().unwrap();
     app.cursor -= prev.len_utf8();
     app.input.remove(app.cursor);
@@ -491,7 +545,11 @@ fn backspace(app: &mut App) {
 fn refresh_completions(app: &mut App) {
     if app.input.starts_with('/') {
         app.completions = completions(&app.input);
-        app.completion_idx = if app.completions.is_empty() { None } else { Some(0) };
+        app.completion_idx = if app.completions.is_empty() {
+            None
+        } else {
+            Some(0)
+        };
     } else {
         app.completions.clear();
         app.completion_idx = None;
@@ -502,7 +560,10 @@ fn apply_completion(app: &mut App) {
     if let Some(i) = app.completion_idx {
         if let Some(&c) = app.completions.get(i) {
             // Replace the current token (up to cursor) with completion.
-            let before = app.input[..app.cursor].rfind(' ').map(|n| n + 1).unwrap_or(0);
+            let before = app.input[..app.cursor]
+                .rfind(' ')
+                .map(|n| n + 1)
+                .unwrap_or(0);
             let after = app.input[app.cursor..].to_string();
             let mut new = String::with_capacity(c.len() + after.len() + (app.cursor - before));
             new.push_str(&app.input[..before]);
@@ -523,7 +584,12 @@ fn submit(app: &mut App) {
     app.cursor = 0;
     app.completions.clear();
     app.completion_idx = None;
-    if line.is_empty() { return; }
+    // Clear any stale status hint from a prior command/error so the
+    // bottom status line doesn't keep showing the previous result.
+    app.status = None;
+    if line.is_empty() {
+        return;
+    }
 
     // User prompt cell (every input becomes part of the scrollback).
     app.chat.push(Cell::UserPrompt(cells::UserPrompt {
@@ -537,7 +603,8 @@ fn submit(app: &mut App) {
 
     match cmd {
         "/quit" | "/exit" | "/q" => {
-            app.chat.push(Cell::System(cells::System("exiting moneyball.".into())));
+            app.chat
+                .push(Cell::System(cells::System("exiting moneyball.".into())));
             app.quit = true;
         }
         "/brief" => {
@@ -550,14 +617,24 @@ fn submit(app: &mut App) {
             // If brief loaded, push tool call + result.
             if let Some(b) = &app.brief {
                 let out = format_brief_as_lines(b);
-                app.chat.push_tool("brief", "", out, true, started.elapsed().as_millis() as u64);
+                app.chat
+                    .push_tool("brief", "", out, true, started.elapsed().as_millis() as u64);
                 app.chat.push(Cell::AssistantText(cells::AssistantText {
                     text: format_feasibility_summary(b),
                     streaming: false,
                 }));
             } else {
-                let err = app.status.clone().unwrap_or_else(|| "snapshot failed".into());
-                app.chat.push_tool("brief", "", vec![err], false, started.elapsed().as_millis() as u64);
+                let err = app
+                    .status
+                    .clone()
+                    .unwrap_or_else(|| "snapshot failed".into());
+                app.chat.push_tool(
+                    "brief",
+                    "",
+                    vec![err],
+                    false,
+                    started.elapsed().as_millis() as u64,
+                );
             }
         }
         "/setup" => {
@@ -604,54 +681,80 @@ fn submit(app: &mut App) {
             }));
         }
         _ => {
-            app.chat.push(Cell::System(cells::System(format!("unknown: {} (try /help)", cmd))));
+            app.chat.push(Cell::System(cells::System(format!(
+                "unknown: {} (try /help)",
+                cmd
+            ))));
         }
     }
 }
 
 fn format_brief_as_lines(b: &brief::ProductRowsAndFeasibility) -> Vec<String> {
     let mut out = Vec::new();
+    // Header
+    out.push("BRIEF  (7d window)".into());
+    out.push(String::new());
+    // Per-product block - multi-line so it fits any chat width.
     for r in &b.rows {
+        let l_to_q = r
+            .l_to_q
+            .map(|x| format!("{:.1}%", x))
+            .unwrap_or_else(|| "-".into());
+        let rs_per_q = r
+            .rs_per_q
+            .map(|x| format!("Rs.{}", x))
+            .unwrap_or_else(|| "-".into());
+        out.push(format!("  > {}", r.product));
         out.push(format!(
-            "{:<24} {:>7}/d  m{:>4}  l{:>4}  q{:>3}  {:>5}/d  \u{20B9}{:>5}/q  L\u{2192}Q {:>4}%   gap {:>5}",
-            truncate_str(&r.product, 24),
-            r.spend_per_day,
-            r.m7d, r.l7d, r.q7d,
-            format!("{:.2}", r.q_per_day),
-            r.rs_per_q.map(|x| x.to_string()).unwrap_or_else(|| "-".into()),
-            r.l_to_q.map(|x| format!("{:.1}", x)).unwrap_or_else(|| "-".into()),
-            format!("{:.1}", r.gap),
+            "    {:>7}/d  m{:>4}  l{:>4}  q{:>3}  {:.2}/d  {}",
+            r.spend_per_day, r.m7d, r.l7d, r.q7d, r.q_per_day, rs_per_q
+        ));
+        out.push(format!(
+            "    L\u{2192}Q {:>5}   gap {:>5}",
+            l_to_q,
+            format!("{:.1}", r.gap)
         ));
     }
+    out.push(String::new());
     let f = &b.feasibility;
-    out.push(format!("FEASIBILITY  {:.1} q/day @ \u{20B9}{}/day = \u{20B9}{}/q \u{00B7} goal {:.0}/day",
-        f.tot_q_per_day, f.tot_spend_per_day, f.cur_rpq, f.tot_goal_per_day));
+    out.push(format!(
+        "FEASIBILITY  {:.1} q/day @ Rs.{}/day = Rs.{}/q  \u{00B7}  goal {:.0}/day",
+        f.tot_q_per_day, f.tot_spend_per_day, f.cur_rpq, f.tot_goal_per_day
+    ));
     if let Some(req) = f.required_at_cur {
-        out.push(format!("  required @ current:  \u{20B9}{}/day ({:.1}x)", req, req as f64 / f.tot_spend_per_day.max(1) as f64));
+        out.push(format!(
+            "  required @ current:  Rs.{}/day ({:.1}x)",
+            req,
+            req as f64 / f.tot_spend_per_day.max(1) as f64
+        ));
     }
     if let (Some(b), Some(req)) = (f.best_rpq, f.required_at_best) {
-        out.push(format!("  required @ best \u{20B9}{}/q: \u{20B9}{}/day ({:.1}x)", b, req, req as f64 / f.tot_spend_per_day.max(1) as f64));
+        out.push(format!(
+            "  required @ best Rs.{}/q: Rs.{}/day ({:.1}x)",
+            b,
+            req,
+            req as f64 / f.tot_spend_per_day.max(1) as f64
+        ));
     }
-    let suffix = if f.open_debt.is_empty() { String::new() } else { format!(" ({})", f.open_debt.join(", ")) };
+    let suffix = if f.open_debt.is_empty() {
+        String::new()
+    } else {
+        format!(" ({})", f.open_debt.join(", "))
+    };
     out.push(format!("  setup debt: {}{}", f.open_debt.len(), suffix));
     out
 }
 
 fn format_feasibility_summary(b: &brief::ProductRowsAndFeasibility) -> String {
     let f = &b.feasibility;
-    let best = f.best_rpq.map(|x| x.to_string()).unwrap_or_else(|| "-".into());
+    let best = f
+        .best_rpq
+        .map(|x| x.to_string())
+        .unwrap_or_else(|| "-".into());
     format!(
-        "portfolio is at {:.1} q/day against a {}/day goal. at current \u{20B9}{}/q you'd need \u{20B9}{}/day; at the best-observed \u{20B9}{}/q you still need \u{20B9}{}/day.",
+        "portfolio is at {:.1} q/day against a {}/day goal. at current Rs.{}/q you'd need Rs.{}/day; at the best-observed Rs.{}/q you still need Rs.{}/day.",
         f.tot_q_per_day, f.tot_goal_per_day as u64, f.cur_rpq, f.required_at_cur.unwrap_or(0), best, f.required_at_best.unwrap_or(0),
     )
-}
-
-fn truncate_str(s: &str, n: usize) -> String {
-    if s.chars().count() <= n { s.to_string() } else {
-        let mut out: String = s.chars().take(n.saturating_sub(1)).collect();
-        out.push('\u{2026}');
-        out
-    }
 }
 
 // ---------- setup-wizard keys ----------
@@ -664,10 +767,18 @@ fn handle_setup_key(app: &mut App, mut state: SetupState, k: KeyEvent) {
         return;
     }
     match k.code {
-        KeyCode::Esc => { app.quit = true; }
-        KeyCode::Enter => { advance_setup(app, &mut state); }
-        KeyCode::Backspace => { backspace_setup(&mut state); }
-        KeyCode::Char(c) => { insert_setup(&mut state, c); }
+        KeyCode::Esc => {
+            app.quit = true;
+        }
+        KeyCode::Enter => {
+            advance_setup(app, &mut state);
+        }
+        KeyCode::Backspace => {
+            backspace_setup(&mut state);
+        }
+        KeyCode::Char(c) => {
+            insert_setup(&mut state, c);
+        }
         _ => {}
     }
     // advance_save may have transitioned us out to View::Brief. Don't clobber that.
@@ -679,14 +790,18 @@ fn handle_setup_key(app: &mut App, mut state: SetupState, k: KeyEvent) {
 /// Keyboard handler for the multi-account selection list (step 1 substep 1).
 fn handle_select_keys(s: &mut SetupState, k: KeyEvent) {
     let n = s.meta_discovered.len();
-    if n == 0 { return; }
+    if n == 0 {
+        return;
+    }
     // Visible rows must match the renderer's visible_rows constant below.
     const VISIBLE_ROWS: usize = 12;
     match k.code {
         KeyCode::Up => {
             if s.meta_highlight > 0 {
                 s.meta_highlight -= 1;
-                if s.meta_highlight < s.meta_scroll { s.meta_scroll = s.meta_highlight; }
+                if s.meta_highlight < s.meta_scroll {
+                    s.meta_scroll = s.meta_highlight;
+                }
             }
         }
         KeyCode::Down => {
@@ -705,14 +820,22 @@ fn handle_select_keys(s: &mut SetupState, k: KeyEvent) {
             s.meta_highlight = (s.meta_highlight + VISIBLE_ROWS).min(n - 1);
             s.meta_scroll = (s.meta_highlight + 1).saturating_sub(VISIBLE_ROWS);
         }
-        KeyCode::Home => { s.meta_highlight = 0; s.meta_scroll = 0; }
-        KeyCode::End => { s.meta_highlight = n - 1; s.meta_scroll = n.saturating_sub(VISIBLE_ROWS); }
+        KeyCode::Home => {
+            s.meta_highlight = 0;
+            s.meta_scroll = 0;
+        }
+        KeyCode::End => {
+            s.meta_highlight = n - 1;
+            s.meta_scroll = n.saturating_sub(VISIBLE_ROWS);
+        }
         KeyCode::Char(' ') => {
             s.meta_selections[s.meta_highlight] = !s.meta_selections[s.meta_highlight];
         }
         KeyCode::Char('a') | KeyCode::Char('A') => {
             let any = s.meta_selections.iter().any(|&b| b);
-            for sel in s.meta_selections.iter_mut() { *sel = !any; }
+            for sel in s.meta_selections.iter_mut() {
+                *sel = !any;
+            }
         }
         KeyCode::Enter => {
             let chosen: Vec<usize> = (0..n).filter(|&i| s.meta_selections[i]).collect();
@@ -724,46 +847,83 @@ fn handle_select_keys(s: &mut SetupState, k: KeyEvent) {
             s.meta_substep = 2;
             s.error = None;
         }
+        KeyCode::Esc => {
+            // "back" - drop the discovered list and return to substep 0
+            // (token paste). The user can re-paste a token or type 'skip'.
+            s.meta_discovered.clear();
+            s.meta_selections.clear();
+            s.meta_selected.clear();
+            s.meta_input.clear();
+            s.meta_rename_input.clear();
+            s.meta_highlight = 0;
+            s.meta_scroll = 0;
+            s.meta_substep = 0;
+            s.error = None;
+        }
         _ => {}
     }
 }
 
 fn insert_setup(s: &mut SetupState, c: char) {
     match s.step {
-        0 => { s.workspace_path.push(c); }
-        1 => { meta_insert(s, c); }
-        2 => { s.product_input.push(c); }
-        3 => { s.goals_input.push(c); }
+        0 => {
+            s.workspace_path.push(c);
+        }
+        1 => {
+            meta_insert(s, c);
+        }
+        2 => {
+            s.product_input.push(c);
+        }
+        3 => {
+            s.goals_input.push(c);
+        }
         _ => {}
     }
 }
 
 fn backspace_setup(s: &mut SetupState) {
     match s.step {
-        0 => { s.workspace_path.pop(); }
-        1 => { meta_backspace(s); }
-        2 => { s.product_input.pop(); }
-        3 => { s.goals_input.pop(); }
+        0 => {
+            s.workspace_path.pop();
+        }
+        1 => {
+            meta_backspace(s);
+        }
+        2 => {
+            s.product_input.pop();
+        }
+        3 => {
+            s.goals_input.pop();
+        }
         _ => {}
     }
 }
 
 fn meta_insert(s: &mut SetupState, c: char) {
     match s.meta_substep {
-        0 => { s.meta_input.push(c); }
+        0 => {
+            s.meta_input.push(c);
+        }
         // substep 1 is keyboard-driven (Up/Down/Space/'a'/Enter); ignore chars.
         1 => {}
-        2 => { s.meta_rename_input.push(c); }
+        2 => {
+            s.meta_rename_input.push(c);
+        }
         _ => {}
     }
 }
 
 fn meta_backspace(s: &mut SetupState) {
     match s.meta_substep {
-        0 => { s.meta_input.pop(); }
+        0 => {
+            s.meta_input.pop();
+        }
         // substep 1 ignored.
         1 => {}
-        2 => { s.meta_rename_input.pop(); }
+        2 => {
+            s.meta_rename_input.pop();
+        }
         _ => {}
     }
 }
@@ -774,7 +934,7 @@ fn advance_setup(app: &mut App, s: &mut SetupState) {
         0 => advance_workspace(app, s),
         1 => advance_meta(app, s),
         2 => advance_products(s),
-        3 => advance_save(app, s),  // step 3 (goals) is the final step now
+        3 => advance_save(app, s), // step 3 (goals) is the final step now
         _ => {}
     }
 }
@@ -795,7 +955,7 @@ fn advance_workspace(app: &mut App, s: &mut SetupState) {
     s.step = 1;
 }
 
-fn advance_meta(app: &mut App, s: &mut SetupState) {
+fn advance_meta(_app: &mut App, s: &mut SetupState) {
     match s.meta_substep {
         // Substep 0: paste token or 'skip'.
         0 => {
@@ -863,12 +1023,12 @@ fn advance_meta(app: &mut App, s: &mut SetupState) {
             let mut new_products: Vec<(String, String)> = Vec::new();
             for (i, &idx) in s.meta_selected.iter().enumerate() {
                 let acct = &s.meta_discovered[idx];
-                let default_name = if overrides.is_empty() {
-                    acct.name.clone()
-                } else {
-                    acct.name.clone() // base for the index key below
-                };
-                let name = overrides.get(&(idx + 1)).cloned().unwrap_or(default_name);
+                // Default to the Meta account's display name; let the user
+                // override via "1=Name 2=OtherName" syntax in the rename input.
+                let name = overrides
+                    .get(&(idx + 1))
+                    .cloned()
+                    .unwrap_or_else(|| acct.name.clone());
                 let id = moneyball_core::meta::account_id_for_storage(&acct.id);
                 if new_products.iter().any(|(n, _)| n == &name) {
                     s.error = Some(format!("duplicate product name '{}'", name));
@@ -888,11 +1048,17 @@ fn advance_meta(app: &mut App, s: &mut SetupState) {
     }
 }
 
-fn parse_renames(raw: &str) -> std::result::Result<std::collections::HashMap<usize, String>, String> {
+fn parse_renames(
+    raw: &str,
+) -> std::result::Result<std::collections::HashMap<usize, String>, String> {
     let mut out = std::collections::HashMap::new();
     for part in raw.split_whitespace() {
-        let (idx_s, name) = part.split_once('=').ok_or_else(|| format!("bad rename '{}': expected N=Name", part))?;
-        let idx: usize = idx_s.parse().map_err(|_| format!("bad index '{}'", idx_s))?;
+        let (idx_s, name) = part
+            .split_once('=')
+            .ok_or_else(|| format!("bad rename '{}': expected N=Name", part))?;
+        let idx: usize = idx_s
+            .parse()
+            .map_err(|_| format!("bad index '{}'", idx_s))?;
         if idx < 1 {
             return Err(format!("index must be >= 1 (got {})", idx));
         }
@@ -915,19 +1081,24 @@ fn advance_products(s: &mut SetupState) {
         return;
     }
     if raw.eq_ignore_ascii_case("demo") {
-        s.products = DEMO_PRODUCTS.iter()
+        s.products = DEMO_PRODUCTS
+            .iter()
             .map(|(n, a)| (n.to_string(), a.to_string()))
             .collect();
         s.product_input.clear();
         return;
     }
-    let parts: Vec<&str> = raw.split(|c: char| c == ',' || c.is_whitespace())
+    let parts: Vec<&str> = raw
+        .split(|c: char| c == ',' || c.is_whitespace())
         .filter(|p| !p.is_empty())
         .collect();
     match parts.as_slice() {
         [name, acct] => {
             if !acct.chars().all(|c| c.is_ascii_digit()) || acct.len() < 6 {
-                s.error = Some(format!("ad account '{}' should be digits only (15-20 chars)", acct));
+                s.error = Some(format!(
+                    "ad account '{}' should be digits only (15-20 chars)",
+                    acct
+                ));
                 return;
             }
             if s.products.iter().any(|(n, _)| n == name) {
@@ -948,22 +1119,34 @@ fn advance_goals(s: &mut SetupState) -> bool {
     let raw = s.goals_input.trim();
     if raw.is_empty() {
         // Blank input -> defaults of 10 for every product.
-        s.goals_input = s.products.iter()
+        s.goals_input = s
+            .products
+            .iter()
             .map(|(n, _)| format!("{}=10", n))
-            .collect::<Vec<_>>().join(" ");
+            .collect::<Vec<_>>()
+            .join(" ");
     }
     match parse_goals(&s.products, &s.goals_input) {
         Ok(_) => true,
-        Err(e) => { s.error = Some(e); false }
+        Err(e) => {
+            s.error = Some(e);
+            false
+        }
     }
 }
 
 fn advance_save(app: &mut App, s: &mut SetupState) {
-    if !advance_goals(s) { return; }  // validation failed - keep user on goals step
-    let products: Vec<_> = s.products.iter().map(|(n, a)| moneyball_core::config::Product {
-        name: n.clone(),
-        ad_account: a.clone(),
-    }).collect();
+    if !advance_goals(s) {
+        return;
+    } // validation failed - keep user on goals step
+    let products: Vec<_> = s
+        .products
+        .iter()
+        .map(|(n, a)| moneyball_core::config::Product {
+            name: n.clone(),
+            ad_account: a.clone(),
+        })
+        .collect();
     let goals_map = parse_goals(&s.products, &s.goals_input).unwrap_or_default();
     // target_rs_per_q is intentionally NOT asked during setup - it's a
     // derived/observed metric per product, not a hardcoded universal value.
@@ -992,7 +1175,10 @@ fn advance_save(app: &mut App, s: &mut SetupState) {
     });
 }
 
-fn parse_goals(products: &[(String, String)], s: &str) -> std::result::Result<std::collections::HashMap<String, f64>, String> {
+fn parse_goals(
+    products: &[(String, String)],
+    s: &str,
+) -> std::result::Result<std::collections::HashMap<String, f64>, String> {
     let mut out = std::collections::HashMap::new();
     let known: std::collections::HashSet<&str> = products.iter().map(|(n, _)| n.as_str()).collect();
 
@@ -1007,12 +1193,17 @@ fn parse_goals(products: &[(String, String)], s: &str) -> std::result::Result<st
         if trimmed.len() != rest.len() {
             rest = trimmed;
         }
-        if rest.is_empty() { break; }
+        if rest.is_empty() {
+            break;
+        }
 
         // Find the '=' that ends this product's name.
         let eq = rest.find('=').ok_or_else(|| {
             let snippet: String = rest.chars().take(40).collect();
-            format!("expected 'ProdName=Number', no '=' found in: '{}...'", snippet)
+            format!(
+                "expected 'ProdName=Number', no '=' found in: '{}...'",
+                snippet
+            )
         })?;
 
         // Name = chars from start to '=' (trim trailing whitespace).
@@ -1036,8 +1227,13 @@ fn parse_goals(products: &[(String, String)], s: &str) -> std::result::Result<st
         let val = after_eq[..val_end].trim();
 
         let v: f64 = val.parse().map_err(|_| {
-            format!("not a number: '{}' in '{}={}{}'",
-                val, name, val, after_eq[val_end..].chars().take(20).collect::<String>())
+            format!(
+                "not a number: '{}' in '{}={}{}'",
+                val,
+                name,
+                val,
+                after_eq[val_end..].chars().take(20).collect::<String>()
+            )
         })?;
         if v <= 0.0 || v > 1000.0 {
             return Err(format!("goal {} out of range (1-1000) for '{}'", v, name));
@@ -1055,8 +1251,6 @@ fn parse_goals(products: &[(String, String)], s: &str) -> std::result::Result<st
     Ok(out)
 }
 
-
-
 // ---------- render ----------
 
 fn render(f: &mut ratatui::Frame, app: &App) {
@@ -1070,9 +1264,9 @@ fn render(f: &mut ratatui::Frame, app: &App) {
         .direction(Direction::Vertical)
         .margin(1)
         .constraints([
-            Constraint::Length(2),    // logo
-            Constraint::Length(1),    // context bar
-            Constraint::Min(6),       // body
+            Constraint::Length(2), // logo
+            Constraint::Length(1), // context bar
+            Constraint::Min(6),    // body
         ])
         .split(area);
 
@@ -1110,15 +1304,23 @@ fn render_chat_view(f: &mut ratatui::Frame, area: Rect, app: &App) {
     let completion_h: u16 = if has_completion { 1 } else { 0 };
     let status_h: u16 = if app.status.is_some() { 1 } else { 0 };
 
+    // Body height: count actual content lines, clamp to a reasonable
+    // window. Avoids huge blank bodies when chat has few cells
+    // (previously Min(5) expanded to fill the screen, leaving 19+
+    // empty rows). Capped at 20 so a 200-line backscroll doesn't push
+    // the input off-screen.
+    let content_lines = count_chat_lines(app, area.width) as u16;
+    let body_h = content_lines.clamp(5, 20);
+
     let chunks = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
-            Constraint::Min(5),                       // chat scrollback
-            Constraint::Length(completion_h),          // slash-command completions
-            Constraint::Length(1),                      // separator
-            Constraint::Length(1),                      // input line
-            Constraint::Length(1),                      // keybinding caption
-            Constraint::Length(status_h),               // status hint
+            Constraint::Length(body_h),       // chat scrollback (natural height)
+            Constraint::Length(completion_h), // slash-command completions
+            Constraint::Length(1),            // separator
+            Constraint::Length(1),            // input line
+            Constraint::Length(1),            // keybinding caption
+            Constraint::Length(status_h),     // status hint
         ])
         .split(area);
 
@@ -1135,7 +1337,9 @@ fn render_chat_view(f: &mut ratatui::Frame, area: Rect, app: &App) {
         let mut spans: Vec<Span<'static>> = vec![Span::styled("  ", Style::default())];
         for (i, c) in app.completions.iter().enumerate() {
             let style = if Some(i) == app.completion_idx {
-                Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD)
+                Style::default()
+                    .fg(Color::Yellow)
+                    .add_modifier(Modifier::BOLD)
             } else {
                 Style::default().fg(Color::DarkGray)
             };
@@ -1146,10 +1350,10 @@ fn render_chat_view(f: &mut ratatui::Frame, area: Rect, app: &App) {
 
     // 3. Thin horizontal separator (above the input line)
     let width = area.width as usize;
-    let sep: String = std::iter::repeat('\u{2500}').take(width.max(10)).collect();
+    let sep: String = std::iter::repeat_n('\u{2500}', width.max(10)).collect();
     f.render_widget(
         Paragraph::new(Line::from(sep)).style(Style::default().fg(Color::DarkGray)),
-        chunks[2 - 0 + (if has_completion { 1 } else { 0 })],
+        chunks[2 + (if has_completion { 1 } else { 0 })],
     );
     // Actually recompute indices cleanly:
     // chunks[0] = body
@@ -1167,25 +1371,44 @@ fn render_chat_view(f: &mut ratatui::Frame, area: Rect, app: &App) {
     let status_idx = 5;
     let _ = sep; // already drawn; re-draw correctly:
     f.render_widget(
-        Paragraph::new(Line::from(sep_str(width)))
-            .style(Style::default().fg(Color::DarkGray)),
+        Paragraph::new(Line::from(sep_str(width))).style(Style::default().fg(Color::DarkGray)),
         chunks[sep_idx],
     );
 
     let placeholder = "ask moneyball about your portfolio or type / for commands";
     let prompt_line = if app.input.is_empty() {
         Line::from(vec![
-            Span::styled("\u{276F} ", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)),
-            Span::styled(placeholder, Style::default().fg(Color::DarkGray).add_modifier(Modifier::ITALIC)),
+            Span::styled(
+                "\u{276F} ",
+                Style::default()
+                    .fg(Color::Cyan)
+                    .add_modifier(Modifier::BOLD),
+            ),
+            Span::styled(
+                placeholder,
+                Style::default()
+                    .fg(Color::DarkGray)
+                    .add_modifier(Modifier::ITALIC),
+            ),
             Span::styled("\u{2588}", Style::default().fg(Color::DarkGray)),
         ])
     } else {
         let before = app.input[..app.cursor].to_string();
         let after = app.input[app.cursor..].to_string();
         Line::from(vec![
-            Span::styled("\u{276F} ", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)),
+            Span::styled(
+                "\u{276F} ",
+                Style::default()
+                    .fg(Color::Cyan)
+                    .add_modifier(Modifier::BOLD),
+            ),
             Span::styled(before, Style::default().fg(Color::White)),
-            Span::styled("\u{2588}", Style::default().fg(Color::Cyan).add_modifier(Modifier::SLOW_BLINK)),
+            Span::styled(
+                "\u{2588}",
+                Style::default()
+                    .fg(Color::Cyan)
+                    .add_modifier(Modifier::SLOW_BLINK),
+            ),
             Span::styled(after, Style::default().fg(Color::White)),
         ])
     };
@@ -1193,7 +1416,7 @@ fn render_chat_view(f: &mut ratatui::Frame, area: Rect, app: &App) {
 
     // 5. Keybinding caption (no borders)
     let caption = Line::from(Span::styled(
-        "  \u{21B5} send  \u{00B7}  esc clear input  \u{00B7}  \u{21E5} complete  \u{00B7}  ?? quit",
+        "  \u{21B5} send  \u{00B7}  esc clear input  \u{00B7}  \u{21E5} complete  \u{00B7}  /exit to quit",
         Style::default().fg(Color::DarkGray),
     ));
     f.render_widget(Paragraph::new(caption), chunks[caption_idx]);
@@ -1213,17 +1436,39 @@ fn render_chat_view(f: &mut ratatui::Frame, area: Rect, app: &App) {
 }
 
 fn sep_str(width: usize) -> String {
-    std::iter::repeat('\u{2500}').take(width.max(10)).collect()
+    std::iter::repeat_n('\u{2500}', width.max(10)).collect()
+}
+
+/// Count the visual lines the chat log will render in `area.width` columns.
+/// Used to size the body chunk so it doesn't expand to fill the whole
+/// screen with empty rows when the chat has only a few cells.
+fn count_chat_lines(app: &App, width: u16) -> usize {
+    use crate::chat::ChatCell;
+    let mut n = 0;
+    for cell in &app.chat.cells {
+        n += 1; // the blank separator line between cells
+        n += cell.desired_height(width) as usize;
+    }
+    n
 }
 
 fn render_setup(f: &mut ratatui::Frame, area: Rect, s: &SetupState) {
     // Body only - logo + context bar are rendered by the shared `render`.
     // Setup has no commands panel + input bar (wizard blocks commands).
+    // Body height: each step has slightly different content; pick a
+    // natural height that fits the longest step without forcing huge
+    // padding on the short ones.
+    let body_h: u16 = match s.step {
+        0 | 3 => 11, // workspace / goals: ~7-8 content + spacing
+        1 => 14,     // meta connect: longer instructions
+        2 => 11,     // products: same shape
+        _ => 8,
+    };
     let chunks = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
-            Constraint::Min(10),
-            Constraint::Length(3),     // footer: error + step counter
+            Constraint::Length(body_h),
+            Constraint::Length(3), // footer: error + step counter
         ])
         .split(area);
 
@@ -1234,17 +1479,25 @@ fn render_setup(f: &mut ratatui::Frame, area: Rect, s: &SetupState) {
         3 => render_step_goals(s),
         _ => Paragraph::new("done"),
     };
-    let body = body.block(Block::default().borders(Borders::ALL).title(step_title(s)))
+    let body = body
+        .block(Block::default().borders(Borders::ALL).title(step_title(s)))
         .wrap(Wrap { trim: false });
     f.render_widget(body, chunks[0]);
 
     let mut footer_lines = vec![];
     if let Some(e) = &s.error {
-        footer_lines.push(Line::from(Span::styled(format!("  ! {}", e), Style::default().fg(Color::Red))));
+        footer_lines.push(Line::from(Span::styled(
+            format!("  ! {}", e),
+            Style::default().fg(Color::Red),
+        )));
     }
     let total = 4;
     footer_lines.push(Line::from(Span::styled(
-        format!("  step {} of {} - Enter to continue, Esc to quit", s.step + 1, total),
+        format!(
+            "  step {} of {} - Enter to continue, Esc to quit",
+            s.step + 1,
+            total
+        ),
         Style::default().fg(Color::DarkGray),
     )));
     let footer = Paragraph::new(footer_lines).block(Block::default().borders(Borders::ALL));
@@ -1262,15 +1515,21 @@ fn step_title(s: &SetupState) -> String {
 }
 
 fn styled_title(text: &str) -> Line<'static> {
-    Line::from(Span::styled(text.to_string(),
-        Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)))
+    Line::from(Span::styled(
+        text.to_string(),
+        Style::default()
+            .fg(Color::Cyan)
+            .add_modifier(Modifier::BOLD),
+    ))
 }
 
 /// Prompt line with a full-block cursor at the end of `value`.
 fn prompt_line(value: &str) -> Line<'static> {
     Line::from(Span::styled(
         format!("  > {}\u{2588}", value),
-        Style::default().add_modifier(Modifier::BOLD).fg(Color::Yellow),
+        Style::default()
+            .add_modifier(Modifier::BOLD)
+            .fg(Color::Yellow),
     ))
 }
 
@@ -1283,11 +1542,14 @@ fn render_step_workspace(s: &SetupState) -> Paragraph<'static> {
         Line::from(""),
     ];
     lines.push(Line::from(Span::styled(
-        format!("  > {}\u{2588}", s.workspace_path),  // full-block cursor
-        Style::default().add_modifier(Modifier::BOLD))));
+        format!("  > {}\u{2588}", s.workspace_path), // full-block cursor
+        Style::default().add_modifier(Modifier::BOLD),
+    )));
     lines.push(Line::from(""));
-    lines.push(Line::from(Span::styled("  Press Enter to accept. Backspace to edit. Esc to quit.",
-        Style::default().fg(Color::DarkGray))));
+    lines.push(Line::from(Span::styled(
+        "  Press Enter to accept. Backspace to edit. Esc to quit.",
+        Style::default().fg(Color::DarkGray),
+    )));
     Paragraph::new(lines)
 }
 
@@ -1301,12 +1563,16 @@ fn render_step_meta(s: &SetupState) -> Paragraph<'static> {
                 Line::from("  (the one with ads_read permission; get one at"),
                 Line::from("  developers.facebook.com -> Tools -> Marketing API)."),
                 Line::from(""),
-                Line::from(Span::styled("  Or type 'skip' to enter ad accounts manually.",
-                    Style::default().fg(Color::Yellow))),
+                Line::from(Span::styled(
+                    "  Or type 'skip' to enter ad accounts manually.",
+                    Style::default().fg(Color::Yellow),
+                )),
                 Line::from(""),
                 Line::from("  Token is saved to macOS Keychain / Linux Secret Service"),
-                Line::from(Span::styled("  via the OS keyring - never written to disk in plaintext.",
-                    Style::default().fg(Color::DarkGray))),
+                Line::from(Span::styled(
+                    "  via the OS keyring - never written to disk in plaintext.",
+                    Style::default().fg(Color::DarkGray),
+                )),
                 Line::from(""),
             ];
             lines.push(prompt_line(&s.meta_input));
@@ -1341,10 +1607,19 @@ fn render_step_meta(s: &SetupState) -> Paragraph<'static> {
                 };
                 let checkbox = if s.meta_selections[i] { "[x]" } else { "[ ]" };
                 let marker = if i == s.meta_highlight { ">" } else { " " };
-                let text = format!("  {} {} [{:>2}] {} - {} ({})",
-                    marker, checkbox, i + 1, a.id, a.name, status);
+                let text = format!(
+                    "  {} {} [{:>2}] {} - {} ({})",
+                    marker,
+                    checkbox,
+                    i + 1,
+                    a.id,
+                    a.name,
+                    status
+                );
                 let style = if i == s.meta_highlight {
-                    Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD)
+                    Style::default()
+                        .fg(Color::Yellow)
+                        .add_modifier(Modifier::BOLD)
                 } else if s.meta_selections[i] {
                     Style::default().fg(Color::Green)
                 } else {
@@ -1354,13 +1629,14 @@ fn render_step_meta(s: &SetupState) -> Paragraph<'static> {
             }
             if end < n {
                 lines.push(Line::from(Span::styled(
-                    format!("  ... {} more below (PgDn to scroll)",
-                        n - end),
-                    Style::default().fg(Color::DarkGray))));
+                    format!("  ... {} more below (PgDn to scroll)", n - end),
+                    Style::default().fg(Color::DarkGray),
+                )));
             } else if start > 0 {
                 lines.push(Line::from(Span::styled(
                     "  ... PgUp to scroll up",
-                    Style::default().fg(Color::DarkGray))));
+                    Style::default().fg(Color::DarkGray),
+                )));
             }
             Paragraph::new(lines)
         }
@@ -1370,14 +1646,20 @@ fn render_step_meta(s: &SetupState) -> Paragraph<'static> {
                 Line::from(""),
                 Line::from("  Defaults: each product uses the account's display name."),
                 Line::from("  To rename, type e.g.  1=BrandName 3=OtherName"),
-                Line::from(Span::styled("  Press Enter on blank line to keep defaults.",
-                    Style::default().fg(Color::Yellow))),
+                Line::from(Span::styled(
+                    "  Press Enter on blank line to keep defaults.",
+                    Style::default().fg(Color::Yellow),
+                )),
                 Line::from(""),
             ];
             for (i, &idx) in s.meta_selected.iter().enumerate() {
                 let a = &s.meta_discovered[idx];
-                lines.push(Line::from(format!("  [{}] {} (default: {})",
-                    i + 1, a.id, a.name)));
+                lines.push(Line::from(format!(
+                    "  [{}] {} (default: {})",
+                    i + 1,
+                    a.id,
+                    a.name
+                )));
             }
             lines.push(Line::from(""));
             lines.push(prompt_line(&s.meta_rename_input));
@@ -1392,18 +1674,30 @@ fn render_step_products(s: &SetupState) -> Paragraph<'static> {
         styled_title("Step 3 of 4: confirm your products"),
         Line::from(""),
         Line::from("  Add: 'ProductName AdAccountId' then Enter."),
-        Line::from(Span::styled("  Type 'demo' to load the Fincity example (4 products).",
-            Style::default().fg(Color::Yellow))),
-        Line::from(Span::styled("  Press Enter on blank line when done adding products.",
-            Style::default().fg(Color::DarkGray))),
+        Line::from(Span::styled(
+            "  Type 'demo' to load the Fincity example (4 products).",
+            Style::default().fg(Color::Yellow),
+        )),
+        Line::from(Span::styled(
+            "  Press Enter on blank line when done adding products.",
+            Style::default().fg(Color::DarkGray),
+        )),
         Line::from(""),
     ];
     if s.products.is_empty() {
-        lines.push(Line::from(Span::styled("  (no products yet)", Style::default().fg(Color::DarkGray))));
+        lines.push(Line::from(Span::styled(
+            "  (no products yet)",
+            Style::default().fg(Color::DarkGray),
+        )));
     } else {
-        lines.push(Line::from(Span::styled(format!("  {} product{} added:",
-            s.products.len(), if s.products.len() == 1 { "" } else { "s" }),
-            Style::default().fg(Color::Green))));
+        lines.push(Line::from(Span::styled(
+            format!(
+                "  {} product{} added:",
+                s.products.len(),
+                if s.products.len() == 1 { "" } else { "s" }
+            ),
+            Style::default().fg(Color::Green),
+        )));
         for (i, (n, a)) in s.products.iter().enumerate() {
             lines.push(Line::from(format!("    [{}] {} -> {}", i + 1, n, a)));
         }
@@ -1427,119 +1721,158 @@ fn render_step_goals(s: &SetupState) -> Paragraph<'static> {
     }
     lines.push(Line::from(""));
     lines.push(prompt_line(&s.goals_input));
-    lines.push(Line::from(Span::styled("  Press Enter on blank line to accept all defaults, then save.",
-        Style::default().fg(Color::DarkGray))));
+    lines.push(Line::from(Span::styled(
+        "  Press Enter on blank line to accept all defaults, then save.",
+        Style::default().fg(Color::DarkGray),
+    )));
     Paragraph::new(lines)
-}
-
-fn render_brief(f: &mut ratatui::Frame, area: Rect, app: &App) {
-    // Brief fills: body (table OR welcome) + commands + input. Logo + context live in `render`.
-    let chunks = Layout::default()
-        .direction(Direction::Vertical)
-        .constraints([
-            Constraint::Min(10),
-            Constraint::Length(COMMANDS.len() as u16 + 2),
-            Constraint::Length(3),
-        ])
-        .split(area);
-
-    // Body: brief table + feasibility, OR the welcome screen.
-    if let Some(b) = &app.brief {
-        let mut lines: Vec<Line> = vec![
-            Line::from(Span::styled(
-                format!("BRIEF  snapshot {}", app.snap_date.as_deref().unwrap_or("?")),
-                Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD),
-            )),
-            Line::from(Span::styled(
-                "  (7d window; config.json goals)",
-                Style::default().fg(Color::DarkGray),
-            )),
-            Line::from(""),
-        ];
-        for r in &b.rows {
-            lines.push(Line::from(format!(
-                "  {:<22} {:>7}/d  m{:>4}  l{:>4}  q{:>3}  {:>5}/d  \u{20B9}{:>5}/q  L\u{2192}Q {:>4}%  gap {:>5}",
-                truncate(&r.product, 22),
-                comma(r.spend_per_day),
-                r.m7d, r.l7d, r.q7d,
-                format!("{:.2}", r.q_per_day),
-                r.rs_per_q.map(|x| comma(x)).unwrap_or_else(|| "-".into()),
-                r.l_to_q.map(|x| format!("{:.1}", x)).unwrap_or_else(|| "-".into()),
-                format!("{:.1}", r.gap),
-            )));
-        }
-        lines.push(Line::from(""));
-        let f1 = &b.feasibility;
-        lines.push(Line::from(format!(
-            "FEASIBILITY  {:.1} q/day @ \u{20B9}{}/day = \u{20B9}{}/q  \u{00B7}  goal {:.0}/day",
-            f1.tot_q_per_day, comma(f1.tot_spend_per_day), comma(f1.cur_rpq), f1.tot_goal_per_day,
-        )));
-        if let Some(req) = f1.required_at_cur {
-            lines.push(Line::from(format!(
-                "  required @ current:  \u{20B9}{}/day ({:.1}x)",
-                comma(req), req as f64 / f1.tot_spend_per_day.max(1) as f64,
-            )));
-        }
-        if let (Some(b), Some(req)) = (f1.best_rpq, f1.required_at_best) {
-            lines.push(Line::from(format!(
-                "  required @ best \u{20B9}{}/q: \u{20B9}{}/day ({:.1}x)",
-                comma(b), comma(req), req as f64 / f1.tot_spend_per_day.max(1) as f64,
-            )));
-        }
-        let suffix = if f1.open_debt.is_empty() { String::new() } else { format!(" ({})", f1.open_debt.join(", ")) };
-        lines.push(Line::from(format!("  setup debt: {}{}", f1.open_debt.len(), suffix)));
-        let body = Paragraph::new(lines).block(Block::default().borders(Borders::ALL));
-        f.render_widget(body, chunks[0]);
-    } else {
-        // Welcome screen for "configured but no snapshot data yet" state.
-        let products: Vec<String> = app.cfg.workspace.as_ref()
-            .map(|w| w.products.iter().map(|p| p.name.clone()).collect())
-            .unwrap_or_default();
-        let lines = crate::widgets::welcome_text(&products);
-        let body = Paragraph::new(lines)
-            .block(Block::default().borders(Borders::ALL).title("welcome"))
-            .wrap(Wrap { trim: false });
-        f.render_widget(body, chunks[0]);
-    }
-
-    // Slash-command help bar
-    let help_items: Vec<ListItem> = COMMANDS.iter()
-        .map(|(c, h)| ListItem::new(Line::from(format!("  {:<14} {}", c, h))))
-        .collect();
-    let help = List::new(help_items)
-        .block(Block::default().borders(Borders::ALL).title("commands"));
-    f.render_widget(help, chunks[1]);
-
-    // Input bar
-    render_input_bar(f, chunks[2], app);
-}
-
-fn render_input_bar(_f: &mut ratatui::Frame, _area: Rect, _app: &App) {
-    // No-op: chat view renders the input line inline (see render_chat_view).
-}
-
-// ---------- helpers ----------
-
-fn truncate(s: &str, n: usize) -> String {
-    if s.chars().count() <= n { s.to_string() } else {
-        let mut out: String = s.chars().take(n - 1).collect();
-        out.push('\u{2026}');
-        out
-    }
-}
-
-fn comma(n: u64) -> String {
-    let s = n.to_string();
-    let bytes = s.as_bytes();
-    let mut out = Vec::with_capacity(bytes.len() + bytes.len() / 3);
-    for (i, &b) in bytes.iter().rev().enumerate() {
-        if i > 0 && i % 3 == 0 { out.push(b','); }
-        out.push(b);
-    }
-    out.reverse();
-    String::from_utf8(out).unwrap()
 }
 
 // Suppress unused warning for the small helper module.
 #[allow(dead_code)]
-const _: fn() = || { let _ = Clear; };
+const _: fn() = || {
+    let _ = Clear;
+};
+
+#[cfg(test)]
+mod paste_tests {
+    use super::*;
+    use std::path::PathBuf;
+
+    fn make_state(step: usize, substep: u8) -> SetupState {
+        let mut s = SetupState::new(PathBuf::from("/tmp/mb-test"));
+        s.workspace_path = "/tmp/mb-test".into();
+        s.step = step;
+        s.meta_substep = substep;
+        s
+    }
+
+    fn app_with_setup(state: SetupState) -> App {
+        let cfg = AppConfig::resolve_optional(Some("/tmp/mb-test"), None);
+        let mut app = App::new_for_test(cfg);
+        app.force_setup_for_test(state);
+        app
+    }
+
+    #[test]
+    fn paste_meta_token_into_substep0() {
+        let s = make_state(1, 0);
+        let mut app = app_with_setup(s);
+        handle_paste(&mut app, "EAA12345abcdefghij".into());
+        match app.view {
+            View::Setup(state) => {
+                assert_eq!(state.meta_input, "EAA12345abcdefghij");
+            }
+            _ => panic!("expected Setup view"),
+        }
+    }
+
+    #[test]
+    fn paste_strips_newlines_and_control_chars() {
+        let s = make_state(1, 0);
+        let mut app = app_with_setup(s);
+        // Real clipboard often wraps a token with a trailing newline.
+        handle_paste(&mut app, "EAA12345\n".into());
+        handle_paste(&mut app, "abc\tdef\r".into());
+        match app.view {
+            View::Setup(state) => {
+                assert_eq!(state.meta_input, "EAA12345abcdef");
+            }
+            _ => panic!("expected Setup view"),
+        }
+    }
+
+    #[test]
+    fn paste_into_workspace_step() {
+        let s = make_state(0, 0);
+        let mut app = app_with_setup(s);
+        // Clear the default workspace path before pasting.
+        match &mut app.view {
+            View::Setup(state) => state.workspace_path.clear(),
+            _ => unreachable!(),
+        }
+        handle_paste(&mut app, "/tmp/pasted-workspace".into());
+        match app.view {
+            View::Setup(state) => {
+                assert_eq!(state.workspace_path, "/tmp/pasted-workspace");
+            }
+            _ => panic!("expected Setup view"),
+        }
+    }
+
+    #[test]
+    fn paste_into_product_input() {
+        let s = make_state(2, 0);
+        let mut app = app_with_setup(s);
+        handle_paste(&mut app, "FincityOfficial act_1".into());
+        match app.view {
+            View::Setup(state) => {
+                assert_eq!(state.product_input, "FincityOfficial act_1");
+            }
+            _ => panic!("expected Setup view"),
+        }
+    }
+
+    #[test]
+    fn paste_into_goals_input() {
+        let s = make_state(3, 0);
+        let mut app = app_with_setup(s);
+        handle_paste(&mut app, "Namma Mane=12".into());
+        match app.view {
+            View::Setup(state) => {
+                assert_eq!(state.goals_input, "Namma Mane=12");
+            }
+            _ => panic!("expected Setup view"),
+        }
+    }
+
+    #[test]
+    fn paste_into_multi_select_is_ignored() {
+        // substep 1 has no text input; paste should not change selection.
+        let s = make_state(1, 1);
+        let mut app = app_with_setup(s);
+        handle_paste(&mut app, "should be dropped".into());
+        match app.view {
+            View::Setup(state) => {
+                assert!(state.meta_input.is_empty());
+                assert!(state.meta_rename_input.is_empty());
+            }
+            _ => panic!("expected Setup view"),
+        }
+    }
+
+    #[test]
+    fn paste_into_rename_substep() {
+        let s = make_state(1, 2);
+        let mut app = app_with_setup(s);
+        handle_paste(&mut app, "1=BrandName".into());
+        match app.view {
+            View::Setup(state) => {
+                assert_eq!(state.meta_rename_input, "1=BrandName");
+            }
+            _ => panic!("expected Setup view"),
+        }
+    }
+
+    #[test]
+    fn paste_into_brief_input() {
+        let cfg = AppConfig::resolve_optional(Some("/tmp/mb-test"), None);
+        let mut app = App::new_for_test(cfg);
+        // resolve_optional yields a setup view when no workspace config exists,
+        // so we override that here for the brief-view paste test.
+        app.force_welcome_for_test();
+        handle_paste(&mut app, "what is my best product?".into());
+        assert_eq!(app.input, "what is my best product?");
+    }
+
+    #[test]
+    fn empty_paste_is_noop() {
+        let s = make_state(1, 0);
+        let mut app = app_with_setup(s);
+        handle_paste(&mut app, "".into());
+        match app.view {
+            View::Setup(state) => assert!(state.meta_input.is_empty()),
+            _ => panic!("expected Setup view"),
+        }
+    }
+}

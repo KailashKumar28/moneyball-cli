@@ -1,0 +1,367 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>moneyball — desired state</title>
+<style>
+  :root {
+    --bg: #0e0e10; --panel: #16161a; --panel-2: #1f1f24;
+    --border: #2c2c34; --text: #d8d8dc; --muted: #8a8a93;
+    --accent: #38bdf8; --green: #10b981; --amber: #f59e0b; --red: #ef4444;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0;
+    background: var(--bg); color: var(--text);
+    font: 14px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+  }
+  .wrap { max-width: 1200px; margin: 0 auto; padding: 32px 24px 64px; }
+  header h1 { margin: 0 0 4px; font-size: 28px; font-weight: 700; }
+  header .sub { color: var(--muted); margin-bottom: 24px; }
+  .meta { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin: 24px 0; }
+  .meta .card {
+    background: var(--panel); border: 1px solid var(--border);
+    border-radius: 8px; padding: 14px;
+  }
+  .meta .card .label { color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: 0.05em; }
+  .meta .card .value { font-size: 22px; font-weight: 600; margin-top: 4px; }
+  .meta .card.green .value { color: var(--green); }
+  .meta .card.amber .value { color: var(--amber); }
+  .meta .card.red .value { color: var(--red); }
+  .filter-bar { display: flex; gap: 8px; flex-wrap: wrap; margin: 16px 0 24px; }
+  .filter-bar button {
+    background: var(--panel-2); color: var(--text);
+    border: 1px solid var(--border); border-radius: 999px;
+    padding: 6px 14px; cursor: pointer; font: inherit;
+  }
+  .filter-bar button.active {
+    background: var(--accent); color: #001020; border-color: var(--accent);
+  }
+  .filter-bar button:hover:not(.active) { border-color: var(--accent); }
+  .grid { display: grid; grid-template-columns: 1fr; gap: 16px; }
+  .feature {
+    background: var(--panel); border: 1px solid var(--border);
+    border-radius: 12px; padding: 18px;
+    display: grid; grid-template-columns: 1fr 1fr; gap: 18px;
+  }
+  .feature[data-status="passing"] { border-left: 3px solid var(--green); }
+  .feature[data-status="failing"] { border-left: 3px solid var(--red); }
+  .feature[data-status="pending"] { border-left: 3px solid var(--border); }
+  .feature[data-status="blocked"] { border-left: 3px solid var(--amber); }
+  .feature h3 { margin: 0 0 4px; font-size: 16px; font-weight: 600; }
+  .feature .area {
+    display: inline-block;
+    font-size: 11px; padding: 2px 8px; border-radius: 4px;
+    background: var(--panel-2); color: var(--muted);
+    text-transform: uppercase; letter-spacing: 0.05em;
+    margin-left: 8px;
+  }
+  .feature .expected { color: var(--text); margin: 12px 0 8px; }
+  .feature .notes { color: var(--muted); font-size: 12px; margin-top: 8px; }
+  .screenshot {
+    background: var(--panel-2); border: 1px solid var(--border);
+    border-radius: 8px; padding: 12px;
+    display: flex; flex-direction: column; align-items: center;
+    min-height: 220px; justify-content: center;
+  }
+  .screenshot img {
+    max-width: 100%; height: auto;
+    border-radius: 4px;
+    image-rendering: pixelated;
+  }
+  .screenshot .placeholder {
+    color: var(--muted); font-size: 13px;
+    text-align: center; padding: 32px;
+  }
+  .screenshot .caption {
+    color: var(--muted); font-size: 11px;
+    margin-top: 8px; font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  }
+  .status-pill {
+    display: inline-block;
+    font-size: 11px; padding: 2px 8px; border-radius: 999px;
+    text-transform: uppercase; letter-spacing: 0.05em;
+    margin-left: 8px;
+  }
+  .status-pill.passing { background: rgba(16,185,129,0.15); color: var(--green); }
+  .status-pill.failing { background: rgba(239,68,68,0.15); color: var(--red); }
+  .status-pill.pending { background: rgba(138,138,147,0.15); color: var(--muted); }
+  .status-pill.blocked { background: rgba(245,158,11,0.15); color: var(--amber); }
+  footer {
+    margin-top: 48px; padding-top: 16px; border-top: 1px solid var(--border);
+    color: var(--muted); font-size: 12px;
+  }
+  code { background: var(--panel-2); padding: 1px 6px; border-radius: 3px; font-size: 12px; }
+  pre {
+    background: var(--panel-2); padding: 10px 12px; border-radius: 6px;
+    overflow-x: auto; font-size: 12px;
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>moneyball — desired state</h1>
+    <div class="sub">Visual test harness · generated from <code>.test-harness/features.toml</code></div>
+  </header>
+
+  <div class="meta" id="meta">
+    <div class="card"><div class="label">Total features</div><div class="value" id="m-total">—</div></div>
+    <div class="card green"><div class="label">Passing</div><div class="value" id="m-pass">—</div></div>
+    <div class="card amber"><div class="label">Pending</div><div class="value" id="m-pend">—</div></div>
+    <div class="card red"><div class="label">Failing</div><div class="value" id="m-fail">—</div></div>
+  </div>
+
+  <div class="filter-bar">
+    <button data-filter="all" class="active">All</button>
+    <button data-filter="passing">Passing</button>
+    <button data-filter="pending">Pending</button>
+    <button data-filter="failing">Failing</button>
+    <button data-filter="cli">cli</button>
+    <button data-filter="tui">tui</button>
+    <button data-filter="wizard">wizard</button>
+    <button data-filter="slash">slash</button>
+    <button data-filter="session">session</button>
+    <button data-filter="subcommand">subcommand</button>
+  </div>
+
+  <div class="grid" id="grid"></div>
+
+  <footer>
+    <p><strong>How to capture a feature:</strong></p>
+    <pre>~/.pi/agent/harness/tui-test/capture.sh &lt;feature-id&gt; &lt;command...&gt; \
+  .test-harness/screenshots/&lt;feature-id&gt;/latest.png</pre>
+    <p>Then update <code>features.toml</code>: set <code>status</code> to <code>passing</code> or <code>failing</code> and add notes. Then run <code>python3 .test-harness/build-html.py</code> to regenerate this page.</p>
+  </footer>
+</div>
+
+<script>
+// AUTO-GENERATED from features.toml. Do not edit by hand.
+const FEATURES = [
+  { id: 'welcome-view', area: 'tui', name: 'Welcome view (no workspace)',
+    expected: 'When moneyball launches with no workspace configured, it shows: the MONEYBALL ASCII logo with a cyan diamond glyph, the workspace context line, and the first-run setup wizard step 1 (workspace path input). The cursor sits at the end of the input field. Box borders render cleanly.',
+    screenshot: 'screenshots/welcome-view/latest.png',
+    status: 'passing',
+    notes: 'Captured at 120x40. Logo, wizard panel, cursor all visible.' },
+  { id: 'wizard-step-1-workspace', area: 'wizard', name: 'Wizard step 1: workspace path',
+    expected: 'Form-style input with the current default path pre-filled. Pressing Enter accepts. Backspace edits. Esc clears the input (does NOT quit - see slash-exit-command). Help text visible at the bottom.',
+    screenshot: 'screenshots/wizard-step-1-workspace/latest.png',
+    status: 'passing',
+    notes: '' },
+  { id: 'wizard-step-2-meta', area: 'wizard', name: 'Wizard step 2: connect Meta',
+    expected: "Multi-select checklist of discovered ad accounts. Up/Down/PgUp/PgDn/Home/End to move. Space toggles. 'a' selects all/none. Enter confirms. Question: is the optional 'rename selected accounts' substep kept? (user was unsure - ASK before declaring broken).",
+    screenshot: 'screenshots/wizard-step-2-meta/latest.png',
+    status: 'pending',
+    notes: 'OPEN QUESTION for the loop driver: confirm rename substep with user.' },
+  { id: 'wizard-step-3-products', area: 'wizard', name: 'Wizard step 3: confirm products',
+    expected: "Auto-filled list of selected Meta ad accounts. 'Name AdAccount' or 'demo' adds manually. Each row shows product name + ad account ID.",
+    screenshot: 'screenshots/wizard-step-3-products/latest.png',
+    status: 'pending',
+    notes: '' },
+  { id: 'wizard-step-4-goals', area: 'wizard', name: 'Wizard step 4: goals per product',
+    expected: 'For each product, prompt for daily qualified-lead goal. Default 10. Empty Enter accepts default.',
+    screenshot: 'screenshots/wizard-step-4-goals/latest.png',
+    status: 'pending',
+    notes: '' },
+  { id: 'brief-command', area: 'subcommand', name: 'moneyball brief',
+    expected: 'Prints a per-product 7-day brief table (spend/day, leads, qualified, q/day, Rs/q, lead-to-qualified rate, goal, gap) plus a FEASIBILITY section with portfolio totals and required-spend math. Parity-verified vs mb.py scoreboard.',
+    screenshot: 'screenshots/brief-command/latest.png',
+    status: 'passing',
+    notes: 'Verified against fin_campaign_analysis 2026-07-13 snapshot.' },
+  { id: 'snapshot-command', area: 'subcommand', name: 'moneyball snapshot',
+    expected: 'Validates the JSON snapshot for a given date. Exits non-zero on schema errors. Prints which fields are missing or malformed.',
+    screenshot: 'screenshots/snapshot-command/latest.png',
+    status: 'pending',
+    notes: '' },
+  { id: 'repl-default', area: 'cli', name: 'moneyball (no args) -> REPL',
+    expected: 'Starts the interactive TUI. Default behavior of the binary.',
+    screenshot: 'screenshots/repl-default/latest.png',
+    status: 'passing',
+    notes: '' },
+  { id: 'repl-chat-bar', area: 'tui', name: 'Chat-style input bar (codex style)',
+    expected: "Original-codex style chat input. NO bordered box. NO static command list. Inline completion ghost when typing '/'. Keybinding caption visible (e.g. 'enter to send, esc to clear'). Placeholder text shown when input is empty (e.g. 'Ask moneyball or type / for commands'). Bottom row sits flush against the terminal edge.",
+    screenshot: 'screenshots/repl-chat-bar/latest.png',
+    status: 'passing',
+    notes: "Implemented per AGENTS.md: 'chat-style input bar (no bordered box, no static command list, inline completion ghost, keybinding caption, placeholder text)'." },
+  { id: 'repl-esc-clears', area: 'tui', name: 'Esc clears the input (no quit)',
+    expected: "Pressing Esc on a non-empty input clears it. Pressing Esc on empty input shows a hint (e.g. 'use /exit to quit') but does NOT quit. The double-Esc quit shortcut from earlier codex-style implementations is removed. Only /exit (or /quit, /q) ends moneyball.",
+    screenshot: 'screenshots/repl-esc-clears/latest.png',
+    status: 'passing',
+    notes: "Removed handle_esc quit logic in lib.rs. Removed dead esc_armed_at field and arm_cancel function. Updated keybinding caption from 'esc esc to quit' to '/exit to quit'." },
+  { id: 'repl-logo', area: 'tui', name: 'Moneyball ASCII logo on session start',
+    expected: 'The first cell on every fresh session is a System cell containing the MONEYBALL ASCII art with cyan diamond.',
+    screenshot: 'screenshots/repl-logo/latest.png',
+    status: 'passing',
+    notes: '' },
+  { id: 'slash-help', area: 'slash', name: '/help (or /?)',
+    expected: 'Lists every available slash command with one-line description. Matches the original codex /help output format (command + description, monospace).',
+    screenshot: 'screenshots/slash-help/latest.png',
+    status: 'passing',
+    notes: '' },
+  { id: 'slash-exit', area: 'slash', name: '/exit, /quit, /q',
+    expected: "All three aliases exit moneyball cleanly. The session is auto-saved to ~/.moneyball/sessions/ before exit. A 'exiting moneyball.' System cell is appended to the chat log before quit.",
+    screenshot: 'screenshots/slash-exit/latest.png',
+    status: 'passing',
+    notes: 'Already implemented in lib.rs:658: `/quit | /exit | /q => { ... app.quit = true }`.' },
+  { id: 'slash-clear', area: 'slash', name: '/clear',
+    expected: "Clears the visible chat log (does NOT delete the session file). Original codex-style. After clearing, a fresh System cell appears saying 'cleared.' or similar. Optional - confirm with user if wanted.",
+    screenshot: 'screenshots/slash-clear/latest.png',
+    status: 'pending',
+    notes: 'Not yet implemented. Confirm with user: do we want /clear?' },
+  { id: 'slash-brief', area: 'slash', name: '/brief',
+    expected: 'Loads the portfolio brief and pushes a tool-call cell with the formatted output, plus an assistant summary cell with feasibility math. Same as the headless `moneyball brief` command but invoked live.',
+    screenshot: 'screenshots/slash-brief/latest.png',
+    status: 'pending',
+    notes: '' },
+  { id: 'slash-funnel', area: 'slash', name: '/funnel <product>',
+    expected: 'Per-product funnel analysis: leads -> qualified -> closed conversion ratios. Currently a stub. Wired in the next iteration.',
+    screenshot: 'screenshots/slash-funnel/latest.png',
+    status: 'failing',
+    notes: "Currently returns 'wired in the next iteration'. Needs implementation." },
+  { id: 'slash-diagnose', area: 'slash', name: '/diagnose <product>',
+    expected: 'Runs the 5-command diagnostic synthesis for the named product. Currently a stub.',
+    screenshot: 'screenshots/slash-diagnose/latest.png',
+    status: 'failing',
+    notes: "Currently returns 'wired in the next iteration'. Needs implementation." },
+  { id: 'slash-ask', area: 'slash', name: '/ask <question>',
+    expected: 'Streams an LLM answer for free-form questions about the portfolio. Currently a stub.',
+    screenshot: 'screenshots/slash-ask/latest.png',
+    status: 'failing',
+    notes: "Currently returns 'LLM streaming wires up in the next iteration'. Needs implementation." },
+  { id: 'slash-snapshot', area: 'slash', name: '/snapshot --check',
+    expected: 'Validates the snapshot for the current (or named) date. Exits non-zero on schema errors with a clear report. Currently a stub.',
+    screenshot: 'screenshots/slash-snapshot/latest.png',
+    status: 'failing',
+    notes: '' },
+  { id: 'slash-ledger', area: 'slash', name: '/ledger',
+    expected: 'Shows prediction history from ~/.moneyball/sessions/ledger.jsonl. Currently a stub.',
+    screenshot: 'screenshots/slash-ledger/latest.png',
+    status: 'failing',
+    notes: '' },
+  { id: 'slash-setup', area: 'slash', name: '/setup',
+    expected: 'Re-opens the first-run setup wizard at step 1. Lets the user reconfigure workspace, products, goals. Does NOT clobber an existing session.',
+    screenshot: 'screenshots/slash-setup/latest.png',
+    status: 'passing',
+    notes: '' },
+  { id: 'session-save', area: 'session', name: 'Session persistence on quit',
+    expected: 'On /exit (or /quit, /q), a Session JSON file is written to ~/.moneyball/sessions/. Includes all chat cells (System, UserPrompt, AssistantText, ToolCall).',
+    screenshot: 'screenshots/session-save/latest.png',
+    status: 'pending',
+    notes: '' },
+  { id: 'session-resume', area: 'session', name: 'moneyball -c / --resume <id> (instant prompt)',
+    expected: "Loads the latest session (or named id). Does NOT replay the full message log. The screen shows just the prompt input ready for new commands. (User clarification: 'instant prompt without reply'. Original codex style.)",
+    screenshot: 'screenshots/session-resume/latest.png',
+    status: 'passing',
+    notes: 'Fixed: load_session_into now resets chat to empty (no replay) but preserves session_id and session_started so new cells are appended to the same on-disk file. Removed dead session_cell_to_chat + parse_status helpers.' },
+  { id: 'session-list', area: 'cli', name: 'moneyball --list',
+    expected: 'Prints a table of saved sessions. Columns: id, created_at (UTC), message count, last_updated, working_directory, snapshot_date. Original codex-style table format.',
+    screenshot: 'screenshots/session-list/latest.png',
+    status: 'pending',
+    notes: '' },
+  { id: 'data-root-flag', area: 'cli', name: '--data-root <DATA_ROOT>',
+    expected: 'Override the workspace path. Default: sibling fin_campaign_analysis/ next to the binary.',
+    screenshot: 'screenshots/data-root-flag/latest.png',
+    status: 'passing',
+    notes: 'Fixed: main.rs was discarding the cfg for REPL. Added run_with_cfg() in lib.rs that takes Option<AppConfig>. main.rs now passes cfg to run_with_cfg.' },
+  { id: 'date-flag', area: 'cli', name: '--date <DATE>',
+    expected: 'Pin snapshot date. Default: latest available.',
+    screenshot: 'screenshots/date-flag/latest.png',
+    status: 'pending',
+    notes: '' }
+];
+
+function render(filter) {
+  const grid = document.getElementById("grid");
+  while (grid.firstChild) grid.removeChild(grid.firstChild);
+  for (const f of FEATURES) {
+    if (filter !== "all" && filter !== f.status && filter !== f.area) continue;
+    const card = document.createElement("div");
+    card.className = "feature";
+    card.dataset.status = f.status;
+
+    const left = document.createElement("div");
+    const h3 = document.createElement("h3");
+    h3.textContent = f.name;
+    const areaSpan = document.createElement("span");
+    areaSpan.className = "area";
+    areaSpan.textContent = f.area;
+    const statusPill = document.createElement("span");
+    statusPill.className = "status-pill " + f.status;
+    statusPill.textContent = f.status;
+    h3.appendChild(areaSpan);
+    h3.appendChild(statusPill);
+    left.appendChild(h3);
+
+    const expected = document.createElement("div");
+    expected.className = "expected";
+    expected.textContent = f.expected;
+    left.appendChild(expected);
+
+    if (f.notes) {
+      const notes = document.createElement("div");
+      notes.className = "notes";
+      notes.textContent = f.notes;
+      left.appendChild(notes);
+    }
+    const idLine = document.createElement("div");
+    idLine.className = "notes";
+    idLine.style.marginTop = "12px";
+    const idCode = document.createElement("code");
+    idCode.textContent = "id: " + f.id;
+    idLine.appendChild(idCode);
+    left.appendChild(idLine);
+    card.appendChild(left);
+
+    const shot = document.createElement("div");
+    shot.className = "screenshot";
+    const img = document.createElement("img");
+    img.src = "../" + f.screenshot;
+    img.alt = f.name;
+    img.onerror = () => {
+      img.style.display = "none";
+      placeholder.style.display = "block";
+    };
+    shot.appendChild(img);
+    const placeholder = document.createElement("div");
+    placeholder.className = "placeholder";
+    placeholder.style.display = "none";
+    placeholder.textContent = "no screenshot yet";
+    const codeEl = document.createElement("code");
+    codeEl.textContent = f.screenshot;
+    placeholder.appendChild(codeEl);
+    shot.appendChild(placeholder);
+    const caption = document.createElement("div");
+    caption.className = "caption";
+    caption.textContent = f.screenshot;
+    shot.appendChild(caption);
+    card.appendChild(shot);
+
+    grid.appendChild(card);
+  }
+}
+
+function updateMeta() {
+  const total = FEATURES.length;
+  const pass = FEATURES.filter(f => f.status === "passing").length;
+  const pend = FEATURES.filter(f => f.status === "pending").length;
+  const fail = FEATURES.filter(f => f.status === "failing").length;
+  document.getElementById("m-total").textContent = total;
+  document.getElementById("m-pass").textContent = pass;
+  document.getElementById("m-pend").textContent = pend;
+  document.getElementById("m-fail").textContent = fail;
+}
+
+document.querySelectorAll(".filter-bar button").forEach(b => {
+  b.addEventListener("click", () => {
+    document.querySelectorAll(".filter-bar button").forEach(x => x.classList.remove("active"));
+    b.classList.add("active");
+    render(b.dataset.filter);
+  });
+});
+
+updateMeta();
+render("all");
+</script>
+</body>
+</html>
