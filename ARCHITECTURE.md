@@ -108,11 +108,9 @@ never touches the network. Network lives in exactly three core modules:
 
 ## 8. Standing debt (chip away; never add to it)
 
-- [x] First split done: `commands.rs` (581) + `setup.rs` (1,589) extracted;
-      lib.rs 3,270 -> 1,169 lines.
-- [ ] Continue the split: pull `app.rs` (state), `event.rs` (loop + keys),
-      and `render.rs` (chrome + chat view) out of lib.rs; substructure
-      `setup.rs` (1,589 lines) into a `setup/` dir.
+- [x] lib.rs split complete (2026-07-16): lib.rs is a 96-line table of
+      contents; app.rs / event.rs / render.rs / commands.rs / palette (in
+      render) / setup/{mod,render_steps}.rs all within or near the soft cap.
 - [x] `llm.rs`: `request_headers()` is the single source of truth for
       auth/header assembly across all three call paths.
 - [x] Clippy at zero (2026-07-16). Hold there (gate #2).

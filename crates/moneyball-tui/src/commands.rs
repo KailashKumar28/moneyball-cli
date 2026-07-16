@@ -162,10 +162,40 @@ your own pipeline at\n\n    {}/<YYYY-MM-DD>/\n\nand /brief reads whatever it wri
             run_freeform(app, &question);
         }
         "/snapshot" => {
-            app.chat.push(Cell::AssistantText(cells::AssistantText {
-                text: "/snapshot --check validates that <workspace>/moneyball/history/snap/<date>/*.json match schema. wiring next.".into(),
-                streaming: false,
-            }));
+            // List available snapshot dates and validate the latest one
+            // parses against the schema.
+            let started = std::time::Instant::now();
+            let snap_root = app.cfg.snap_dir();
+            let dates = moneyball_core::snapshot::list_dates(&snap_root).unwrap_or_default();
+            if dates.is_empty() {
+                app.chat.push_tool(
+                    "snapshot",
+                    "",
+                    vec![format!("no snapshots in {} - run /fetch to pull one.", snap_root.display())],
+                    false,
+                    started.elapsed().as_millis() as u64,
+                );
+            } else {
+                let latest = dates.last().cloned().unwrap_or_default();
+                let mut out: Vec<String> =
+                    vec![format!("{} snapshot(s) in {}:", dates.len(), snap_root.display())];
+                out.extend(dates.iter().map(|d| format!("  {}", d)));
+                match moneyball_core::snapshot::load(&snap_root.join(&latest)) {
+                    Ok(s) => out.push(format!(
+                        "latest {} validates: {} ads_daily rows",
+                        latest,
+                        s.ads_daily.len()
+                    )),
+                    Err(e) => out.push(format!("latest {} FAILS validation: {}", latest, e)),
+                }
+                app.chat.push_tool(
+                    "snapshot",
+                    "",
+                    out,
+                    true,
+                    started.elapsed().as_millis() as u64,
+                );
+            }
         }
         "/ledger" => {
             app.chat.push(Cell::AssistantText(cells::AssistantText {
