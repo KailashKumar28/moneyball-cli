@@ -1,0 +1,11 @@
+{
+  "thinking": "high",
+  "steeringMode": "one-at-a-time",
+  "defaultProjectTrust": "always",
+  "packages": [
+    "npm:pi-interactive-shell",
+    "npm:pi-lens",
+    "git:github.com/tmustier/pi-extensions",
+    "npm:pi-taskflow"
+  ]
+}
