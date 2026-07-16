@@ -7,6 +7,7 @@
 
 pub mod brief;
 pub mod config;
+pub mod crm;
 pub mod error;
 pub mod fetch;
 pub mod llm;

@@ -1306,6 +1306,7 @@ dependencies = [
  "clap",
  "moneyball-core",
  "moneyball-tui",
+ "serde_json",
  "tokio",
 ]
 

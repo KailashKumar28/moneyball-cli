@@ -7,7 +7,7 @@
 use std::collections::HashMap;
 use std::path::Path;
 
-use chrono::{DateTime, Duration, NaiveDate, TimeZone, Utc};
+use chrono::{Duration, NaiveDate, TimeZone, Utc};
 use serde::Deserialize;
 
 use crate::config::{AppConfig, CrmConfig};
@@ -17,8 +17,6 @@ use crate::snapshot::Snapshot;
 const IST_OFFSET_HOURS: i64 = 5;
 const IST_OFFSET_MINUTES: i64 = 30;
 const LAG_HOURS: i64 = 72;
-const QUALIFIED_PLUS: &[&str] = &["Contactable", "Visit", "Revisit", "Booking"];
-const VISIT_PLUS: &[&str] = &["Visit", "Revisit", "Booking"];
 
 #[derive(Debug, Clone)]
 pub struct ProductRow {
@@ -142,22 +140,22 @@ fn compute_product(product: &str, snap: &Snapshot, window: &Window, goal: f64) -
     let mut v: HashMap<String, u64> = HashMap::new();
     let mut b: HashMap<String, u64> = HashMap::new();
 
-    for_each_crm_ticket(snap, |ticket, delivery_ep| {
+    crate::crm::for_each_ticket(&snap.crm, |ticket, delivery_ep| {
         if delivery_ep < d0_ist || delivery_ep >= d1_ist {
             return;
         }
-        let aid = ticket_ad_id(ticket).unwrap_or_default();
+        let aid = crate::crm::ticket_ad_id(ticket).unwrap_or_default();
         let cid = match ad_to_campaign.get(&aid) {
             Some(c) => c.clone(),
             None => return,
         };
-        let stage = ticket_stage(ticket);
-        let funnel = ticket_funnel(ticket);
+        let stage = crate::crm::ticket_stage(ticket);
+        let funnel = crate::crm::ticket_funnel(ticket);
         *l.entry(cid.clone()).or_default() += 1;
-        if QUALIFIED_PLUS.contains(&stage.as_str()) {
+        if crate::crm::QUALIFIED_PLUS.contains(&stage.as_str()) {
             *q.entry(cid.clone()).or_default() += 1;
         }
-        if VISIT_PLUS.contains(&stage.as_str()) {
+        if crate::crm::VISIT_PLUS.contains(&stage.as_str()) {
             *v.entry(cid.clone()).or_default() += 1;
         }
         if funnel == "WON" || stage == "Booking" {
@@ -281,99 +279,6 @@ fn load_open_debt(path: &Path) -> Vec<String> {
                 .collect()
         })
         .unwrap_or_default()
-}
-
-// ---------- CRM iteration ----------
-
-fn for_each_crm_ticket<F: FnMut(&serde_json::Map<String, serde_json::Value>, i64)>(
-    snap: &Snapshot,
-    mut f: F,
-) {
-    let v = &snap.crm;
-    match v {
-        serde_json::Value::Object(map) => {
-            // {campaign_id: {tickets: [...]}}
-            for (_cid, blob) in map {
-                let Some(blob) = blob.as_object() else {
-                    continue;
-                };
-                let Some(tickets) = blob.get("tickets").and_then(|t| t.as_array()) else {
-                    continue;
-                };
-                for t in tickets {
-                    let Some(obj) = t.as_object() else { continue };
-                    let ep = ticket_delivery_epoch(obj).unwrap_or(i64::MIN);
-                    f(obj, ep);
-                }
-            }
-        }
-        serde_json::Value::Array(arr) => {
-            for t in arr {
-                let Some(obj) = t.as_object() else { continue };
-                let ep = ticket_delivery_epoch(obj).unwrap_or(i64::MIN);
-                f(obj, ep);
-            }
-        }
-        _ => {}
-    }
-}
-
-fn ticket_delivery_epoch(t: &serde_json::Map<String, serde_json::Value>) -> Option<i64> {
-    let delivery = t.get("delivery")?;
-    parse_epoch(delivery)
-}
-
-fn parse_epoch(v: &serde_json::Value) -> Option<i64> {
-    match v {
-        serde_json::Value::Number(n) => n.as_i64().or_else(|| n.as_f64().map(|f| f as i64)),
-        serde_json::Value::String(s) => {
-            if let Ok(i) = s.parse::<i64>() {
-                return Some(i);
-            }
-            // ISO string - parse as UTC then shift to IST for date-bucketing
-            if let Ok(dt) = DateTime::parse_from_rfc3339(s) {
-                return Some(dt.timestamp());
-            }
-            // Try naive ISO + treat as UTC
-            for fmt in &[
-                "%Y-%m-%dT%H:%M:%S%z",
-                "%Y-%m-%dT%H:%M:%S%.f%z",
-                "%Y-%m-%dT%H:%M:%S",
-            ] {
-                if let Ok(dt) = chrono::NaiveDateTime::parse_from_str(s, fmt) {
-                    return Some(Utc.from_utc_datetime(&dt).timestamp());
-                }
-            }
-            None
-        }
-        _ => None,
-    }
-}
-
-fn ticket_ad_id(t: &serde_json::Map<String, serde_json::Value>) -> Option<String> {
-    if let Some(s) = t.get("ad_id").and_then(|v| v.as_str()) {
-        return Some(s.into());
-    }
-    if let Some(obj) = t.get("adId").and_then(|v| v.as_object()) {
-        if let Some(s) = obj.get("adId").and_then(|v| v.as_str()) {
-            return Some(s.into());
-        }
-    }
-    None
-}
-
-fn ticket_stage(t: &serde_json::Map<String, serde_json::Value>) -> String {
-    t.get("stage")
-        .and_then(|v| v.as_str())
-        .unwrap_or("")
-        .to_string()
-}
-
-fn ticket_funnel(t: &serde_json::Map<String, serde_json::Value>) -> String {
-    t.get("funnel")
-        .and_then(|v| v.as_str())
-        .unwrap_or("")
-        .to_string()
 }
 
 // ---------- m-leads from Meta actions ----------

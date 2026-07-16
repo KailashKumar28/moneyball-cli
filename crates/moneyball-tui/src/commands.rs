@@ -171,14 +171,20 @@ your own pipeline at\n\n    {}/<YYYY-MM-DD>/\n\nand /brief reads whatever it wri
                 app.chat.push_tool(
                     "snapshot",
                     "",
-                    vec![format!("no snapshots in {} - run /fetch to pull one.", snap_root.display())],
+                    vec![format!(
+                        "no snapshots in {} - run /fetch to pull one.",
+                        snap_root.display()
+                    )],
                     false,
                     started.elapsed().as_millis() as u64,
                 );
             } else {
                 let latest = dates.last().cloned().unwrap_or_default();
-                let mut out: Vec<String> =
-                    vec![format!("{} snapshot(s) in {}:", dates.len(), snap_root.display())];
+                let mut out: Vec<String> = vec![format!(
+                    "{} snapshot(s) in {}:",
+                    dates.len(),
+                    snap_root.display()
+                )];
                 out.extend(dates.iter().map(|d| format!("  {}", d)));
                 match moneyball_core::snapshot::load(&snap_root.join(&latest)) {
                     Ok(s) => out.push(format!(

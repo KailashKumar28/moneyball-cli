@@ -52,6 +52,22 @@ enum Cmd {
         #[arg(long, default_value_t = 28)]
         days: u32,
     },
+    /// Connect CRM data - print the crm.json contract, validate an export.
+    Crm {
+        #[command(subcommand)]
+        cmd: CrmCmd,
+    },
+}
+
+#[derive(Subcommand, Debug)]
+enum CrmCmd {
+    /// Print the crm.json contract (paste into your CRM's coding agent).
+    Contract,
+    /// Validate a crm.json export against the contract. Exit 0 = PASS.
+    Check {
+        /// Path to the crm.json file to validate.
+        file: std::path::PathBuf,
+    },
 }
 
 fn main() -> Result<()> {
@@ -119,6 +135,56 @@ fn main() -> Result<()> {
             }
             println!("snapshot written: {}", report.path.display());
         }
+        Cmd::Crm { cmd } => match cmd {
+            CrmCmd::Contract => print!("{}", moneyball_core::crm::CONTRACT_MD),
+            CrmCmd::Check { file } => {
+                if !run_crm_check(&cfg, &file)? {
+                    std::process::exit(1);
+                }
+            }
+        },
     }
     Ok(())
+}
+
+/// Validate a crm.json export; print the report. Returns pass/fail.
+fn run_crm_check(cfg: &AppConfig, file: &std::path::Path) -> Result<bool> {
+    let raw =
+        std::fs::read_to_string(file).with_context(|| format!("cannot read {}", file.display()))?;
+    let parsed: serde_json::Value = match serde_json::from_str(&raw) {
+        Ok(v) => v,
+        Err(e) => {
+            println!("FAIL: {} is not valid JSON: {}", file.display(), e);
+            return Ok(false);
+        }
+    };
+    let stages = cfg
+        .workspace
+        .as_ref()
+        .map(|w| w.crm.stages.clone())
+        .unwrap_or_default();
+    let snap = cfg
+        .snap_for(None)
+        .ok()
+        .and_then(|p| moneyball_core::snapshot::load(&p).ok());
+    let report = moneyball_core::crm::check(&parsed, &stages, snap.as_ref());
+    println!("crm check: {} ({} tickets)", file.display(), report.tickets);
+    for line in &report.info {
+        println!("  -     {}", line);
+    }
+    for line in &report.warnings {
+        println!("  warn  {}", line);
+    }
+    for line in &report.errors {
+        println!("  error {}", line);
+    }
+    if report.passed() {
+        println!("PASS");
+    } else {
+        println!(
+            "FAIL ({} error line(s)) - see moneyball crm contract",
+            report.errors.len()
+        );
+    }
+    Ok(report.passed())
 }
