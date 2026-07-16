@@ -139,10 +139,7 @@ your own pipeline at\n\n    {}/<YYYY-MM-DD>/\n\nand /brief reads whatever it wri
             app.view = View::Setup(state);
         }
         "/funnel" => {
-            app.chat.push(Cell::AssistantText(cells::AssistantText {
-                text: format!("/funnel {} - wired in the next iteration. for now use /ask + this product name.", arg),
-                streaming: false,
-            }));
+            run_funnel(app, arg);
         }
         "/diagnose" => {
             app.chat.push(Cell::AssistantText(cells::AssistantText {
@@ -359,6 +356,93 @@ pub(crate) fn on_fetch_failed(app: &mut App, err: String, days: u32, ms: u64) {
     app.chat
         .push_tool("fetch", &format!("{} days", days), vec![err], false, ms);
 }
+
+/// `/funnel <product> [campaign|adset|ad]` - per-entity funnel as a tool
+/// cell, then a streaming LLM read of it (scale/kill/wait per entity).
+/// Compute is instant (snapshot on disk), so no worker thread needed.
+fn run_funnel(app: &mut App, arg: &str) {
+    use crate::chat::cells;
+    use crate::chat::Cell;
+    let started = std::time::Instant::now();
+    let products: Vec<String> = app
+        .cfg
+        .workspace
+        .as_ref()
+        .map(|w| w.products.iter().map(|p| p.name.clone()).collect())
+        .unwrap_or_default();
+
+    // Trailing token may be the level; everything before it is the
+    // product (product names contain spaces).
+    let (product, by) = match arg.rsplit_once(' ') {
+        Some((head, lvl)) if ["campaign", "adset", "ad"].contains(&lvl) => {
+            (head.trim().to_string(), lvl.to_string())
+        }
+        _ => (arg.to_string(), "adset".to_string()),
+    };
+    if product.is_empty() || !products.iter().any(|p| p == &product) {
+        app.chat.push(Cell::AssistantText(cells::AssistantText {
+            text: format!(
+                "usage: /funnel <product> [campaign|adset|ad]\nconfigured products: {}",
+                if products.is_empty() {
+                    "(none - run /setup)".into()
+                } else {
+                    products.join(", ")
+                }
+            ),
+            streaming: false,
+        }));
+        return;
+    }
+
+    let snap = match app
+        .cfg
+        .snap_for(app.cfg.date.as_deref())
+        .and_then(|p| moneyball_core::snapshot::load(&p))
+    {
+        Ok(s) => s,
+        Err(_) => {
+            app.chat.push(Cell::AssistantText(cells::AssistantText {
+                text: "no snapshot yet - run /fetch first (or /brief, which self-heals).".into(),
+                streaming: false,
+            }));
+            return;
+        }
+    };
+    let level = moneyball_core::funnel::By::parse(&by).expect("level pre-validated");
+    let rows = moneyball_core::funnel::compute(&snap, &app.cfg, &product, 7, level);
+    let mut lines = vec![format!(
+        "FUNNEL {} - by {} - 7d - snapshot {}",
+        product, by, snap.date
+    )];
+    lines.extend(
+        moneyball_core::funnel::table(&rows)
+            .lines()
+            .map(String::from),
+    );
+    let table_text = lines.join("\n");
+    app.chat.push_tool(
+        "funnel",
+        arg,
+        lines,
+        true,
+        started.elapsed().as_millis() as u64,
+    );
+
+    let sys = format!("{}\n\n{}", FUNNEL_SYSTEM_PROMPT, app_state_block(app));
+    let user = format!(
+        "Here is the 7-day per-{} funnel for {} (kill = spend passed the kill table \
+         with <=2 qualified; immature = leads still inside the 72h maturation lag):\n\n{}",
+        by, product, table_text
+    );
+    call_agent(app, &sys, &user);
+}
+
+const FUNNEL_SYSTEM_PROMPT: &str = "You are moneyball, a Meta-ads portfolio advisor. \
+You are given a per-entity funnel table (spend, Meta leads m, CRM leads l, qualified q, \
+visits v, Rs/qualified, kill flags). Give a per-entity read: SCALE (efficient + sufficient \
+volume), KILL (kill flag true and not immature), or WAIT (immature, learning, or not enough \
+spend). Cite the numbers that justify each call. Never recommend killing an immature or \
+learning entity. 3-8 sentences, no preamble.";
 
 /// Live app state injected into every LLM system prompt so the model
 /// never hallucinates about setup/data (codex + claude code both ground

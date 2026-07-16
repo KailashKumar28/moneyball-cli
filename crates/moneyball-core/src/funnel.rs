@@ -271,7 +271,8 @@ fn cell(r: &FunnelRow, col: &str) -> String {
 }
 
 /// Fixed-width table, mb.py `_tab` style: header, dashed rule, rows.
-fn table(rows: &[FunnelRow]) -> String {
+/// ASCII-only so the TUI can render it verbatim.
+pub fn table(rows: &[FunnelRow]) -> String {
     if rows.is_empty() {
         return "(no rows)\n".into();
     }
