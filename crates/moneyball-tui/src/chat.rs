@@ -35,7 +35,7 @@ pub trait ChatCell: std::fmt::Debug + Send + Sync {
     /// Number of viewport rows the cell will occupy at the given width.
     /// Default implementation counts the lines that `display_lines`
     /// returns. Cells are expected to wrap their own content via
-    /// `wrap_text` so this matches what the renderer will draw.
+    /// their `display_lines` so this matches what the renderer will draw.
     fn desired_height(&self, width: u16) -> u16 {
         self.display_lines(width).len() as u16
     }
@@ -139,49 +139,23 @@ pub mod cells {
 
     impl ChatCell for AssistantText {
         fn display_lines(&self, width: u16) -> Vec<Line<'static>> {
-            let indent = "  ";
-            let mut out = Vec::new();
-            let text = &self.text;
-            // Wrap long text on word boundaries; trim trailing blank lines.
-            let wrapped = wrap_text(
-                text,
-                width.saturating_sub(indent.len() as u16).max(20) as usize,
-            );
-            for (i, line) in wrapped.iter().enumerate() {
-                let mut spans: Vec<Span<'static>> = Vec::new();
-                spans.push(Span::styled(indent, Style::default()));
-                if self.streaming && i == wrapped.len() - 1 {
-                    spans.push(Span::styled(
-                        line.clone(),
-                        Style::default().fg(Color::White),
-                    ));
-                    spans.push(Span::styled(
-                        "\u{2588}",
-                        Style::default()
-                            .fg(Color::Cyan)
-                            .add_modifier(Modifier::SLOW_BLINK),
-                    ));
-                } else {
-                    spans.push(Span::styled(
-                        line.clone(),
-                        Style::default().fg(Color::White),
-                    ));
+            // Markdown-aware render (codex/Claude Code pattern): markers
+            // become styling, never raw ** or backticks on screen.
+            let mut out = crate::markdown::render(&self.text, width, "  ");
+            if self.streaming {
+                let caret = Span::styled(
+                    "\u{2588}",
+                    Style::default()
+                        .fg(Color::Cyan)
+                        .add_modifier(Modifier::SLOW_BLINK),
+                );
+                match out.last_mut() {
+                    Some(last) => last.spans.push(caret),
+                    None => out.push(Line::from(vec![Span::raw("  "), caret])),
                 }
-                out.push(Line::from(spans));
             }
-            // If streaming AND nothing has been streamed yet, still show the caret on its own line
-            if wrapped.is_empty() {
-                let mut spans: Vec<Span<'static>> = Vec::new();
-                spans.push(Span::styled(indent, Style::default()));
-                if self.streaming {
-                    spans.push(Span::styled(
-                        "\u{2588}",
-                        Style::default()
-                            .fg(Color::Cyan)
-                            .add_modifier(Modifier::SLOW_BLINK),
-                    ));
-                }
-                out.push(Line::from(spans));
+            if out.is_empty() {
+                out.push(Line::from(Span::raw("  ")));
             }
             out
         }
@@ -216,7 +190,7 @@ pub mod cells {
             let max_w = width.saturating_sub(indent.len() as u16).max(20) as usize;
             for ln in &self.output {
                 // Tool output is pre-formatted (aligned tables); never word-wrap
-                // it - `wrap_text` collapses runs of spaces and destroys column
+                // it - word-wrapping collapses runs of spaces and destroys column
                 // alignment. Clip to the panel width instead, keeping whitespace.
                 out.push(Line::from(Span::styled(
                     format!("{}{}", indent, clip(ln, max_w)),
@@ -448,55 +422,13 @@ impl ChatLog {
 // ---------- helpers ----------
 
 /// Clip a pre-formatted line to `width` columns, preserving internal whitespace
-/// (unlike `wrap_text`, which collapses space runs). Adds an ellipsis when cut.
+/// (word-wrapping would collapse space runs). Adds an ellipsis when cut.
 fn clip(s: &str, width: usize) -> String {
     if width == 0 || s.chars().count() <= width {
         return s.to_string();
     }
     let mut out: String = s.chars().take(width.saturating_sub(1)).collect();
     out.push('\u{2026}');
-    out
-}
-
-fn wrap_text(text: &str, width: usize) -> Vec<String> {
-    if width == 0 || text.is_empty() {
-        return vec![text.to_string()];
-    }
-    let mut out: Vec<String> = Vec::new();
-    for paragraph in text.split('\n') {
-        if paragraph.is_empty() {
-            out.push(String::new());
-            continue;
-        }
-        let mut current = String::new();
-        for word in paragraph.split_whitespace() {
-            if word.len() > width {
-                // Hard-break a long word.
-                if !current.is_empty() {
-                    out.push(std::mem::take(&mut current));
-                }
-                let mut chunk = word;
-                while chunk.len() > width {
-                    out.push(chunk[..width].to_string());
-                    chunk = &chunk[width..];
-                }
-                current.push_str(chunk);
-                continue;
-            }
-            if current.is_empty() {
-                current.push_str(word);
-            } else if current.len() + 1 + word.len() <= width {
-                current.push(' ');
-                current.push_str(word);
-            } else {
-                out.push(std::mem::take(&mut current));
-                current.push_str(word);
-            }
-        }
-        if !current.is_empty() {
-            out.push(current);
-        }
-    }
     out
 }
 

@@ -5,6 +5,7 @@ mod app;
 pub mod chat;
 mod commands;
 mod event;
+pub(crate) mod markdown;
 mod render;
 mod setup;
 pub mod widgets;

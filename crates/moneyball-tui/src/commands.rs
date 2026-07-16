@@ -471,12 +471,20 @@ fn app_state_block(app: &App) -> String {
     match &app.snap_date {
         Some(d) => s.push_str(&format!("snapshot: {} loaded\n", d)),
         None => s.push_str(
-            "snapshot: none yet. /brief and per-product numbers are unavailable until the \
-             user's fetcher writes <workspace>/moneyball/history/snap/<YYYY-MM-DD>/*.json. \
+            "snapshot: none yet. /brief self-heals by running /fetch (Meta pull) when a token \
+             is configured; otherwise an external pipeline can write \
+             <workspace>/.moneyball/history/snap/<YYYY-MM-DD>/*.json. \
              /setup does NOT create snapshots - never suggest it for missing data.\n",
         ),
     }
-    s.push_str("slash commands: /brief /funnel <product> /diagnose <product> /ask /snapshot /ledger /keychain /setup /exit\n");
+    let cmds: Vec<&str> = COMMANDS.iter().map(|(c, _)| *c).collect();
+    s.push_str(&format!("slash commands: {}\n", cmds.join(" ")));
+    s.push_str(
+        "Output style: plain terminal prose. **bold** and `code` render styled; \
+         tables, links and nested lists do not - avoid them. When citing commands, \
+         use product names verbatim including spaces (e.g. /funnel Namma Mane) - \
+         never slugify them.\n",
+    );
     s
 }
 
