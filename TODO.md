@@ -8,6 +8,32 @@ bottom after a release-sized batch.)
 
 ## Now (next slices, in order)
 
+- [ ] **Package A - agent brain** (design: ARCHITECTURE.md §6b):
+      A1 `core/agent/protocol.rs`: Item/Op/Ev enums (history = wire format).
+      A2 llm.rs body builders take `&[Item]` + tool defs; parse tool calls.
+      A3 agent worker thread: full-history turn loop, tool registry wired
+         (brief + funnel first), pi truncation caps, AtomicBool cancel +
+         <turn_aborted> marker, invariants (outputs healed, one turn).
+      A4 sessions -> append-only JSONL of Items (+ final Evs); resume
+         replays into history AND cells; delete the destructive
+         load_session_into/save_current_session pair.
+      A5 TUI: replace StreamEvent plumbing with Op/Ev seam; ToolBegin/End
+         cells keyed by call_id; latency/provider as cell metadata.
+- [ ] **Package B - money/data safety**: bracketed paste; reject unknown
+      /commands locally; real Esc cancellation (A3 gives the flag); crm
+      fetch must not create ads-free "latest" snapshots; warn when crm.json
+      absent (brief) instead of narrating fake zeros; scrub URLs/secrets
+      from CRM error strings; fix byte-slice truncations (main.rs preview,
+      crm/fetch preview, llm.rs truncate).
+- [ ] **Package C - input safety + exits**: char-aware cursor moves +
+      completion slices; double-Ctrl+C to quit; /setup Esc actually goes
+      back/exits; paste into chat respects cursor + strips control chars.
+- [ ] **UX polish batch** (from UX critique): spinner + elapsed + esc hint
+      while working; context bar middle-truncation (snapshot/status always
+      visible); single command registry drives palette + /help + footer
+      (add /help /keychain /exit, drop stubs); fix garbled logo; funnel
+      table drops id column first on narrow widths; Up = input history.
+
 - [ ] **Validate LeadSquared for real**: point a `crm.toml` at a live
       LeadSquared account (AccessKey/SecretKey), confirm the preset field
       paths (`mx_*` attribution, ProspectStage) and paging behavior.

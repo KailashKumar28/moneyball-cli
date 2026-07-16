@@ -98,6 +98,47 @@ declarative crm.toml spec). Nothing ever writes to Meta or the CRM.
 - Base URLs are verified against the live endpoint before shipping (a 404
   from a preset is a preset bug, not a user error).
 
+## 6b. Agent core (binding; researched from codex-rs + pi-mono source, 2026-07-16)
+
+The conversational layer follows openai/codex (codex-rs) and badlogic/pi-mono,
+which independently converge on the same primitives. Deviating from these
+requires updating this section first.
+
+- **History is the wire format.** One `Item` enum is BOTH the in-memory
+  transcript and the persisted format (codex's `ResponseItem` trick):
+  `User{text} | Assistant{text} | ToolCall{call_id,name,args} |
+  ToolOutput{call_id,output,is_error}`. No separate chat-message model.
+  Every request sends the FULL history (no incremental diffing, no DB).
+- **The loop** (pi's shape): send history -> stream response -> collect tool
+  calls -> execute -> append `ToolOutput`s -> repeat until a response has no
+  tool calls. No iteration cap. A tool failure is a `ToolOutput{is_error}`
+  message fed back to the model - never an exception, never a dead turn.
+- **Invariants** (codex): (1) every `ToolCall` has a `ToolOutput` before the
+  next request - synthesize "aborted" outputs at prompt build; (2) exactly
+  one in-flight turn per session (new input queues or replaces); (3) the
+  final assistant event carries the complete text, so deltas never persist.
+- **Cancellation**: UI thread sets a shared `Arc<AtomicBool>`; the worker
+  checks it between SSE events (blocking reqwest iterator returns between
+  events - same latency as codex's `or_cancel`) and drops the stream
+  (TCP-level cancel). After interrupt, append a user-role
+  `<turn_aborted>...` marker item; heal dangling calls lazily.
+- **Sessions**: append-only JSONL - header line, then one `Item` per line
+  (plus final UI events for replay). Resume = read lines, rebuild history
+  from Items and cells from final events. Never rewrite the file.
+- **Tool output truncation** (pi): every tool result is capped (~2000 lines
+  / 50KB, head-keep for reads, tail-keep for command output) with a
+  continuation hint in the text.
+- **Tool results split model-facing `content` from UI-facing detail** so the
+  table the user sees is not necessarily the tokens the model pays for.
+- **Minimalism is load-bearing** (pi): short system prompt (<1k tokens), no
+  RAG/embeddings, no sub-agents, no planner state. Models are RL-trained to
+  understand agent loops; the loop + files + a few sharp tools is the
+  product. Escape hatches go through existing commands, not new machinery.
+- **TUI<->core seam**: `Op` in (UserInput/Interrupt/Shutdown), `Ev` out
+  (TurnStarted, AssistantDelta/Done, ToolBegin/End keyed by call_id,
+  TurnAborted, TurnComplete, Error) over std mpsc. The TUI creates a cell
+  on ToolBegin and finalizes it on ToolEnd; it never sees wire formats.
+
 ## 7. Enforcement gates (definition of done for any change)
 
 1. `cargo fmt --all` - default rustfmt, no config debates.
