@@ -8,12 +8,6 @@ bottom after a release-sized batch.)
 
 ## Now (next slices, in order)
 
-- [ ] **UX polish batch** (from UX critique): spinner + elapsed + esc hint
-      while working; context bar middle-truncation (snapshot/status always
-      visible); single command registry drives palette + /help + footer
-      (add /help /keychain /exit, drop stubs); fix garbled logo; funnel
-      table drops id column first on narrow widths; Up = input history.
-
 - [ ] **Validate LeadSquared for real**: point a `crm.toml` at a live
       LeadSquared account (AccessKey/SecretKey), confirm the preset field
       paths (`mx_*` attribution, ProspectStage) and paging behavior.
@@ -53,6 +47,15 @@ bottom after a release-sized batch.)
   with `cargo install` (gate #7); E2E-reproduce bugs before fixing them.
 
 ## Done log
+
+- [x] 2026-07-17 CRM keys-only connect shipped: preset catalog
+      (LeadZump proven, LeadSquared docs-based), crm connect = pick CRM
+      -> paste keys (with where-to-find help) -> live test pull gates
+      the save; custom path takes a pasted curl command (POST bodies
+      work), auto-secretizes headers, LLM drafts the map; observed
+      unknown stage names get mapped interactively and written back to
+      crm.toml; paging semantics validated at parse time so the LLM
+      retry loop self-corrects. rustyline editing on all prompts.
 
 - [x] 2026-07-16 Package C shipped: char-aware Left/Right (multibyte
       input no longer panics - tmux-verified with "cafe"+accent), single

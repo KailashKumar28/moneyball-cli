@@ -8,6 +8,7 @@
 
 pub mod connect;
 pub mod fetch;
+pub mod presets;
 pub mod source;
 
 use std::collections::{HashMap, HashSet};
@@ -158,6 +159,9 @@ pub struct CheckReport {
     pub errors: Vec<String>,
     pub warnings: Vec<String>,
     pub info: Vec<String>,
+    /// Distinct stage values not in the canonical/configured set, most
+    /// frequent first - drives the connect wizard's stage-map step.
+    pub unknown_stages: Vec<String>,
 }
 
 impl CheckReport {
@@ -317,8 +321,8 @@ fn check_stages(
         }
     }
     if !unknown.is_empty() {
-        let mut names: Vec<_> = unknown.iter().collect();
-        names.sort_by(|a, b| b.1.cmp(a.1));
+        let mut names: Vec<_> = unknown.into_iter().collect();
+        names.sort_by_key(|(_, n)| std::cmp::Reverse(*n));
         let list = names
             .iter()
             .take(SAMPLE_CAP)
@@ -330,6 +334,7 @@ fn check_stages(
             list,
             CANONICAL_STAGES.join(", ")
         ));
+        r.unknown_stages = names.into_iter().map(|(s, _)| s).collect();
     }
 }
 

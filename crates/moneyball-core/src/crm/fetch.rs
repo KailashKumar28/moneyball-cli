@@ -44,12 +44,6 @@ pub fn fetch_crm(cfg: &AppConfig, days: u32) -> Result<CrmFetchReport> {
                 .into(),
         )
     })?;
-    if spec.paging.mode == PagingMode::Page && spec.paging.param.is_empty() {
-        return Err(Error::Config(
-            "crm.toml: paging.mode = \"page\" requires paging.param".into(),
-        ));
-    }
-
     let today = Local::now().date_naive();
     let from = today - Duration::days(days.max(1) as i64);
     let mut vars: HashMap<&str, String> = HashMap::from([

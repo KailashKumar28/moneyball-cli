@@ -102,7 +102,18 @@ pub struct MapSpec {
 }
 
 pub fn parse(spec: &str) -> Result<SourceSpec> {
-    toml::from_str(spec).map_err(|e| Error::Config(format!("crm.toml: {}", e)))
+    let s: SourceSpec =
+        toml::from_str(spec).map_err(|e| Error::Config(format!("crm.toml: {}", e)))?;
+    // Semantic validation here, not at execution time, so the connect
+    // wizard's LLM retry loop sees these failures too.
+    if s.paging.mode == PagingMode::Page && s.paging.param.is_empty() {
+        return Err(Error::Config(
+            "crm.toml: paging.mode = \"page\" requires paging.param (the query \
+             parameter that carries the page number)"
+                .into(),
+        ));
+    }
+    Ok(s)
 }
 
 /// Replace `{var}` templates. Unknown vars are left intact so typos show
@@ -198,6 +209,29 @@ pub fn csv_records(raw: &str) -> Result<Vec<Value>> {
         }
         out.push(Value::Object(rec));
     }
+    Ok(out)
+}
+
+/// Add stage mappings to a spec's [map.stage_map], preserving existing
+/// entries (parse -> insert -> re-serialize; returns a valid spec).
+pub fn add_stage_mappings(spec_toml: &str, pairs: &[(String, String)]) -> Result<String> {
+    let mut doc: toml::Table =
+        toml::from_str(spec_toml).map_err(|e| Error::Config(format!("crm.toml: {}", e)))?;
+    let map = doc
+        .entry("map")
+        .or_insert_with(|| toml::Value::Table(Default::default()))
+        .as_table_mut()
+        .ok_or_else(|| Error::Config("crm.toml: [map] is not a table".into()))?;
+    let sm = map
+        .entry("stage_map")
+        .or_insert_with(|| toml::Value::Table(Default::default()))
+        .as_table_mut()
+        .ok_or_else(|| Error::Config("crm.toml: [map.stage_map] is not a table".into()))?;
+    for (from, to) in pairs {
+        sm.insert(from.clone(), toml::Value::String(to.clone()));
+    }
+    let out = toml::to_string(&doc).map_err(|e| Error::Config(format!("serialize: {}", e)))?;
+    parse(&out)?; // never write a spec that cannot be read back
     Ok(out)
 }
 
