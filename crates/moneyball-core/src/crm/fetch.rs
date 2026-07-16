@@ -151,6 +151,27 @@ fn validate_and_write(
     })
 }
 
+/// One-page probe used by `crm connect` to grab a sample response before
+/// any spec exists. No paging params; date templates resolve to the
+/// trailing 28 days.
+pub fn probe(request: &source::RequestSpec) -> Result<Value> {
+    let client = reqwest::blocking::Client::builder()
+        .timeout(std::time::Duration::from_secs(30))
+        .build()
+        .map_err(|e| Error::Config(format!("client: {}", e)))?;
+    let today = Local::now().date_naive();
+    let vars: HashMap<&str, String> = HashMap::from([
+        (
+            "from_date",
+            (today - Duration::days(28)).format("%Y-%m-%d").to_string(),
+        ),
+        ("to_date", today.format("%Y-%m-%d").to_string()),
+        ("page", "1".into()),
+        ("page_size", "50".into()),
+    ]);
+    request_page(&client, request, &source::PagingSpec::default(), &vars)
+}
+
 /// One HTTP call with refs resolved and templates expanded.
 fn request_page(
     client: &reqwest::blocking::Client,

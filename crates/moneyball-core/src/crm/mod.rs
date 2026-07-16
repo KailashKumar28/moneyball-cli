@@ -6,6 +6,7 @@
 //! that lets any CRM (including custom AI-built ones) iterate against
 //! precise errors until its export conforms.
 
+pub mod connect;
 pub mod fetch;
 pub mod source;
 

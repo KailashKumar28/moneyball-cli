@@ -18,6 +18,7 @@ use crate::error::{Error, Result};
 pub const TEMPLATE_TOML: &str = include_str!("template.crm.toml");
 
 #[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct SourceSpec {
     /// Display name, e.g. "leadsquared" or "acme-crm".
     pub name: String,
@@ -29,6 +30,7 @@ pub struct SourceSpec {
 }
 
 #[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct RequestSpec {
     pub url: String,
     #[serde(default = "default_method")]
@@ -50,6 +52,7 @@ fn default_method() -> String {
 }
 
 #[derive(Debug, Default, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct PagingSpec {
     /// "none" (default) = single request; "page" = increment a page
     /// number in `param` until a page returns fewer than `size` records.
@@ -81,6 +84,7 @@ pub enum PagingMode {
 }
 
 #[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct MapSpec {
     /// Dot path to the record array in the response; "" when the
     /// response IS the array.

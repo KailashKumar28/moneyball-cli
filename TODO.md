@@ -8,10 +8,6 @@ bottom after a release-sized batch.)
 
 ## Now (next slices, in order)
 
-- [ ] **/crm connect wizard (CRM phase 4)**: TUI flow - user pastes base
-      URL + auth + one sample response; LLM drafts `crm.toml` ONCE; show
-      the draft; `crm check` must PASS before saving. LLM never in the
-      recurring data path. Headless parts exist (`crm init/fetch/check`).
 - [ ] **Validate LeadSquared for real**: point a `crm.toml` at a live
       LeadSquared account (AccessKey/SecretKey), confirm the preset field
       paths (`mx_*` attribution, ProspectStage) and paging behavior.
@@ -33,7 +29,8 @@ bottom after a release-sized batch.)
       (both write into the same day's snapshot dir).
 - [ ] **Surface CRM in the TUI**: `/crm` command showing connection
       status (spec present? last crm.json date? join rate) with a
-      pointer to the headless commands.
+      pointer to the headless commands; longer term, a TUI-native
+      `/crm connect` view wrapping `crm::connect`.
 - [ ] **Setup wizard: CRM step**: offer `crm init` + contract pointer at
       the end of /setup instead of leaving CRM discovery to docs.
 - [ ] **MB_AGENT output coverage**: machine-readable JSON for `brief`,
@@ -54,6 +51,11 @@ bottom after a release-sized batch.)
 
 ## Done log
 
+- [x] 2026-07-16 CRM phase 4 (headless): `moneyball crm connect` - probe
+      endpoint, LLM drafts crm.toml once (parse-retry loop against a
+      strict deny_unknown_fields schema), dry-run over the live sample,
+      save on approval. E2E: MiniMax drafted a working spec from a mock
+      CRM; saved spec ran via `crm fetch` deterministically.
 - [x] 2026-07-16 TUI freeze on /fetch and /brief self-heal: Meta pull
       moved to a worker thread (StreamEvent::FetchDone), tmux-verified.
 - [x] 2026-07-16 CRM phase 3: CSV import through the same map +

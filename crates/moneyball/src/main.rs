@@ -76,6 +76,9 @@ enum CrmCmd {
         #[arg(long, default_value_t = 28)]
         days: u32,
     },
+    /// Guided setup: probe your CRM, let the LLM draft crm.toml once,
+    /// validate against a live sample, save on your approval.
+    Connect,
     /// Import a CSV lead export through the crm.toml [map] (column names).
     Import {
         /// Path to the CSV file (header row required).
@@ -181,6 +184,10 @@ fn main() -> Result<()> {
                 );
                 print_ingest_outcome(&r);
             }
+            CrmCmd::Connect => {
+                let strict = AppConfig::resolve(cli.data_root.as_deref(), None)?;
+                run_crm_connect(&strict)?;
+            }
             CrmCmd::Import { file } => {
                 let strict = AppConfig::resolve(cli.data_root.as_deref(), None)?;
                 let r = moneyball_core::crm::fetch::import_csv(&strict, &file)
@@ -242,6 +249,83 @@ fn run_crm_check(cfg: &AppConfig, file: &std::path::Path) -> Result<bool> {
         );
     }
     Ok(report.passed())
+}
+
+/// Interactive `crm connect`: gather name/url/auth, probe a sample, LLM
+/// drafts crm.toml (once), dry-run the draft on the sample, save on "y".
+fn run_crm_connect(cfg: &AppConfig) -> Result<()> {
+    use moneyball_core::crm::connect;
+
+    let name = ask("CRM name (e.g. leadsquared, acme-crm): ")?;
+    if name.is_empty() {
+        anyhow::bail!("a name is required");
+    }
+    let url = ask("leads endpoint URL (include any query params it needs): ")?;
+    if url.is_empty() {
+        anyhow::bail!("an endpoint URL is required");
+    }
+    let mut headers: Vec<(String, String)> = Vec::new();
+    loop {
+        let line = ask("auth header as Name: value (empty line when done): ")?;
+        if line.is_empty() {
+            break;
+        }
+        let Some((h, v)) = line.split_once(':') else {
+            eprintln!("  expected Name: value");
+            continue;
+        };
+        // Values go straight into auth.json; crm.toml only carries the ref.
+        let secret_name = format!("{}_{}", name, h.trim().to_lowercase().replace('-', "_"));
+        moneyball_core::secrets::store_crm_key(&secret_name, v.trim())?;
+        headers.push((h.trim().into(), format!("secret:{}", secret_name)));
+        eprintln!("  stored as secret:{}", secret_name);
+    }
+
+    let input = connect::ConnectInput { name, url, headers };
+    eprintln!("probing the endpoint for a sample...");
+    let sample = connect::probe_sample(&input)?;
+    let preview = sample.to_string();
+    eprintln!(
+        "sample received ({} bytes): {}...",
+        preview.len(),
+        &preview[..preview.len().min(300)]
+    );
+
+    eprintln!("drafting crm.toml with your configured LLM (a truncated sample is sent to it)...");
+    let draft = connect::draft_spec(cfg, &input, &sample)?;
+    println!(
+        "\n----- drafted crm.toml -----\n{}\n----------------------------",
+        draft
+    );
+
+    let (n, report) = connect::dry_run(cfg, &draft, &sample)?;
+    println!("dry run over the sample: {} record(s)", n);
+    print_check_lines(&report);
+    let verdict = if report.passed() {
+        "PASS"
+    } else {
+        "has errors"
+    };
+
+    let path = moneyball_core::crm::fetch::spec_path(cfg);
+    let q = format!("dry run {} - save to {}? [y/N]: ", verdict, path.display());
+    if ask(&q)?.eq_ignore_ascii_case("y") {
+        std::fs::write(&path, &draft)?;
+        println!("saved. next: moneyball crm fetch --days 28");
+    } else {
+        println!("not saved. re-run crm connect, or hand-edit via: moneyball crm init");
+    }
+    Ok(())
+}
+
+/// One stderr prompt -> one trimmed stdin line.
+fn ask(prompt: &str) -> Result<String> {
+    use std::io::Write;
+    eprint!("{}", prompt);
+    std::io::stderr().flush()?;
+    let mut s = String::new();
+    std::io::stdin().read_line(&mut s)?;
+    Ok(s.trim().to_string())
 }
 
 fn print_ingest_outcome(r: &moneyball_core::crm::fetch::CrmFetchReport) {
