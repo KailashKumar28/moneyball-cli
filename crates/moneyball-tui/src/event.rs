@@ -159,7 +159,17 @@ fn handle_paste(app: &mut App, text: String) {
                 _ => {}
             }
         }
-        View::Brief => app.input.push_str(&text),
+        View::Brief => {
+            // One atomic insert at the cursor; newlines become spaces so
+            // a multi-line paste can never auto-submit; controls drop.
+            let clean: String = text
+                .chars()
+                .map(|c| if c == '\n' || c == '\r' { ' ' } else { c })
+                .filter(|c| !c.is_control())
+                .collect();
+            app.input.insert_str(app.cursor, &clean);
+            app.cursor += clean.len();
+        }
     }
 }
 

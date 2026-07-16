@@ -29,6 +29,8 @@ pub struct App {
     pub status: Option<String>,
     pub brief: Option<ProductRowsAndFeasibility>,
     pub snap_date: Option<String>,
+    /// Loaded snapshot had no CRM data - l/q/v are not real zeros.
+    pub crm_missing: bool,
     pub quit: bool,
     pub quit_emoji: String,
     /// Chat-style message log. Every interaction (slash-command, free-form
@@ -157,6 +159,7 @@ impl App {
             status: None,
             brief: None,
             snap_date: None,
+            crm_missing: false,
             quit: false,
             quit_emoji: String::new(),
             chat,
@@ -235,6 +238,7 @@ impl App {
                     let history =
                         brief::load_history(&self.cfg.history_dir().join("scoreboard.csv"));
                     let r = brief::compute(&snap, &self.cfg, &history);
+                    self.crm_missing = moneyball_core::crm::is_empty(&snap.crm);
                     self.snap_date = Some(r::date_of(&snap));
                     self.brief = Some(r);
                     self.status = None;

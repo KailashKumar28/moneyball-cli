@@ -76,8 +76,15 @@ pub(crate) fn submit(app: &mut App) {
             // call (so the user can see the source data), then call the
             // configured LLM for an interpretation.
             if let Some(b) = &app.brief {
-                let out = format_brief_as_lines(b);
-                let user_prompt = build_brief_prompt(b);
+                let mut out = format_brief_as_lines(b);
+                let mut user_prompt = build_brief_prompt(b);
+                if app.crm_missing {
+                    out.push(format!("warn: {}", moneyball_core::crm::NO_CRM_WARNING));
+                    user_prompt.push_str(&format!(
+                        "\n\nIMPORTANT: {}. Do not diagnose lead quality from l/q/v.",
+                        moneyball_core::crm::NO_CRM_WARNING
+                    ));
+                }
                 app.chat
                     .push_tool("brief", "", out, true, started.elapsed().as_millis() as u64);
                 let sys = format!("{}\n\n{}", BRIEF_SYSTEM_PROMPT, app_state_block(app));
@@ -257,10 +264,17 @@ your own pipeline at\n\n    {}/<YYYY-MM-DD>/\n\nand /brief reads whatever it wri
             }));
         }
         _ => {
-            // Free-form chat. The LLM is the default; slash commands are
-            // optional shortcuts. We try to load the brief so the agent
-            // has portfolio context, but failure is silent (we still
-            // answer the question).
+            // A slash typo must never reach the paid LLM path - reject
+            // locally and instantly (codex/Claude Code behavior).
+            if cmd.starts_with('/') {
+                app.chat.push(Cell::System(cells::System(format!(
+                    "unknown command {} - type / to see the command list.",
+                    cmd
+                ))));
+                return;
+            }
+            // Free-form chat: the LLM is the default; slash commands are
+            // optional shortcuts. The agent pulls data via its tools.
             run_freeform(app, &line);
         }
     }
@@ -469,7 +483,12 @@ fn app_state_block(app: &App) -> String {
         None => s.push_str("workspace: NOT configured - /setup is the fix\n"),
     }
     match &app.snap_date {
-        Some(d) => s.push_str(&format!("snapshot: {} loaded\n", d)),
+        Some(d) => {
+            s.push_str(&format!("snapshot: {} loaded\n", d));
+            if app.crm_missing {
+                s.push_str(&format!("{}\n", moneyball_core::crm::NO_CRM_WARNING));
+            }
+        }
         None => s.push_str(
             "snapshot: none yet. /brief self-heals by running /fetch (Meta pull) when a token \
              is configured; otherwise an external pipeline can write \
@@ -602,7 +621,14 @@ impl moneyball_core::agent::ToolExec for SnapshotTools {
                 let snap = self.snap()?;
                 let history = brief::load_history(&self.cfg.history_dir().join("scoreboard.csv"));
                 let b = brief::compute(&snap, &self.cfg, &history);
-                Ok(format_brief_as_lines(&b).join("\n"))
+                let mut out = format_brief_as_lines(&b).join("\n");
+                if moneyball_core::crm::is_empty(&snap.crm) {
+                    out.push_str(&format!(
+                        "\nIMPORTANT: {}. Do not diagnose lead quality from l/q/v.",
+                        moneyball_core::crm::NO_CRM_WARNING
+                    ));
+                }
+                Ok(out)
             }
             "funnel" => {
                 let products: Vec<String> = self

@@ -201,6 +201,17 @@ pub fn csv_records(raw: &str) -> Result<Vec<Value>> {
     Ok(out)
 }
 
+/// Cut a string at (or just before) `cap` bytes, on a char boundary.
+/// The byte-slice `&s[..n]` panics on multibyte text - lead names and
+/// error bodies routinely contain it.
+pub fn truncate_chars(s: &str, cap: usize) -> &str {
+    let mut end = cap.min(s.len());
+    while !s.is_char_boundary(end) {
+        end -= 1;
+    }
+    &s[..end]
+}
+
 /// Dot-path lookup: `a.b.c` descends nested objects.
 fn get_path<'a>(v: &'a Value, path: &str) -> Option<&'a Value> {
     let mut cur = v;

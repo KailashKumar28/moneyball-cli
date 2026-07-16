@@ -137,7 +137,26 @@ fn validate_and_write(
         .and_then(|p| crate::snapshot::load(&p).ok());
     let check = super::check(&crm, &stages, snap.as_ref());
     let path = if check.passed() {
-        let date = Local::now().date_naive().format("%Y-%m-%d").to_string();
+        // Never create an ads-free "latest" snapshot: writing crm.json
+        // into an empty today-dir would make /brief read zero spend for
+        // everything. Join today's dir only if ads are already there,
+        // else the newest snapshot that has them.
+        let today = Local::now().date_naive().format("%Y-%m-%d").to_string();
+        let snap_root = cfg.history_dir().join("snap");
+        let date = if snap_root.join(&today).join("ads_daily.json").is_file() {
+            today
+        } else {
+            crate::snapshot::list_dates(&snap_root)?
+                .into_iter()
+                .rev()
+                .find(|d| snap_root.join(d).join("ads_daily.json").is_file())
+                .ok_or_else(|| {
+                    Error::Config(
+                        "no ads snapshot to attach CRM data to - run `moneyball fetch` (or /fetch) first"
+                            .into(),
+                    )
+                })?
+        };
         Some(write_crm_json(cfg, &date, &crm)?)
     } else {
         None
@@ -207,9 +226,11 @@ fn request_page(
             .header("Content-Type", "application/json")
             .body(source::expand(body, vars));
     }
+    // without_url(): the reqwest error's URL carries the resolved query
+    // string - which may embed secrets - and must never reach the screen.
     let resp = req
         .send()
-        .map_err(|e| Error::Config(format!("CRM request failed: {}", e)))?;
+        .map_err(|e| Error::Config(format!("CRM request failed: {}", e.without_url())))?;
     let status = resp.status();
     let body: Value = resp
         .json()
@@ -227,11 +248,11 @@ fn request_page(
 /// First ~200 chars of an error body - enough to diagnose, never a dump.
 fn preview(v: &Value) -> String {
     let s = v.to_string();
-    if s.len() > 200 {
-        format!("{}...", &s[..200])
-    } else {
-        s
-    }
+    format!(
+        "{}{}",
+        source::truncate_chars(&s, 200),
+        if s.len() > 200 { "..." } else { "" }
+    )
 }
 
 /// Atomic write of crm.json into the date's snapshot dir (tmp + rename,

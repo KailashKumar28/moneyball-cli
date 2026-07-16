@@ -38,10 +38,14 @@ pub fn init() -> Result<Tui> {
     // Mouse capture lets the wheel scroll the transcript instead of the
     // terminal window (text selection becomes Shift+drag - standard TUI
     // trade-off, same as codex).
+    // Bracketed paste: a multi-line paste arrives as ONE Event::Paste
+    // instead of raw keys - without it every pasted newline acted as
+    // Enter and fired real LLM calls.
     execute!(
         out,
         EnterAlternateScreen,
-        crossterm::event::EnableMouseCapture
+        crossterm::event::EnableMouseCapture,
+        crossterm::event::EnableBracketedPaste
     )?;
     let backend = CrosstermBackend::new(out);
     Ok(Terminal::new(backend)?)
@@ -51,6 +55,7 @@ pub fn restore() -> Result<()> {
     disable_raw_mode()?;
     // Best-effort: release the mouse even if leaving the alt screen fails.
     let _ = execute!(io::stdout(), crossterm::event::DisableMouseCapture);
+    let _ = execute!(io::stdout(), crossterm::event::DisableBracketedPaste);
     execute!(io::stdout(), LeaveAlternateScreen)?;
     Ok(())
 }

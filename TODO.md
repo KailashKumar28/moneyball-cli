@@ -8,12 +8,6 @@ bottom after a release-sized batch.)
 
 ## Now (next slices, in order)
 
-- [ ] **Package B - money/data safety**: bracketed paste; reject unknown
-      /commands locally; real Esc cancellation (A3 gives the flag); crm
-      fetch must not create ads-free "latest" snapshots; warn when crm.json
-      absent (brief) instead of narrating fake zeros; scrub URLs/secrets
-      from CRM error strings; fix byte-slice truncations (main.rs preview,
-      crm/fetch preview, llm.rs truncate).
 - [ ] **Package C - input safety + exits**: char-aware cursor moves +
       completion slices; double-Ctrl+C to quit; /setup Esc actually goes
       back/exits; paste into chat respects cursor + strips control chars.
@@ -62,6 +56,14 @@ bottom after a release-sized batch.)
   with `cargo install` (gate #7); E2E-reproduce bugs before fixing them.
 
 ## Done log
+
+- [x] 2026-07-16 Package B shipped: bracketed paste (multi-line paste =
+      one editable insert, never auto-submits), unknown /commands
+      rejected locally (no paid LLM on typos), crm fetch/import refuse
+      to create ads-free "latest" snapshots, /brief + agent tool + state
+      block all warn when crm.json is absent (model now blames setup,
+      not fake zeros), CRM request errors scrubbed via without_url(),
+      remaining byte-slice truncations fixed via crm::source::truncate_chars.
 
 - [x] 2026-07-16 Package A shipped: agent brain live. History = wire
       format (agent::Item), pi tool loop with brief+funnel tools the

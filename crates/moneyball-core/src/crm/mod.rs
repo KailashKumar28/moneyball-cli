@@ -43,6 +43,21 @@ pub fn milestones(stage: &str, funnel: &str) -> (bool, bool, bool) {
     )
 }
 
+/// True when a snapshot has no CRM data at all (crm.json absent or an
+/// empty container). Callers must surface this - zero tickets rendered
+/// as real zeros silently turns /brief into misinformation.
+pub fn is_empty(crm: &Value) -> bool {
+    match crm {
+        Value::Object(m) => m.is_empty(),
+        Value::Array(a) => a.is_empty(),
+        _ => true,
+    }
+}
+
+/// The user-facing sentence for that state - one wording everywhere.
+pub const NO_CRM_WARNING: &str = "no CRM data in this snapshot - l/q/v counts are NOT real \
+zeros; connect a CRM (moneyball crm connect) or write crm.json (moneyball crm contract)";
+
 // ---------- ticket iteration ----------
 
 /// Iterate tickets in either accepted crm.json shape: a flat array of

@@ -309,7 +309,7 @@ fn run_crm_connect(cfg: &AppConfig) -> Result<()> {
     eprintln!(
         "sample received ({} bytes): {}...",
         preview.len(),
-        &preview[..preview.len().min(300)]
+        moneyball_core::crm::source::truncate_chars(&preview, 300)
     );
 
     eprintln!("drafting crm.toml with your configured LLM (a truncated sample is sent to it)...");
