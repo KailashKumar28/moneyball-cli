@@ -23,7 +23,7 @@ pub mod tools;
 
 pub use logo::LOGO;
 pub use meta::{list_ad_accounts, validate_token, AdAccount};
-pub use session::{Session, SessionCell, SessionMeta};
+pub use session::{SessionLog, SessionMeta};
 
 pub use config::{AppConfig, WorkspaceConfig};
 pub use error::{Error, Result};

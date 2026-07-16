@@ -1,91 +1,106 @@
-//! Session persistence.
+//! Session persistence - append-only JSONL (ARCHITECTURE.md section 6b,
+//! codex rollout pattern).
 //!
-//! A session is the user's full interaction with moneyball in one invocation:
-//! the chat log cells, the workspace they were in, the start time, and the
-//! optional snapshot date. Sessions are saved to ~/.moneyball/sessions/ as
-//! JSON so a follow-up invocation can resume the conversation.
+//! `~/.moneyball/sessions/<id>.jsonl`: line 1 is a header, every further
+//! line is one `agent::Item` - the same enum that is the in-memory
+//! transcript and the prompt. Resume = read lines, replay. The file is
+//! never rewritten.
 //!
 //! CLI behavior:
-//!   moneyball         -> new session (always - no confirmation)
-//!   moneyball -c      -> resume most-recent session
+//!   moneyball                -> new session
+//!   moneyball -c             -> resume most-recent session
 //!   moneyball --resume <id>  -> resume a specific session
-//!   moneyball --list   -> list all saved sessions and exit
+//!   moneyball --list         -> list saved sessions and exit
 
+use std::io::Write;
 use std::path::PathBuf;
 
 use anyhow::{Context, Result};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
-/// Per-cell schema used to persist the chat log as JSON. Parallel to
-/// moneyball-tui's chat::Cell enum; we keep them distinct so the wire
-/// format can evolve independently of the in-process type.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(tag = "type", rename_all = "snake_case")]
-pub enum SessionCell {
-    System {
-        text: String,
-    },
-    UserPrompt {
-        text: String,
-        at: DateTime<Utc>,
-    },
-    AssistantText {
-        text: String,
-        streaming: bool,
-    },
-    ToolCall {
-        name: String,
-        args: String,
-        status: String,
-    },
-    ToolResult {
-        name: String,
-        output: Vec<String>,
-        success: bool,
-        duration_ms: u64,
-    },
-}
+use crate::agent::Item;
 
+/// Header line of every session file.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SessionMeta {
     pub id: String,
     pub started_at: DateTime<Utc>,
-    pub ended_at: Option<DateTime<Utc>>,
     pub data_root: PathBuf,
-    pub snap_date: Option<String>,
-    pub label: Option<String>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Session {
+/// One line of the file: the header or an item. The serde tags cannot
+/// collide: SessionMeta is wrapped, Items use their own type tags.
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(untagged)]
+enum Line {
+    Header { session: SessionMeta },
+    Item(Item),
+}
+
+/// Append handle for a live session. Opens the file per append - chat
+/// cadence makes that cheap, and it means a crash never loses more
+/// than the in-flight line.
+pub struct SessionLog {
     pub meta: SessionMeta,
-    pub cells: Vec<SessionCell>,
+    path: PathBuf,
 }
 
-impl Session {
-    pub fn new(data_root: PathBuf) -> Self {
-        let id = make_session_id(Utc::now());
-        Self {
-            meta: SessionMeta {
-                id,
-                started_at: Utc::now(),
-                ended_at: None,
-                data_root,
-                snap_date: None,
-                label: None,
-            },
-            cells: Vec::new(),
-        }
+impl SessionLog {
+    /// Start a new session file (writes the header line).
+    pub fn create(data_root: PathBuf) -> Result<Self> {
+        let meta = SessionMeta {
+            id: make_session_id(),
+            started_at: Utc::now(),
+            data_root,
+        };
+        let path = session_path(&meta.id)?;
+        let header = serde_json::to_string(&Line::Header {
+            session: meta.clone(),
+        })?;
+        std::fs::write(&path, format!("{}\n", header))
+            .with_context(|| format!("write {}", path.display()))?;
+        Ok(Self { meta, path })
     }
 
-    pub fn end(&mut self) {
-        self.meta.ended_at = Some(Utc::now());
+    /// Open an existing session for resume: returns the handle
+    /// (positioned to append) plus the replayed transcript.
+    pub fn open(id: &str) -> Result<(Self, Vec<Item>)> {
+        let path = session_path(id)?;
+        let raw = std::fs::read_to_string(&path)
+            .with_context(|| format!("no session file {}", path.display()))?;
+        let (meta, items) = parse_session(&raw)?;
+        Ok((Self { meta, path }, items))
+    }
+
+    /// Append one transcript item. Errors are surfaced (a session that
+    /// silently stops persisting is worse than a visible warning).
+    pub fn append(&self, item: &Item) -> Result<()> {
+        let mut f = std::fs::OpenOptions::new()
+            .append(true)
+            .open(&self.path)
+            .with_context(|| format!("open {}", self.path.display()))?;
+        writeln!(f, "{}", serde_json::to_string(item)?)?;
+        Ok(())
     }
 }
 
-/// Returns the directory sessions are persisted to. `~/.moneyball/sessions/`.
-/// Creates it lazily.
+/// Parse a session file body: header line first, then items. Unparseable
+/// lines are skipped (forward compatibility) - never a hard failure.
+fn parse_session(raw: &str) -> Result<(SessionMeta, Vec<Item>)> {
+    let mut lines = raw.lines();
+    let header = lines.next().context("empty session file")?;
+    let meta = match serde_json::from_str::<Line>(header) {
+        Ok(Line::Header { session }) => session,
+        _ => anyhow::bail!("first line is not a session header"),
+    };
+    let items = lines
+        .filter_map(|l| serde_json::from_str::<Item>(l).ok())
+        .collect();
+    Ok((meta, items))
+}
+
+/// `~/.moneyball/sessions/`, created lazily.
 pub fn sessions_dir() -> Result<PathBuf> {
     let home = std::env::var_os("HOME")
         .or_else(|| std::env::var_os("USERPROFILE"))
@@ -97,68 +112,39 @@ pub fn sessions_dir() -> Result<PathBuf> {
 }
 
 fn session_path(id: &str) -> Result<PathBuf> {
-    Ok(sessions_dir()?.join(format!("{}.json", id)))
+    Ok(sessions_dir()?.join(format!("{}.jsonl", id)))
 }
 
-pub fn save(s: &Session) -> Result<()> {
-    let p = session_path(&s.meta.id)?;
-    let pretty = serde_json::to_string_pretty(s).context("serialize session")?;
-    std::fs::write(&p, pretty).with_context(|| format!("write {}", p.display()))?;
-    Ok(())
-}
-
-/// Returns the most recently started session, or None if there are none.
-pub fn latest() -> Result<Option<Session>> {
-    let dir = sessions_dir()?;
-    let mut sessions: Vec<Session> = std::fs::read_dir(&dir)?
-        .filter_map(|e| e.ok())
-        .filter(|e| e.path().extension().and_then(|s| s.to_str()) == Some("json"))
-        .filter_map(|e| {
-            let raw = std::fs::read_to_string(e.path()).ok()?;
-            serde_json::from_str::<Session>(&raw).ok()
-        })
-        .collect();
-    // Most-recently-started first.
-    sessions.sort_by_key(|b| std::cmp::Reverse(b.meta.started_at));
-    Ok(sessions.into_iter().next())
-}
-
-pub fn load(id: &str) -> Result<Session> {
-    let p = session_path(id)?;
-    let raw = std::fs::read_to_string(&p).with_context(|| format!("read {}", p.display()))?;
-    let s: Session =
-        serde_json::from_str(&raw).with_context(|| format!("parse {}", p.display()))?;
-    Ok(s)
-}
-
-/// List sessions sorted by recency, newest first. Returns the metadata only
-/// (does not load full cells) - cheap for displaying a picker.
+/// Newest-first session metadata (header lines only - cheap).
 pub fn list() -> Result<Vec<SessionMeta>> {
     let dir = sessions_dir()?;
     let mut metas: Vec<SessionMeta> = std::fs::read_dir(&dir)?
         .filter_map(|e| e.ok())
-        .filter(|e| e.path().extension().and_then(|s| s.to_str()) == Some("json"))
+        .filter(|e| e.path().extension().and_then(|s| s.to_str()) == Some("jsonl"))
         .filter_map(|e| {
             let raw = std::fs::read_to_string(e.path()).ok()?;
-            // Cheap: parse only the meta field via raw_json. We just parse the whole
-            // Session since it's small enough; v2 can switch to a stream parser.
-            serde_json::from_str::<Session>(&raw).ok().map(|s| s.meta)
+            let first = raw.lines().next()?;
+            match serde_json::from_str::<Line>(first).ok()? {
+                Line::Header { session } => Some(session),
+                _ => None,
+            }
         })
         .collect();
-    metas.sort_by_key(|b| std::cmp::Reverse(b.started_at));
+    metas.sort_by_key(|m| std::cmp::Reverse(m.started_at));
     Ok(metas)
 }
 
-pub fn make_session_id(_now: chrono::DateTime<chrono::Utc>) -> String {
-    // UTC timestamp + 4-char random suffix so two sessions in the same
-    // second don't collide.
-    let now = Utc::now();
-    let stamp = now.format("%Y%m%dT%H%M%SZ").to_string();
+/// Id of the most recently started session, if any.
+pub fn latest_id() -> Result<Option<String>> {
+    Ok(list()?.into_iter().next().map(|m| m.id))
+}
+
+/// UTC timestamp + 4-char random suffix so two sessions in the same
+/// second don't collide.
+pub fn make_session_id() -> String {
+    let stamp = Utc::now().format("%Y%m%dT%H%M%SZ");
     let suffix: String = (0..4)
-        .map(|_| {
-            let idx = (rand_u32() as usize) % ALPHA.len();
-            ALPHA[idx] as char
-        })
+        .map(|_| ALPHA[(rand_u32() as usize) % ALPHA.len()] as char)
         .collect();
     format!("mb-{}-{}", stamp, suffix)
 }
@@ -171,8 +157,7 @@ fn rand_u32() -> u32 {
         .duration_since(SystemTime::UNIX_EPOCH)
         .map(|d| d.subsec_nanos())
         .unwrap_or(0);
-    let pid = std::process::id() as u32;
-    // simple xorshift
+    let pid = std::process::id();
     let mut x = nanos ^ (pid.rotate_left(13));
     x ^= x << 13;
     x ^= x >> 17;
@@ -180,11 +165,12 @@ fn rand_u32() -> u32 {
     x
 }
 
-/// Format a session for one-line display in the picker. Includes human-readable
-/// age (e.g. "5m ago", "2h ago", "yesterday").
+/// One-line display for the session picker ("5m ago" style age).
 pub fn fmt_meta_line(m: &SessionMeta) -> String {
-    let dur = Utc::now().signed_duration_since(m.started_at);
-    let secs = dur.num_seconds().max(0);
+    let secs = Utc::now()
+        .signed_duration_since(m.started_at)
+        .num_seconds()
+        .max(0);
     let human = if secs < 60 {
         format!("{}s ago", secs)
     } else if secs < 3600 {
@@ -194,10 +180,61 @@ pub fn fmt_meta_line(m: &SessionMeta) -> String {
     } else {
         format!("{}d ago", secs / 86400)
     };
-    let label_part = m.label.clone().unwrap_or_else(|| "(no label)".into());
-    let end_part = match m.ended_at {
-        Some(_) => "ended",
-        None => "open",
-    };
-    format!("  {}  {}  {}  [{}]", m.id, human, end_part, label_part)
+    format!("  {}  {}  {}", m.id, human, m.data_root.display())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn parse_session_replays_header_and_items() {
+        let meta = SessionMeta {
+            id: "mb-test".into(),
+            started_at: Utc::now(),
+            data_root: PathBuf::from("/w"),
+        };
+        let mut raw = format!(
+            "{}\n",
+            serde_json::to_string(&Line::Header {
+                session: meta.clone()
+            })
+            .unwrap()
+        );
+        let items = vec![
+            Item::User { text: "hi".into() },
+            Item::ToolCall {
+                call_id: "c".into(),
+                name: "brief".into(),
+                args: serde_json::json!({}),
+            },
+            Item::ToolOutput {
+                call_id: "c".into(),
+                output: "t".into(),
+                is_error: false,
+            },
+            Item::Assistant { text: "a".into() },
+        ];
+        for i in &items {
+            raw.push_str(&serde_json::to_string(i).unwrap());
+            raw.push('\n');
+        }
+        raw.push_str("{\"type\":\"future_thing\",\"x\":1}\n"); // skipped, not fatal
+        let (m, back) = parse_session(&raw).unwrap();
+        assert_eq!(m.id, meta.id);
+        assert_eq!(back.len(), items.len());
+    }
+
+    #[test]
+    fn header_must_be_first_line() {
+        assert!(parse_session("{\"type\":\"user\",\"text\":\"x\"}\n").is_err());
+        assert!(parse_session("").is_err());
+    }
+
+    #[test]
+    fn ids_do_not_collide_within_a_second() {
+        let a = make_session_id();
+        let b = make_session_id();
+        assert_ne!(a, b);
+    }
 }

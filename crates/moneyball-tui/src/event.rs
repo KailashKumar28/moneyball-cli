@@ -54,20 +54,68 @@ fn drain_stream(app: &mut App) {
             rx.try_recv()
         };
         match ev {
-            Ok(StreamEvent::Delta(d)) => app.chat.append_assistant(&d),
-            Ok(StreamEvent::Done { ms, provider }) => {
-                app.chat
-                    .append_assistant(&format!(" ({}ms via {})", ms, provider));
-                app.chat.finish_streaming();
-                app.stream = None;
-                return;
-            }
-            Ok(StreamEvent::Failed(e)) => {
-                app.chat
-                    .append_assistant(&format!("llm call failed: {}", e));
-                app.chat.finish_streaming();
-                app.stream = None;
-                return;
+            Ok(StreamEvent::Agent(aev)) => {
+                use moneyball_core::agent::Ev;
+                match aev {
+                    Ev::AssistantDelta(d) => app.chat.append_assistant(&d),
+                    Ev::AssistantDone { .. } => app.chat.finish_streaming(),
+                    Ev::ToolBegin { name, args, .. } => {
+                        app.chat.finish_streaming();
+                        app.chat.push(chat::Cell::ToolCall(chat::cells::ToolCall {
+                            name,
+                            args: crate::app::compact_args(&args),
+                            status: chat::cells::ToolStatus::Running,
+                        }));
+                    }
+                    Ev::ToolEnd { output, ok, .. } => {
+                        app.chat
+                            .push(chat::Cell::ToolResult(chat::cells::ToolResult {
+                                name: "tool".into(),
+                                output: output.lines().map(String::from).collect(),
+                                success: ok,
+                                duration_ms: 0,
+                            }));
+                    }
+                    Ev::TurnComplete {
+                        items,
+                        ms,
+                        provider,
+                    } => {
+                        for item in items {
+                            app.record(item);
+                        }
+                        app.chat.finish_streaming();
+                        // Latency/provider is status metadata, never
+                        // part of the persisted message text.
+                        app.status = Some(format!("{}ms via {}", ms, provider));
+                        app.turn_active = false;
+                        app.stream = None;
+                        return;
+                    }
+                    Ev::TurnAborted { items } => {
+                        for item in items {
+                            app.record(item);
+                        }
+                        app.chat.finish_streaming();
+                        app.chat.push(chat::Cell::System(chat::cells::System(
+                            "(turn interrupted)".into(),
+                        )));
+                        app.turn_active = false;
+                        app.stream = None;
+                        return;
+                    }
+                    Ev::Failed { error, items } => {
+                        for item in items {
+                            app.record(item);
+                        }
+                        app.chat
+                            .append_assistant(&format!("llm call failed: {}", error));
+                        app.chat.finish_streaming();
+                        app.turn_active = false;
+                        app.stream = None;
+                        return;
+                    }
+                }
             }
             Ok(StreamEvent::FetchDone { report, days, ms }) => {
                 app.stream = None;
@@ -226,12 +274,19 @@ fn handle_brief_key(app: &mut App, k: KeyEvent) {
 ///   - Input empty: show a hint pointing to /exit. Never quits.
 ///   - Use /exit (or /quit, /q) to leave moneyball.
 fn handle_esc(app: &mut App) {
-    // Esc during a live response interrupts it (codex behavior). The worker
-    // thread's next send fails once the receiver drops, and it exits.
+    // Esc during an agent turn: set the cancel flag - the worker aborts
+    // between SSE events (real HTTP cancel) and sends TurnAborted, which
+    // records the partial items. The receiver stays alive for that.
+    if app.turn_active {
+        app.cancel.store(true, std::sync::atomic::Ordering::SeqCst);
+        app.status = Some("interrupting...".into());
+        return;
+    }
+    // Esc during a fetch: the pull cannot be stopped mid-request; say so
+    // honestly instead of pretending (the result is discarded).
     if app.stream.take().is_some() {
-        app.chat.append_assistant(" (interrupted)");
         app.chat.finish_streaming();
-        app.status = Some("response interrupted".into());
+        app.status = Some("fetch result discarded (the Meta pull itself completes)".into());
         return;
     }
     if !app.input.is_empty() {

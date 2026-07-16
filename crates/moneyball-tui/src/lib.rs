@@ -11,7 +11,6 @@ mod setup;
 pub mod widgets;
 pub(crate) use app::snapshot_load;
 pub(crate) use app::View;
-use app::{load_session_into, save_current_session};
 pub use app::{App, StreamEvent};
 use event::event_loop;
 pub use setup::SetupState;
@@ -26,7 +25,7 @@ use crossterm::terminal::{
 use ratatui::backend::CrosstermBackend;
 use ratatui::Terminal;
 
-use moneyball_core::session::Session;
+use moneyball_core::session::SessionLog;
 use moneyball_core::AppConfig;
 
 // Two chrono types collide on import name; alias the plain Utc.
@@ -66,13 +65,14 @@ pub fn run() -> Result<()> {
     run_with(None)
 }
 
-/// Entry point that optionally pre-loads a saved session into the chat log.
-pub fn run_with(resume_session: Option<Session>) -> Result<()> {
-    run_with_cfg(resume_session, None)
+/// Entry point that optionally resumes a saved session (log handle +
+/// replayed transcript from `SessionLog::open`).
+pub fn run_with(resume: Option<(SessionLog, Vec<moneyball_core::agent::Item>)>) -> Result<()> {
+    run_with_cfg(resume, None)
 }
 
 pub fn run_with_cfg(
-    resume_session: Option<Session>,
+    resume: Option<(SessionLog, Vec<moneyball_core::agent::Item>)>,
     cfg_override: Option<AppConfig>,
 ) -> Result<()> {
     let cfg = match cfg_override {
@@ -80,8 +80,18 @@ pub fn run_with_cfg(
         None => AppConfig::resolve_optional(None, None),
     };
     let mut app = App::new(cfg);
-    if let Some(s) = resume_session {
-        load_session_into(&mut app, s);
+    match resume {
+        Some((log, items)) => {
+            app.session = Some(log);
+            app.replay(items);
+        }
+        // Fresh session: appended items persist from the first turn.
+        // A create failure degrades to an unpersisted session with a
+        // visible warning, never a dead REPL.
+        None => match SessionLog::create(app.cfg.data_root.clone()) {
+            Ok(log) => app.session = Some(log),
+            Err(e) => app.status = Some(format!("session log unavailable: {}", e)),
+        },
     }
     if matches!(app.view, View::Brief) {
         app.load_brief();
@@ -89,9 +99,5 @@ pub fn run_with_cfg(
     let mut terminal = init()?;
     let res = event_loop(&mut terminal, &mut app);
     restore()?;
-    // Auto-save the chat log so /quit or Ctrl-C still persists.
-    if let Err(e) = save_current_session(&app) {
-        eprintln!("warning: session save failed: {}", e);
-    }
     res
 }

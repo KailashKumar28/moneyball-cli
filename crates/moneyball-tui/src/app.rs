@@ -3,14 +3,13 @@
 
 use crate::*;
 
-use anyhow::Result;
+use std::sync::atomic::AtomicBool;
+use std::sync::Arc;
 
+use moneyball_core::agent::{Ev, Item};
 use moneyball_core::brief::{self, ProductRowsAndFeasibility};
-use moneyball_core::session::{Session, SessionCell};
+use moneyball_core::session::SessionLog;
 use moneyball_core::AppConfig;
-
-// Two chrono types collide on import name; alias the plain Utc.
-use chrono::Utc as ChronoUtc;
 
 #[derive(Debug, Clone, PartialEq)]
 #[allow(clippy::large_enum_variant)] // Brief is a unit variant; SetupState is fat.
@@ -36,25 +35,27 @@ pub struct App {
     /// question, tool output) is appended here. The main TUI body renders
     /// from this log; the dashboard view was replaced.
     pub chat: chat::ChatLog,
-    /// Session id for auto-save. Set on App::new (fresh) or load_session_into (resume).
-    pub session_id: Option<String>,
-    /// When this session was started.
-    pub session_started: Option<chrono::DateTime<chrono::Utc>>,
-    /// Live LLM stream: deltas arrive from a worker thread and are drained
-    /// by the event loop each tick (codex/claude-code streaming pattern).
-    /// `Some` while a response is in flight; dropping it cancels the stream.
+    /// Conversation transcript in wire format (ARCHITECTURE.md 6b).
+    /// The prompt for every turn; appended items also go to `session`.
+    pub history: Vec<Item>,
+    /// Append-only JSONL session log. None in tests / headless render.
+    pub session: Option<SessionLog>,
+    /// Cancel flag shared with the agent worker; Esc sets it and the
+    /// worker aborts between SSE events.
+    pub cancel: Arc<AtomicBool>,
+    /// True while an agent turn (not a fetch) is in flight - decides
+    /// what Esc means.
+    pub turn_active: bool,
+    /// Live worker events, drained by the event loop each tick.
+    /// `Some` while a turn or fetch is in flight.
     pub stream: Option<std::sync::mpsc::Receiver<StreamEvent>>,
 }
 
-/// Events sent by background worker threads (LLM streaming, Meta fetch),
+/// Events sent by background worker threads (agent turns, Meta fetch),
 /// drained by the event loop each tick so the UI never blocks.
 pub enum StreamEvent {
-    Delta(String),
-    Done {
-        ms: u64,
-        provider: String,
-    },
-    Failed(String),
+    /// Agent-loop event (deltas, tool begin/end, turn end).
+    Agent(Ev),
     /// `/fetch` worker finished pulling a snapshot from Meta.
     FetchDone {
         report: moneyball_core::fetch::FetchReport,
@@ -132,8 +133,6 @@ impl App {
             View::Setup(SetupState::new(cfg.data_root.clone()))
         };
         let mut chat = chat::ChatLog::new();
-        let now = ChronoUtc::now();
-        let session_id = format!("mb-{}", now.format("%Y%m%dT%H%M%SZ"));
         // Push the moneyball ASCII logo as the first cell on every fresh session.
         chat.push(chat::Cell::System(chat::cells::System(
             moneyball_core::LOGO.into(),
@@ -161,10 +160,71 @@ impl App {
             quit: false,
             quit_emoji: String::new(),
             chat,
-            session_id: Some(session_id),
-            session_started: Some(now),
+            history: Vec::new(),
+            session: None,
+            cancel: Arc::new(AtomicBool::new(false)),
+            turn_active: false,
             stream: None,
         }
+    }
+
+    /// Append one item to history AND the session log. A persistence
+    /// failure surfaces once in the status line, never kills the REPL.
+    pub(crate) fn record(&mut self, item: Item) {
+        if let Some(log) = &self.session {
+            if let Err(e) = log.append(&item) {
+                self.status = Some(format!("session save failed: {}", e));
+            }
+        }
+        self.history.push(item);
+    }
+
+    /// Rebuild chat cells from a resumed transcript (codex replay
+    /// pattern: history drives both the prompt and the visible cells).
+    pub(crate) fn replay(&mut self, items: Vec<Item>) {
+        use crate::chat::cells;
+        use crate::chat::Cell;
+        for item in &items {
+            match item {
+                Item::User { text } => {
+                    // The turn_aborted marker is model-facing, not a real
+                    // user message - show it as a dim system note.
+                    if text.starts_with("<turn_aborted>") {
+                        self.chat
+                            .push(Cell::System(cells::System("(turn interrupted)".into())));
+                    } else {
+                        self.chat.push(Cell::UserPrompt(cells::UserPrompt {
+                            text: text.clone(),
+                            at: chrono::Local::now(),
+                        }));
+                    }
+                }
+                Item::Assistant { text } => {
+                    self.chat.push(Cell::AssistantText(cells::AssistantText {
+                        text: text.clone(),
+                        streaming: false,
+                    }));
+                }
+                Item::ToolCall { name, args, .. } => {
+                    self.chat.push(Cell::ToolCall(cells::ToolCall {
+                        name: name.clone(),
+                        args: compact_args(args),
+                        status: cells::ToolStatus::Done,
+                    }));
+                }
+                Item::ToolOutput {
+                    output, is_error, ..
+                } => {
+                    self.chat.push(Cell::ToolResult(cells::ToolResult {
+                        name: "tool".into(),
+                        output: output.lines().map(String::from).collect(),
+                        success: !is_error,
+                        duration_ms: 0,
+                    }));
+                }
+            }
+        }
+        self.history = items;
     }
 
     pub fn load_brief(&mut self) {
@@ -199,85 +259,14 @@ mod r {
     }
 }
 
-pub(crate) fn snapshot_load(p: &std::path::Path) -> Result<moneyball_core::Snapshot> {
+pub(crate) fn snapshot_load(p: &std::path::Path) -> anyhow::Result<moneyball_core::Snapshot> {
     Ok(moneyball_core::snapshot::load(p)?)
 }
 
-pub(crate) fn load_session_into(app: &mut App, s: Session) {
-    // Original-codex style: instant prompt, no message-log replay.
-    // The session_id and session_started are inherited so any new cells the
-    // user creates will be appended to the same on-disk session file
-    // (handled by save_current_session -> Session { id, started_at, cells }).
-    app.chat = chat::ChatLog::new();
-    app.session_id = Some(s.meta.id.clone());
-    app.session_started = Some(s.meta.started_at);
-}
-
-fn chat_cell_to_session(c: &chat::Cell) -> SessionCell {
-    use chat::cells as cc;
-    match c {
-        chat::Cell::System(cc::System(text)) => SessionCell::System { text: text.clone() },
-        chat::Cell::UserPrompt(cc::UserPrompt { text, at }) => SessionCell::UserPrompt {
-            text: text.clone(),
-            at: at.with_timezone(&ChronoUtc),
-        },
-        chat::Cell::AssistantText(cc::AssistantText { text, streaming }) => {
-            SessionCell::AssistantText {
-                text: text.clone(),
-                streaming: *streaming,
-            }
-        }
-        chat::Cell::ToolCall(cc::ToolCall { name, args, status }) => SessionCell::ToolCall {
-            name: name.clone(),
-            args: args.clone(),
-            status: match status {
-                cc::ToolStatus::Pending => "pending".into(),
-                cc::ToolStatus::Running => "running".into(),
-                cc::ToolStatus::Done => "done".into(),
-                cc::ToolStatus::Failed => "failed".into(),
-            },
-        },
-        chat::Cell::ToolResult(cc::ToolResult {
-            name,
-            output,
-            success,
-            duration_ms,
-        }) => SessionCell::ToolResult {
-            name: name.clone(),
-            output: output.clone(),
-            success: *success,
-            duration_ms: *duration_ms,
-        },
-        // BriefPlaceholder is a no-op cell (renders as empty). Persist
-        // an empty assistant text so the session round-trips without
-        // losing cells.
-        chat::Cell::BriefPlaceholder => SessionCell::AssistantText {
-            text: String::new(),
-            streaming: false,
-        },
+/// Short one-line render of tool args for the cell header.
+pub(crate) fn compact_args(args: &serde_json::Value) -> String {
+    match args {
+        serde_json::Value::Object(m) if m.is_empty() => String::new(),
+        other => other.to_string(),
     }
-}
-
-/// Snapshot the current chat log + workspace into a Session and persist it.
-/// Overwrites if a session with the same id already exists (so the same
-/// session id can be updated across multiple invocations).
-pub(crate) fn save_current_session(app: &App) -> Result<()> {
-    let meta = moneyball_core::session::SessionMeta {
-        id: app.session_id.clone().unwrap_or_else(|| {
-            // Generate one if we don't have one (shouldn't happen at this point).
-            moneyball_core::session::list()
-                .ok()
-                .and_then(|mut v| v.pop().map(|m| m.id))
-                .unwrap_or_else(|| format!("mb-{}", ChronoUtc::now().format("%Y%m%dT%H%M%SZ")))
-        }),
-        started_at: app.session_started.unwrap_or_else(ChronoUtc::now),
-        ended_at: Some(ChronoUtc::now()),
-        data_root: app.cfg.data_root.clone(),
-        snap_date: app.snap_date.clone(),
-        label: None,
-    };
-    let cells: Vec<SessionCell> = app.chat.cells.iter().map(chat_cell_to_session).collect();
-    let s = Session { meta, cells };
-    moneyball_core::session::save(&s)?;
-    Ok(())
 }

@@ -1333,6 +1333,7 @@ dependencies = [
  "crossterm 0.28.1",
  "moneyball-core",
  "ratatui",
+ "serde_json",
  "tokio",
 ]
 

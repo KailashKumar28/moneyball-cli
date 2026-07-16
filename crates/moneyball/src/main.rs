@@ -119,21 +119,23 @@ fn main() -> Result<()> {
         return Ok(());
     }
 
-    // --resume <id>: load that session before handing off to the REPL.
+    // --resume <id>: reopen that session's log and replay its transcript.
     if let Some(id) = cli.resume.clone() {
-        let s = moneyball_core::session::load(&id)
+        let (log, items) = moneyball_core::session::SessionLog::open(&id)
             .with_context(|| format!("no session found with id '{}'", id))?;
         println!(
-            "resuming session {} (started {})",
-            s.meta.id, s.meta.started_at
+            "resuming session {} ({} items, started {})",
+            log.meta.id,
+            items.len(),
+            log.meta.started_at
         );
-        return moneyball_tui::run_with(Some(s));
+        return moneyball_tui::run_with(Some((log, items)));
     }
 
-    // -c / --continue: load latest session if one exists; else fall back to new.
+    // -c / --continue: reopen the latest session if one exists.
     let resume_session = if cli.continue_last {
-        match moneyball_core::session::latest()? {
-            Some(s) => Some(s),
+        match moneyball_core::session::latest_id()? {
+            Some(id) => Some(moneyball_core::session::SessionLog::open(&id)?),
             None => {
                 eprintln!("no previous session to continue - starting a fresh one");
                 None

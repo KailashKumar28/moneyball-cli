@@ -21,8 +21,6 @@ fn main() {
     ]);
     app.force_welcome_for_test();
     // Synthesize a session id so the harness behaves like a real first-run.
-    app.session_id = Some("mb-20260714T133000Z-abc1".into());
-    app.session_started = Some(chrono::Utc::now());
 
     print!("{}", app.render_to_string(96, 32));
 }

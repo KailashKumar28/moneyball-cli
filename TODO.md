@@ -8,17 +8,6 @@ bottom after a release-sized batch.)
 
 ## Now (next slices, in order)
 
-- [ ] **Package A - agent brain** (design: ARCHITECTURE.md §6b):
-      A1 `core/agent/protocol.rs`: Item/Op/Ev enums (history = wire format).
-      A2 llm.rs body builders take `&[Item]` + tool defs; parse tool calls.
-      A3 agent worker thread: full-history turn loop, tool registry wired
-         (brief + funnel first), pi truncation caps, AtomicBool cancel +
-         <turn_aborted> marker, invariants (outputs healed, one turn).
-      A4 sessions -> append-only JSONL of Items (+ final Evs); resume
-         replays into history AND cells; delete the destructive
-         load_session_into/save_current_session pair.
-      A5 TUI: replace StreamEvent plumbing with Op/Ev seam; ToolBegin/End
-         cells keyed by call_id; latency/provider as cell metadata.
 - [ ] **Package B - money/data safety**: bracketed paste; reject unknown
       /commands locally; real Esc cancellation (A3 gives the flag); crm
       fetch must not create ads-free "latest" snapshots; warn when crm.json
@@ -73,6 +62,13 @@ bottom after a release-sized batch.)
   with `cargo install` (gate #7); E2E-reproduce bugs before fixing them.
 
 ## Done log
+
+- [x] 2026-07-16 Package A shipped: agent brain live. History = wire
+      format (agent::Item), pi tool loop with brief+funnel tools the
+      model invokes itself, append-only JSONL sessions with real replay
+      (-c resume verified: follow-up questions resolve across restarts),
+      AtomicBool cancellation, latency as status metadata. E2E vs
+      MiniMax: "what was my last question" answers correctly.
 
 - [x] 2026-07-16 /funnel wired in the TUI: table tool cell + streaming
       LLM per-entity SCALE/KILL/WAIT read; bad args list the configured

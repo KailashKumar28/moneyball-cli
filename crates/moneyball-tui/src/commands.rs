@@ -526,48 +526,120 @@ fn call_agent(app: &mut App, system: &str, user_prompt: &str) {
             return;
         }
     };
-    // Streaming (codex/claude-code pattern): push an empty streaming cell
-    // now, spawn a worker thread that POSTs with stream:true, and let the
-    // event loop drain deltas into the cell each tick. The UI never blocks.
+    // Agent turn (ARCHITECTURE.md 6b): record the user item, then run
+    // the tool loop on a worker thread. Ev's arrive via the tick drain;
+    // the UI never blocks and Esc cancels via the shared flag.
     if app.stream.is_some() {
         app.status = Some("still responding - wait for it to finish (esc interrupts)".into());
         return;
     }
+    app.record(moneyball_core::agent::Item::User {
+        text: user_prompt.to_string(),
+    });
     app.chat.push(Cell::AssistantText(cells::AssistantText {
         text: String::new(),
         streaming: true,
     }));
+    app.cancel.store(false, std::sync::atomic::Ordering::SeqCst);
     let (tx, rx) = std::sync::mpsc::channel::<StreamEvent>();
     let pid = provider_id.clone();
     let pinfo = provider_info.clone();
     let model = model.clone();
     let sys = system.to_string();
-    let userp = user_prompt.to_string();
+    let history = app.history.clone();
+    let cfg = app.cfg.clone();
+    let cancel = app.cancel.clone();
     std::thread::spawn(move || {
-        let started = std::time::Instant::now();
-        let mut on_delta = |d: &str| {
-            let _ = tx.send(StreamEvent::Delta(d.to_string()));
-        };
-        match moneyball_core::llm::stream_blocking(
-            &pid,
-            &pinfo,
-            &model,
-            Some(&sys),
-            &userp,
-            &mut on_delta,
-        ) {
-            Ok(_) => {
-                let _ = tx.send(StreamEvent::Done {
-                    ms: started.elapsed().as_millis() as u64,
-                    provider: pid,
-                });
+        // Bridge agent Ev's into the app's StreamEvent channel.
+        let (etx, erx) = std::sync::mpsc::channel::<moneyball_core::agent::Ev>();
+        let fwd = std::thread::spawn(move || {
+            for ev in erx {
+                if tx.send(StreamEvent::Agent(ev)).is_err() {
+                    break; // UI dropped the receiver
+                }
             }
-            Err(e) => {
-                let _ = tx.send(StreamEvent::Failed(format!("{}", e)));
-            }
-        }
+        });
+        let exec = SnapshotTools { cfg };
+        // Only implemented tools go on the wire - the model must never
+        // be steered into stubs (audit F4).
+        let tools = vec![
+            moneyball_core::tools::brief_tool(),
+            moneyball_core::tools::funnel_tool(),
+        ];
+        moneyball_core::agent::run_turn(
+            &pid, &pinfo, &model, &sys, history, &tools, &exec, &cancel, &etx,
+        );
+        drop(etx);
+        let _ = fwd.join();
     });
     app.stream = Some(rx);
+    app.turn_active = true;
+}
+
+/// Tool executor over on-disk snapshot data. Runs on the agent worker
+/// thread; errors become ToolOutput{is_error} messages the model sees.
+struct SnapshotTools {
+    cfg: moneyball_core::AppConfig,
+}
+
+impl SnapshotTools {
+    fn snap(&self) -> Result<moneyball_core::Snapshot, String> {
+        self.cfg
+            .snap_for(self.cfg.date.as_deref())
+            .and_then(|p| moneyball_core::snapshot::load(&p))
+            .map_err(|_| {
+                "no snapshot on disk - tell the user to run /fetch (or /brief, which \
+                 self-heals) before asking for numbers"
+                    .to_string()
+            })
+    }
+}
+
+impl moneyball_core::agent::ToolExec for SnapshotTools {
+    fn run(&self, name: &str, args: &serde_json::Value) -> Result<String, String> {
+        match name {
+            "brief" => {
+                let snap = self.snap()?;
+                let history = brief::load_history(&self.cfg.history_dir().join("scoreboard.csv"));
+                let b = brief::compute(&snap, &self.cfg, &history);
+                Ok(format_brief_as_lines(&b).join("\n"))
+            }
+            "funnel" => {
+                let products: Vec<String> = self
+                    .cfg
+                    .workspace
+                    .as_ref()
+                    .map(|w| w.products.iter().map(|p| p.name.clone()).collect())
+                    .unwrap_or_default();
+                let product = args.get("product").and_then(|p| p.as_str()).unwrap_or("");
+                if !products.iter().any(|p| p == product) {
+                    return Err(format!(
+                        "unknown product \"{}\" - pass one of: {}",
+                        product,
+                        products.join(", ")
+                    ));
+                }
+                let snap = self.snap()?;
+                let rows = moneyball_core::funnel::compute(
+                    &snap,
+                    &self.cfg,
+                    product,
+                    7,
+                    moneyball_core::funnel::By::Adset,
+                );
+                Ok(format!(
+                    "FUNNEL {} - by adset - 7d - snapshot {}\n{}",
+                    product,
+                    snap.date,
+                    moneyball_core::funnel::table(&rows)
+                ))
+            }
+            other => Err(format!(
+                "tool \"{}\" is not implemented - answer from the tools you have",
+                other
+            )),
+        }
+    }
 }
 
 /// Free-form chat path. Tries to load the brief silently so the LLM has
@@ -578,43 +650,10 @@ fn call_agent(app: &mut App, system: &str, user_prompt: &str) {
 /// function - the LLM is the default, mirroring how codex / claude
 /// code work.
 fn run_freeform(app: &mut App, question: &str) {
-    // Try to attach portfolio context. If load_brief fails (no snapshot,
-    // no workspace) we still call the agent - the prompt just won't
-    // include numbers and the agent should say so.
-    let context = match &app.brief {
-        Some(b) => Some(build_brief_prompt(b)),
-        None => match app.cfg.snap_for(app.cfg.date.as_deref()) {
-            Ok(path) => match crate::snapshot_load(&path) {
-                Ok(snap) => {
-                    let history =
-                        brief::load_history(&app.cfg.history_dir().join("scoreboard.csv"));
-                    let res = brief::compute(&snap, &app.cfg, &history);
-                    app.brief = Some(res.clone());
-                    Some(build_brief_prompt(&res))
-                }
-                Err(_) => None,
-            },
-            Err(_) => None,
-        },
-    };
-
-    let prompt = match context {
-        Some(ctx) => format!(
-            "{}\n\nQuestion: {}\n\nAnswer using the snapshot context above. \
-If the question can't be answered from the snapshot, say so and suggest \
-a slash command that would help (/brief, /funnel <product>, /diagnose <product>).",
-            ctx, question
-        ),
-        None => format!(
-            "(no portfolio snapshot is loaded - see the app state in your system prompt. \
-Answer in general terms, and if the user needs numbers explain that data appears once \
-their fetcher writes a snapshot - do NOT suggest /setup, it is already complete.)\n\nQuestion: {}",
-            question
-        ),
-    };
-
+    // The agent loop pulls numbers itself via the brief/funnel tools -
+    // no pre-stuffed context, the question goes in verbatim.
     let sys = format!("{}\n\n{}", AGENT_SYSTEM_PROMPT, app_state_block(app));
-    call_agent(app, &sys, &prompt);
+    call_agent(app, &sys, question);
 }
 
 /// Build the user-prompt context from the deterministic brief numbers.
