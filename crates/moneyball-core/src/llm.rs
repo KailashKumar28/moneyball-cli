@@ -24,7 +24,7 @@ use serde_json::{json, Value};
 
 use crate::error::{Error, Result};
 use crate::provider::{ModelProviderInfo, WireApi};
-use crate::tools::{Completion, Tool, ToolCall, tools_payload};
+use crate::tools::{tools_payload, Completion, Tool, ToolCall};
 
 /// Default request timeout. Long enough for a 7-day brief analysis but
 /// short enough that the REPL doesn't hang forever on a stalled socket.
@@ -70,35 +70,9 @@ impl Client {
             .ok_or_else(|| Error::LlmAuth(format!("no API key for provider '{}'", provider_id)))?;
 
         let url = endpoint_for(provider);
-        let mut req = self
-            .inner
-            .post(&url)
-            .header("Content-Type", "application/json");
-
-        // Wire-specific auth header.
-        req = match provider.wire_api {
-            WireApi::Messages => req
-                .header("x-api-key", &api_key)
-                .header("anthropic-version", "2023-06-01"),
-            _ => req.header("Authorization", format!("Bearer {}", api_key)),
-        };
-
-        // Literal http_headers from the provider config.
-        if let Some(hh) = &provider.http_headers {
-            for (k, v) in hh {
-                req = req.header(k, v);
-            }
-        }
-
-        // Env-backed headers.
-        if let Some(eh) = &provider.env_http_headers {
-            for (k, var) in eh {
-                if let Ok(v) = std::env::var(var) {
-                    if !v.is_empty() {
-                        req = req.header(k, v);
-                    }
-                }
-            }
+        let mut req = self.inner.post(&url);
+        for (k, v) in request_headers(provider, &api_key) {
+            req = req.header(&k, &v);
         }
 
         let body = match provider.wire_api {
@@ -118,9 +92,7 @@ impl Client {
             .await
             .map_err(|e| Error::Llm(format!("body read: {}", e)))?;
 
-        if status == reqwest::StatusCode::UNAUTHORIZED
-            || status == reqwest::StatusCode::FORBIDDEN
-        {
+        if status == reqwest::StatusCode::UNAUTHORIZED || status == reqwest::StatusCode::FORBIDDEN {
             return Err(Error::LlmAuth(format!(
                 "provider '{}' rejected the key (HTTP {}): {}",
                 provider_id,
@@ -168,31 +140,9 @@ impl Client {
             .ok_or_else(|| Error::LlmAuth(format!("no API key for provider '{}'", provider_id)))?;
 
         let url = endpoint_for(provider);
-        let mut req = self
-            .inner
-            .post(&url)
-            .header("Content-Type", "application/json");
-
-        req = match provider.wire_api {
-            WireApi::Messages => req
-                .header("x-api-key", &api_key)
-                .header("anthropic-version", "2023-06-01"),
-            _ => req.header("Authorization", format!("Bearer {}", api_key)),
-        };
-
-        if let Some(hh) = &provider.http_headers {
-            for (k, v) in hh {
-                req = req.header(k, v);
-            }
-        }
-        if let Some(eh) = &provider.env_http_headers {
-            for (k, var) in eh {
-                if let Ok(v) = std::env::var(var) {
-                    if !v.is_empty() {
-                        req = req.header(k, v);
-                    }
-                }
-            }
+        let mut req = self.inner.post(&url);
+        for (k, v) in request_headers(provider, &api_key) {
+            req = req.header(&k, &v);
         }
 
         let body = match provider.wire_api {
@@ -212,9 +162,7 @@ impl Client {
             .await
             .map_err(|e| Error::Llm(format!("body read: {}", e)))?;
 
-        if status == reqwest::StatusCode::UNAUTHORIZED
-            || status == reqwest::StatusCode::FORBIDDEN
-        {
+        if status == reqwest::StatusCode::UNAUTHORIZED || status == reqwest::StatusCode::FORBIDDEN {
             return Err(Error::LlmAuth(format!(
                 "provider '{}' rejected the key (HTTP {}): {}",
                 provider_id,
@@ -241,12 +189,148 @@ impl Client {
     }
 }
 
+/// Streaming completion over SSE. Blocking - call from a worker thread.
+/// Invokes `on_delta` for every text fragment as it arrives and returns
+/// the accumulated full text. Supports all three wire protocols:
+///   Messages        -> `content_block_delta` events (`delta.text`)
+///   ChatCompletions -> `choices[0].delta.content`, terminated by [DONE]
+///   Responses       -> `response.output_text.delta` events (`delta`)
+pub fn stream_blocking(
+    provider_id: &str,
+    provider: &ModelProviderInfo,
+    model: &str,
+    system: Option<&str>,
+    user: &str,
+    on_delta: &mut dyn FnMut(&str),
+) -> Result<String> {
+    use std::io::{BufRead, BufReader};
+
+    let api_key = provider
+        .api_key(provider_id)
+        .ok_or_else(|| Error::LlmAuth(format!("no API key for provider '{}'", provider_id)))?;
+    let url = endpoint_for(provider);
+
+    let mut body = match provider.wire_api {
+        WireApi::Responses => build_responses_body(model, system, user),
+        WireApi::ChatCompletions => build_chat_body(model, system, user),
+        WireApi::Messages => build_messages_body(model, system, user),
+    };
+    body["stream"] = Value::Bool(true);
+
+    let client = reqwest::blocking::Client::builder()
+        .connect_timeout(Duration::from_secs(15))
+        .timeout(Duration::from_secs(300)) // whole stream, not per-chunk
+        .build()
+        .map_err(|e| Error::Llm(format!("client: {}", e)))?;
+    let mut req = client.post(&url);
+    for (k, v) in request_headers(provider, &api_key) {
+        req = req.header(&k, &v);
+    }
+
+    let resp = req
+        .json(&body)
+        .send()
+        .map_err(|e| Error::Llm(format!("transport: {}", e)))?;
+    let status = resp.status();
+    if !status.is_success() {
+        let text = resp.text().unwrap_or_default();
+        if status == reqwest::StatusCode::UNAUTHORIZED || status == reqwest::StatusCode::FORBIDDEN {
+            return Err(Error::LlmAuth(format!(
+                "provider '{}' rejected the key (HTTP {}): {}",
+                provider_id,
+                status,
+                truncate(&text, 200)
+            )));
+        }
+        return Err(Error::Llm(format!(
+            "provider '{}' returned HTTP {}: {}",
+            provider_id,
+            status,
+            truncate(&text, 200)
+        )));
+    }
+
+    let mut full = String::new();
+    let reader = BufReader::new(resp);
+    for line in reader.lines() {
+        let line = line.map_err(|e| Error::Llm(format!("stream read: {}", e)))?;
+        let Some(payload) = line.strip_prefix("data:").map(str::trim) else {
+            continue; // event:/id:/blank keep-alive lines
+        };
+        if payload == "[DONE]" {
+            break;
+        }
+        let Ok(v) = serde_json::from_str::<Value>(payload) else {
+            continue;
+        };
+        if let Some(d) = extract_stream_delta(provider.wire_api, &v) {
+            if !d.is_empty() {
+                full.push_str(&d);
+                on_delta(&d);
+            }
+        }
+    }
+    Ok(full)
+}
+
+/// Pull the text fragment out of one SSE JSON event, per wire protocol.
+fn extract_stream_delta(wire: WireApi, v: &Value) -> Option<String> {
+    match wire {
+        WireApi::Messages => {
+            if v.get("type")?.as_str()? != "content_block_delta" {
+                return None;
+            }
+            v.pointer("/delta/text")?.as_str().map(String::from)
+        }
+        WireApi::ChatCompletions => v
+            .pointer("/choices/0/delta/content")?
+            .as_str()
+            .map(String::from),
+        WireApi::Responses => {
+            if v.get("type")?.as_str()? != "response.output_text.delta" {
+                return None;
+            }
+            v.get("delta")?.as_str().map(String::from)
+        }
+    }
+}
+
 fn truncate(s: &str, n: usize) -> String {
     if s.len() <= n {
         s.to_string()
     } else {
         format!("{}...", &s[..n])
     }
+}
+
+/// All request headers for a provider call: content type, wire-specific
+/// auth (x-api-key+anthropic-version vs Bearer), literal http_headers,
+/// env-backed headers. Returned as pairs so the async and blocking reqwest
+/// builders (distinct types) share one source of truth.
+fn request_headers(provider: &ModelProviderInfo, api_key: &str) -> Vec<(String, String)> {
+    let mut h: Vec<(String, String)> = vec![("Content-Type".into(), "application/json".into())];
+    match provider.wire_api {
+        WireApi::Messages => {
+            h.push(("x-api-key".into(), api_key.to_string()));
+            h.push(("anthropic-version".into(), "2023-06-01".into()));
+        }
+        _ => h.push(("Authorization".into(), format!("Bearer {}", api_key))),
+    }
+    if let Some(hh) = &provider.http_headers {
+        for (k, v) in hh {
+            h.push((k.clone(), v.clone()));
+        }
+    }
+    if let Some(eh) = &provider.env_http_headers {
+        for (k, var) in eh {
+            if let Ok(v) = std::env::var(var) {
+                if !v.is_empty() {
+                    h.push((k.clone(), v));
+                }
+            }
+        }
+    }
+    h
 }
 
 /// Compute the full URL for a provider's request endpoint.
@@ -518,7 +602,11 @@ fn parse_responses_completion(v: &Value) -> Option<Completion> {
             } else {
                 o.arguments
             };
-            calls.push(ToolCall { id: o.id, name: o.name, arguments: args });
+            calls.push(ToolCall {
+                id: o.id,
+                name: o.name,
+                arguments: args,
+            });
         } else {
             // text or message
             for c in o.content {
@@ -552,8 +640,8 @@ fn parse_chat_completion(v: &Value) -> Option<Completion> {
     if let Some(tcs) = msg.get("tool_calls").and_then(|t| t.as_array()) {
         for tc in tcs {
             if let Ok(parsed) = serde_json::from_value::<ChatToolCall>(tc.clone()) {
-                let args: Value = serde_json::from_str(&parsed.function.arguments)
-                    .unwrap_or(Value::Null);
+                let args: Value =
+                    serde_json::from_str(&parsed.function.arguments).unwrap_or(Value::Null);
                 calls.push(ToolCall {
                     id: parsed.id,
                     name: parsed.function.name,
@@ -579,7 +667,11 @@ fn parse_anthropic_completion(v: &Value) -> Option<Completion> {
         let kind = block.get("type").and_then(|t| t.as_str()).unwrap_or("");
         if kind == "tool_use" {
             if let Ok(parsed) = serde_json::from_value::<AnthropicToolUse>(block.clone()) {
-                calls.push(ToolCall { id: parsed.id, name: parsed.name, arguments: parsed.input });
+                calls.push(ToolCall {
+                    id: parsed.id,
+                    name: parsed.name,
+                    arguments: parsed.input,
+                });
             }
         } else if kind == "text" || kind.is_empty() {
             if let Some(t) = block.get("text").and_then(|t| t.as_str()) {
@@ -632,7 +724,11 @@ mod tests {
 
     #[test]
     fn responses_body_uses_instructions_and_input() {
-        let v = build_responses_body("gpt-5", Some("you are a moneyball advisor"), "show me namma");
+        let v = build_responses_body(
+            "gpt-5",
+            Some("you are a moneyball advisor"),
+            "show me namma",
+        );
         assert_eq!(v["model"], "gpt-5");
         assert_eq!(v["instructions"], "you are a moneyball advisor");
         assert_eq!(v["input"], "show me namma");
@@ -848,8 +944,55 @@ mod tests {
                 assert_eq!(calls[0].id, "toolu_1");
                 assert_eq!(calls[0].name, "brief");
             }
-            other => panic!("expected ToolCalls (since tool_use present), got {:?}", other),
+            other => panic!(
+                "expected ToolCalls (since tool_use present), got {:?}",
+                other
+            ),
         }
+    }
+
+    // ---------- streaming delta extraction ----------
+
+    #[test]
+    fn stream_delta_messages_wire() {
+        let v: Value = serde_json::from_str(
+            r#"{"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"Hel"}}"#,
+        )
+        .unwrap();
+        assert_eq!(
+            extract_stream_delta(WireApi::Messages, &v).as_deref(),
+            Some("Hel")
+        );
+        // Non-delta events yield nothing.
+        let v2: Value = serde_json::from_str(r#"{"type":"message_start"}"#).unwrap();
+        assert!(extract_stream_delta(WireApi::Messages, &v2).is_none());
+    }
+
+    #[test]
+    fn stream_delta_chat_wire() {
+        let v: Value =
+            serde_json::from_str(r#"{"choices":[{"delta":{"content":"lo "},"index":0}]}"#).unwrap();
+        assert_eq!(
+            extract_stream_delta(WireApi::ChatCompletions, &v).as_deref(),
+            Some("lo ")
+        );
+        // Final chunk has empty delta - no text.
+        let v2: Value =
+            serde_json::from_str(r#"{"choices":[{"delta":{},"finish_reason":"stop"}]}"#).unwrap();
+        assert!(extract_stream_delta(WireApi::ChatCompletions, &v2).is_none());
+    }
+
+    #[test]
+    fn stream_delta_responses_wire() {
+        let v: Value =
+            serde_json::from_str(r#"{"type":"response.output_text.delta","delta":"world"}"#)
+                .unwrap();
+        assert_eq!(
+            extract_stream_delta(WireApi::Responses, &v).as_deref(),
+            Some("world")
+        );
+        let v2: Value = serde_json::from_str(r#"{"type":"response.completed"}"#).unwrap();
+        assert!(extract_stream_delta(WireApi::Responses, &v2).is_none());
     }
 
     #[test]

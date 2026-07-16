@@ -115,11 +115,14 @@ impl ModelProviderInfo {
     }
 
     /// Built-in preset for MiniMax (Messages API, Anthropic-compatible).
-    /// URL and model list to be confirmed with the user.
+    /// The Anthropic-compatible surface lives under /anthropic; the Messages
+    /// wire appends "/messages", so base must end at ".../anthropic/v1".
+    /// (Plain "/v1" is MiniMax's OpenAI-compatible base - POSTing
+    /// /v1/messages there 404s.)
     pub fn minimax() -> Self {
         Self {
             name: "MiniMax".into(),
-            base_url: "https://api.minimax.io/v1".into(),
+            base_url: "https://api.minimax.io/anthropic/v1".into(),
             env_key: Some("MINIMAX_API_KEY".into()),
             wire_api: WireApi::Messages,
             http_headers: Some(HashMap::from([(
@@ -135,7 +138,8 @@ impl ModelProviderInfo {
     pub fn anthropic() -> Self {
         Self {
             name: "Anthropic".into(),
-            base_url: "https://api.anthropic.com".into(),
+            // Messages wire appends "/messages"; the live route is /v1/messages.
+            base_url: "https://api.anthropic.com/v1".into(),
             env_key: Some("ANTHROPIC_API_KEY".into()),
             wire_api: WireApi::Messages,
             http_headers: Some(HashMap::from([(
@@ -159,11 +163,7 @@ pub fn models_for(preset: &ModelProviderInfo) -> &'static [&'static str] {
             "o3",
             "o4-mini",
         ],
-        ("Anthropic", _) => &[
-            "claude-opus-4-5",
-            "claude-sonnet-4-5",
-            "claude-haiku-4-5",
-        ],
+        ("Anthropic", _) => &["claude-opus-4-5", "claude-sonnet-4-5", "claude-haiku-4-5"],
         ("MiniMax", _) => &["MiniMax-M3", "MiniMax-M2"],
         _ => &["custom"],
     }
@@ -221,10 +221,7 @@ mod tests {
         let back: ModelProviderInfo = serde_json::from_str(&s).unwrap();
         assert_eq!(back.base_url, p.base_url);
         assert_eq!(back.wire_api, p.wire_api);
-        assert_eq!(
-            back.query_params.unwrap().get("beta").unwrap(),
-            "true"
-        );
+        assert_eq!(back.query_params.unwrap().get("beta").unwrap(), "true");
     }
 
     #[test]
