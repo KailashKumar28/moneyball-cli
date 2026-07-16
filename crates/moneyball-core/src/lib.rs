@@ -8,6 +8,7 @@
 pub mod brief;
 pub mod config;
 pub mod error;
+pub mod fetch;
 pub mod llm;
 pub mod logo;
 pub mod meta;

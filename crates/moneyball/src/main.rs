@@ -46,6 +46,12 @@ enum Cmd {
         #[arg(long)]
         check: bool,
     },
+    /// Pull daily ad insights from Meta and write today's snapshot.
+    Fetch {
+        /// How many trailing days of daily rows to pull (ending yesterday).
+        #[arg(long, default_value_t = 28)]
+        days: u32,
+    },
 }
 
 fn main() -> Result<()> {
@@ -69,7 +75,10 @@ fn main() -> Result<()> {
     if let Some(id) = cli.resume.clone() {
         let s = moneyball_core::session::load(&id)
             .with_context(|| format!("no session found with id '{}'", id))?;
-        println!("resuming session {} (started {})", s.meta.id, s.meta.started_at);
+        println!(
+            "resuming session {} (started {})",
+            s.meta.id, s.meta.started_at
+        );
         return moneyball_tui::run_with(Some(s));
     }
 
@@ -99,6 +108,16 @@ fn main() -> Result<()> {
         Cmd::Snapshot { check: _ } => {
             let p = cfg.snap_for(cli.date.as_deref())?;
             println!("snapshot ok: {}", p.display());
+        }
+        Cmd::Fetch { days } => {
+            let strict = AppConfig::resolve(cli.data_root.as_deref(), cli.date.as_deref())?;
+            println!("fetching {} days of insights from Meta...", days);
+            let report = moneyball_core::fetch::fetch_snapshot(&strict, days)
+                .with_context(|| "fetch failed")?;
+            for (name, n) in &report.per_product {
+                println!("  {:<40} {:>5} rows", name, n);
+            }
+            println!("snapshot written: {}", report.path.display());
         }
     }
     Ok(())
