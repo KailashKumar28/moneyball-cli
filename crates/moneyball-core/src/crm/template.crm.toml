@@ -1,0 +1,48 @@
+# moneyball CRM source spec - executed by `moneyball crm fetch`.
+# Docs: `moneyball crm contract` explains the target crm.json shape.
+# Secrets NEVER go in this file: use "secret:<name>" (stored via
+# `moneyball crm secret <name>`) or "env:<VAR>".
+#
+# The example values below are for LeadSquared; replace with your CRM.
+
+name = "leadsquared"
+
+[request]
+# Endpoint returning leads. GET with query params, or POST with a body.
+url = "https://api-in21.leadsquared.com/v2/LeadManagement.svc/Leads.RetrieveByCriteria"
+method = "GET"
+
+[request.headers]
+"x-LSQ-AccessKey" = "secret:leadsquared_access"
+"x-LSQ-SecretKey" = "secret:leadsquared_secret"
+
+[request.query]
+# Templates available anywhere in query/body: {from_date} {to_date}
+# (YYYY-MM-DD), {page}, {page_size}.
+fromDate = "{from_date}"
+toDate = "{to_date}"
+
+[paging]
+# "none" = single request; "page" = repeat with an incrementing page
+# number until a page returns fewer than `size` records.
+mode = "page"
+param = "pageIndex"
+start = 1
+size_param = "pageSize"
+size = 500
+
+[map]
+# Where the record array lives in the response ("" if the response IS
+# the array), then a dot path per contract field.
+root = "Leads"
+ad_id = "mx_Ad_Id"
+stage = "ProspectStage"
+delivery = "mx_Delivery_Time"
+funnel = ""
+
+[map.stage_map]
+# Your CRM's stage names -> canonical stages
+# (Lost, NonContactable, Contactable, Visit, Revisit, Booking).
+"Qualified" = "Contactable"
+"Site Visit" = "Visit"
+"Won" = "Booking"

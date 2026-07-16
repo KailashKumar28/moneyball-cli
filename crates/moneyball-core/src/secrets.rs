@@ -9,7 +9,8 @@
 //! machine and zero prompts.
 //!
 //! Layout:
-//!   { "meta_access_token": "...", "llm_keys": { "<provider_id>": "..." } }
+//!   { "meta_access_token": "...", "llm_keys": { "<provider_id>": "..." },
+//!     "crm_keys": { "<name>": "..." } }
 
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -24,6 +25,8 @@ struct AuthFile {
     meta_access_token: Option<String>,
     #[serde(default, skip_serializing_if = "HashMap::is_empty")]
     llm_keys: HashMap<String, String>,
+    #[serde(default, skip_serializing_if = "HashMap::is_empty")]
+    crm_keys: HashMap<String, String>,
 }
 
 /// `~/.moneyball/auth.json` - global (not per-workspace): keys belong to
@@ -93,5 +96,24 @@ pub fn load_llm_key(provider_id: &str) -> Option<String> {
 pub fn clear_llm_key(provider_id: &str) -> Result<()> {
     let mut f = load_file();
     f.llm_keys.remove(provider_id);
+    save_file(&f)
+}
+
+/// Store a CRM secret referenced from crm.toml as `secret:<name>`.
+pub fn store_crm_key(name: &str, value: &str) -> Result<()> {
+    let mut f = load_file();
+    f.crm_keys.insert(name.to_string(), value.to_string());
+    save_file(&f)
+}
+
+/// Read a CRM secret. `None` if absent.
+pub fn load_crm_key(name: &str) -> Option<String> {
+    load_file().crm_keys.get(name).cloned()
+}
+
+/// Remove a CRM secret. Idempotent.
+pub fn clear_crm_key(name: &str) -> Result<()> {
+    let mut f = load_file();
+    f.crm_keys.remove(name);
     save_file(&f)
 }

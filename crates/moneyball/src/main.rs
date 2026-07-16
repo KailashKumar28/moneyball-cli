@@ -68,6 +68,19 @@ enum CrmCmd {
         /// Path to the crm.json file to validate.
         file: std::path::PathBuf,
     },
+    /// Write an annotated crm.toml starter spec into the workspace.
+    Init,
+    /// Run the crm.toml spec: pull leads, validate, write crm.json.
+    Fetch {
+        /// How many trailing days of leads to request.
+        #[arg(long, default_value_t = 28)]
+        days: u32,
+    },
+    /// Store a CRM secret (value read from stdin, never from argv).
+    Secret {
+        /// Name referenced from crm.toml as "secret:<name>".
+        name: String,
+    },
 }
 
 fn main() -> Result<()> {
@@ -142,6 +155,46 @@ fn main() -> Result<()> {
                     std::process::exit(1);
                 }
             }
+            CrmCmd::Init => {
+                let strict = AppConfig::resolve(cli.data_root.as_deref(), None)?;
+                let path = moneyball_core::crm::fetch::spec_path(&strict);
+                if path.exists() {
+                    println!("crm.toml already exists: {}", path.display());
+                } else {
+                    std::fs::write(&path, moneyball_core::crm::source::TEMPLATE_TOML)?;
+                    println!("wrote starter spec: {}", path.display());
+                    println!("edit it for your CRM, then run: moneyball crm fetch");
+                }
+            }
+            CrmCmd::Fetch { days } => {
+                let strict = AppConfig::resolve(cli.data_root.as_deref(), None)?;
+                let r = moneyball_core::crm::fetch::fetch_crm(&strict, days)
+                    .with_context(|| "crm fetch failed")?;
+                println!(
+                    "crm fetch ({}): {} tickets over {} page(s)",
+                    r.name, r.tickets, r.pages
+                );
+                print_check_lines(&r.check);
+                match r.path {
+                    Some(p) => println!("PASS - crm.json written: {}", p.display()),
+                    None => {
+                        println!("FAIL - validation errors above; crm.json NOT written");
+                        std::process::exit(1);
+                    }
+                }
+            }
+            CrmCmd::Secret { name } => {
+                eprintln!("paste the value for \"{}\" and press Enter:", name);
+                let mut value = String::new();
+                std::io::stdin().read_line(&mut value)?;
+                let value = value.trim();
+                if value.is_empty() {
+                    eprintln!("empty value - nothing stored");
+                    std::process::exit(1);
+                }
+                moneyball_core::secrets::store_crm_key(&name, value)?;
+                println!("stored CRM secret \"{}\" in ~/.moneyball/auth.json", name);
+            }
         },
     }
     Ok(())
@@ -169,15 +222,7 @@ fn run_crm_check(cfg: &AppConfig, file: &std::path::Path) -> Result<bool> {
         .and_then(|p| moneyball_core::snapshot::load(&p).ok());
     let report = moneyball_core::crm::check(&parsed, &stages, snap.as_ref());
     println!("crm check: {} ({} tickets)", file.display(), report.tickets);
-    for line in &report.info {
-        println!("  -     {}", line);
-    }
-    for line in &report.warnings {
-        println!("  warn  {}", line);
-    }
-    for line in &report.errors {
-        println!("  error {}", line);
-    }
+    print_check_lines(&report);
     if report.passed() {
         println!("PASS");
     } else {
@@ -187,4 +232,16 @@ fn run_crm_check(cfg: &AppConfig, file: &std::path::Path) -> Result<bool> {
         );
     }
     Ok(report.passed())
+}
+
+fn print_check_lines(report: &moneyball_core::crm::CheckReport) {
+    for line in &report.info {
+        println!("  -     {}", line);
+    }
+    for line in &report.warnings {
+        println!("  warn  {}", line);
+    }
+    for line in &report.errors {
+        println!("  error {}", line);
+    }
 }

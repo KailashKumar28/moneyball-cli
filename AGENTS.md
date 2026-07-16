@@ -2,9 +2,10 @@
 
 Read-only Meta-ads advisor. The READ/analysis path (brief, funnel, advisor
 math) never touches the network; the only network modules are `meta.rs`
-(discovery), `fetch.rs` (explicit snapshot pull), `llm.rs` (model calls) -
-and nothing ever writes to Meta. Analysis reads snapshots via the documented
-schema, whether written by `/fetch` or an external pipeline. TUI is the management
+(discovery), `fetch.rs` (explicit snapshot pull), `llm.rs` (model calls),
+`crm/fetch.rs` (explicit CRM pull) - and nothing ever writes to Meta or the
+CRM. Analysis reads snapshots via the documented schema, whether written by
+`/fetch`, `crm fetch`, or an external pipeline. TUI is the management
 surface; no web UI.
 
 See [ARCHITECTURE.md](ARCHITECTURE.md) for the BINDING structure & style

@@ -6,6 +6,9 @@
 //! that lets any CRM (including custom AI-built ones) iterate against
 //! precise errors until its export conforms.
 
+pub mod fetch;
+pub mod source;
+
 use std::collections::{HashMap, HashSet};
 
 use chrono::{DateTime, TimeZone, Utc};
@@ -14,7 +17,7 @@ use serde_json::Value;
 use crate::snapshot::Snapshot;
 
 /// The contract document, printed verbatim by `moneyball crm contract`.
-pub const CONTRACT_MD: &str = include_str!("../../../docs/CRM_CONTRACT.md");
+pub const CONTRACT_MD: &str = include_str!("../../../../docs/CRM_CONTRACT.md");
 
 /// Canonical stage names, funnel order. Workspace `crm.stages` may
 /// override the recognized set; semantics below always apply.
@@ -276,11 +279,10 @@ fn check_stages(
     stages: &[String],
     r: &mut CheckReport,
 ) {
-    let known: HashSet<&str> = if stages.is_empty() {
-        CANONICAL_STAGES.iter().copied().collect()
-    } else {
-        stages.iter().map(String::as_str).collect()
-    };
+    // Canonical stages are always recognized; workspace crm.stages extends
+    // the set (it may name CRM-specific stages the export passes through).
+    let mut known: HashSet<&str> = CANONICAL_STAGES.iter().copied().collect();
+    known.extend(stages.iter().map(String::as_str));
     let mut unknown: HashMap<String, usize> = HashMap::new();
     for t in tickets {
         let s = ticket_stage(t);

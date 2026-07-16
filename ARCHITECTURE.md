@@ -23,17 +23,21 @@ reverse. Core has no ratatui/terminal dependency, ever. The same code path
 is exercised headless (sub-commands) and through the TUI.
 
 Network boundary: the read/analysis path (brief, funnel, advisor math)
-never touches the network. Network lives in exactly three core modules:
+never touches the network. Network lives in exactly four core modules:
 `meta.rs` (account discovery), `fetch.rs` (explicit snapshot pull),
-`llm.rs` (model calls). Nothing ever writes to Meta.
+`llm.rs` (model calls), `crm/fetch.rs` (explicit CRM pull driven by the
+declarative crm.toml spec). Nothing ever writes to Meta or the CRM.
 
 ## 2. I/O contract
 
 - Reads: snapshots at `<workspace>/.moneyball/history/snap/<date>/`.
-- Writes: `.moneyball/{config.json,history/,state/,runs/}` in the
-  workspace; `~/.moneyball/auth.json` (0600) for secrets - codex-style
+- Writes: `.moneyball/{config.json,crm.toml,history/,state/,runs/}` in
+  the workspace; `~/.moneyball/auth.json` (0600) for secrets - codex-style
   dotfile, not the OS keychain (keychain ACLs break for locally built
-  binaries). Secrets never appear in config.json or logs.
+  binaries). Secrets never appear in config.json, crm.toml, or logs -
+  crm.toml references them as `secret:<name>` / `env:<VAR>`.
+- CRM data enters only as contract-conformant `crm.json`
+  (docs/CRM_CONTRACT.md); `crm::check` gates every write of it.
 - `MB_AGENT=1` -> machine-readable output for sub-commands.
 
 ## 3. Module rules - the anti-verbosity contract
