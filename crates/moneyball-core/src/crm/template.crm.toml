@@ -9,6 +9,8 @@ name = "leadsquared"
 
 [request]
 # Endpoint returning leads. GET with query params, or POST with a body.
+# CSV-only CRM? Delete this whole [request] section and [paging], keep
+# [map] with column names, and run: moneyball crm import <file.csv>
 url = "https://api-in21.leadsquared.com/v2/LeadManagement.svc/Leads.RetrieveByCriteria"
 method = "GET"
 

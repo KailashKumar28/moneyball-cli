@@ -21,7 +21,8 @@ pub const TEMPLATE_TOML: &str = include_str!("template.crm.toml");
 pub struct SourceSpec {
     /// Display name, e.g. "leadsquared" or "acme-crm".
     pub name: String,
-    pub request: RequestSpec,
+    /// Absent for CSV-only sources (`moneyball crm import`).
+    pub request: Option<RequestSpec>,
     #[serde(default)]
     pub paging: PagingSpec,
     pub map: MapSpec,
@@ -173,6 +174,29 @@ pub fn transform(records: &[Value], map: &MapSpec) -> Vec<Value> {
         .collect()
 }
 
+/// CSV rows as records: header row names the fields, every value is a
+/// string (parse_epoch and the validator handle coercion downstream).
+/// For CSV, the spec's map paths are simply column names.
+pub fn csv_records(raw: &str) -> Result<Vec<Value>> {
+    let mut rdr = csv::ReaderBuilder::new()
+        .has_headers(true)
+        .from_reader(raw.as_bytes());
+    let headers = rdr
+        .headers()
+        .map_err(|e| Error::Config(format!("csv: {}", e)))?
+        .clone();
+    let mut out = Vec::new();
+    for row in rdr.records() {
+        let row = row.map_err(|e| Error::Config(format!("csv: {}", e)))?;
+        let mut rec = serde_json::Map::new();
+        for (h, v) in headers.iter().zip(row.iter()) {
+            rec.insert(h.to_string(), Value::String(v.to_string()));
+        }
+        out.push(Value::Object(rec));
+    }
+    Ok(out)
+}
+
 /// Dot-path lookup: `a.b.c` descends nested objects.
 fn get_path<'a>(v: &'a Value, path: &str) -> Option<&'a Value> {
     let mut cur = v;
@@ -269,6 +293,21 @@ delivery = "mx_Delivery_Time"
         assert_eq!(tickets[0]["ad_id"], "120211");
         assert_eq!(tickets[0]["stage"], "Visit");
         assert_eq!(tickets[0]["delivery"], "2026-07-15T09:30:00+05:30");
+    }
+
+    #[test]
+    fn csv_records_use_header_names() {
+        let raw = "Ad Id,Stage,Delivered\n111,Site Visit,2026-07-15T09:30:00+05:30\n";
+        let recs = csv_records(raw).unwrap();
+        assert_eq!(recs.len(), 1);
+        assert_eq!(recs[0]["Ad Id"], "111");
+        assert_eq!(recs[0]["Stage"], "Site Visit");
+    }
+
+    #[test]
+    fn spec_without_request_parses() {
+        let s = parse("name = \"csv-crm\"\n[map]\nad_id = \"Ad Id\"\nstage = \"Stage\"\ndelivery = \"Delivered\"\n").unwrap();
+        assert!(s.request.is_none());
     }
 
     #[test]

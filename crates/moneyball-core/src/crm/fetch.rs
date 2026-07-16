@@ -37,18 +37,13 @@ pub fn spec_path(cfg: &AppConfig) -> PathBuf {
 /// contract tickets, validate, and (only on PASS) write
 /// `<snap>/<today>/crm.json`.
 pub fn fetch_crm(cfg: &AppConfig, days: u32) -> Result<CrmFetchReport> {
-    let workspace = cfg
-        .workspace
-        .as_ref()
-        .ok_or_else(|| Error::Config("no workspace configured - run /setup first".into()))?;
-    let spec_file = spec_path(cfg);
-    let raw = std::fs::read_to_string(&spec_file).map_err(|_| {
-        Error::Config(format!(
-            "no CRM spec at {} - create one with: moneyball crm init",
-            spec_file.display()
-        ))
+    let spec = load_spec(cfg)?;
+    let request = spec.request.as_ref().ok_or_else(|| {
+        Error::Config(
+            "crm.toml has no [request] - a CSV-only spec; use: moneyball crm import <file.csv>"
+                .into(),
+        )
     })?;
-    let spec = source::parse(&raw)?;
     if spec.paging.mode == PagingMode::Page && spec.paging.param.is_empty() {
         return Err(Error::Config(
             "crm.toml: paging.mode = \"page\" requires paging.param".into(),
@@ -76,7 +71,7 @@ pub fn fetch_crm(cfg: &AppConfig, days: u32) -> Result<CrmFetchReport> {
     const MAX_PAGES: u32 = 500;
     loop {
         vars.insert("page", page.to_string());
-        let resp = request_page(&client, &spec, &vars)?;
+        let resp = request_page(&client, request, &spec.paging, &vars)?;
         let batch = source::records(&resp, &spec.map.root)?;
         let n = batch.len();
         records.extend(batch.iter().cloned());
@@ -94,24 +89,61 @@ pub fn fetch_crm(cfg: &AppConfig, days: u32) -> Result<CrmFetchReport> {
         page += 1;
     }
 
-    let tickets = source::transform(&records, &spec.map);
-    let crm = Value::Array(tickets);
+    validate_and_write(cfg, spec.name, &records, &spec.map, pages)
+}
 
-    // Validate before writing; join against the latest snapshot if any.
+/// Import a CSV export through the same spec map + validation pipeline.
+/// Offline counterpart to fetch_crm - map paths are CSV column names.
+pub fn import_csv(cfg: &AppConfig, file: &std::path::Path) -> Result<CrmFetchReport> {
+    let spec = load_spec(cfg)?;
+    let raw = std::fs::read_to_string(file)
+        .map_err(|e| Error::Config(format!("cannot read {}: {}", file.display(), e)))?;
+    let records = source::csv_records(&raw)?;
+    validate_and_write(cfg, spec.name, &records, &spec.map, 0)
+}
+
+fn load_spec(cfg: &AppConfig) -> Result<SourceSpec> {
+    cfg.workspace
+        .as_ref()
+        .ok_or_else(|| Error::Config("no workspace configured - run /setup first".into()))?;
+    let spec_file = spec_path(cfg);
+    let raw = std::fs::read_to_string(&spec_file).map_err(|_| {
+        Error::Config(format!(
+            "no CRM spec at {} - create one with: moneyball crm init",
+            spec_file.display()
+        ))
+    })?;
+    source::parse(&raw)
+}
+
+/// Shared tail of every ingestion path: transform, validate against the
+/// contract (+ latest snapshot join), write crm.json only on PASS.
+fn validate_and_write(
+    cfg: &AppConfig,
+    name: String,
+    records: &[Value],
+    map: &source::MapSpec,
+    pages: u32,
+) -> Result<CrmFetchReport> {
+    let stages = cfg
+        .workspace
+        .as_ref()
+        .map(|w| w.crm.stages.clone())
+        .unwrap_or_default();
+    let crm = Value::Array(source::transform(records, map));
     let snap = cfg
         .snap_for(None)
         .ok()
         .and_then(|p| crate::snapshot::load(&p).ok());
-    let check = super::check(&crm, &workspace.crm.stages, snap.as_ref());
-
+    let check = super::check(&crm, &stages, snap.as_ref());
     let path = if check.passed() {
-        let date = today.format("%Y-%m-%d").to_string();
+        let date = Local::now().date_naive().format("%Y-%m-%d").to_string();
         Some(write_crm_json(cfg, &date, &crm)?)
     } else {
         None
     };
     Ok(CrmFetchReport {
-        name: spec.name,
+        name,
         tickets: crm.as_array().map(Vec::len).unwrap_or(0),
         pages,
         path,
@@ -122,34 +154,34 @@ pub fn fetch_crm(cfg: &AppConfig, days: u32) -> Result<CrmFetchReport> {
 /// One HTTP call with refs resolved and templates expanded.
 fn request_page(
     client: &reqwest::blocking::Client,
-    spec: &SourceSpec,
+    request: &source::RequestSpec,
+    paging: &source::PagingSpec,
     vars: &HashMap<&str, String>,
 ) -> Result<Value> {
-    let url = source::expand(&spec.request.url, vars);
-    let mut req = match spec.request.method.to_uppercase().as_str() {
+    let url = source::expand(&request.url, vars);
+    let mut req = match request.method.to_uppercase().as_str() {
         "GET" => client.get(&url),
         "POST" => client.post(&url),
         m => return Err(Error::Config(format!("unsupported method {}", m))),
     };
-    for (k, v) in &spec.request.headers {
+    for (k, v) in &request.headers {
         req = req.header(k, source::expand(&source::resolve_ref(v)?, vars));
     }
-    let mut query: Vec<(String, String)> = spec
-        .request
+    let mut query: Vec<(String, String)> = request
         .query
         .iter()
         .map(|(k, v)| Ok((k.clone(), source::expand(&source::resolve_ref(v)?, vars))))
         .collect::<Result<_>>()?;
     // Page mode carries its params implicitly - the spec declares the
     // names once in [paging], not again in [request.query].
-    if spec.paging.mode == PagingMode::Page {
-        query.push((spec.paging.param.clone(), vars["page"].clone()));
-        if !spec.paging.size_param.is_empty() {
-            query.push((spec.paging.size_param.clone(), spec.paging.size.to_string()));
+    if paging.mode == PagingMode::Page {
+        query.push((paging.param.clone(), vars["page"].clone()));
+        if !paging.size_param.is_empty() {
+            query.push((paging.size_param.clone(), paging.size.to_string()));
         }
     }
     req = req.query(&query);
-    if let Some(body) = &spec.request.body {
+    if let Some(body) = &request.body {
         req = req
             .header("Content-Type", "application/json")
             .body(source::expand(body, vars));

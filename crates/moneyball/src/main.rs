@@ -76,6 +76,11 @@ enum CrmCmd {
         #[arg(long, default_value_t = 28)]
         days: u32,
     },
+    /// Import a CSV lead export through the crm.toml [map] (column names).
+    Import {
+        /// Path to the CSV file (header row required).
+        file: std::path::PathBuf,
+    },
     /// Store a CRM secret (value read from stdin, never from argv).
     Secret {
         /// Name referenced from crm.toml as "secret:<name>".
@@ -174,14 +179,19 @@ fn main() -> Result<()> {
                     "crm fetch ({}): {} tickets over {} page(s)",
                     r.name, r.tickets, r.pages
                 );
-                print_check_lines(&r.check);
-                match r.path {
-                    Some(p) => println!("PASS - crm.json written: {}", p.display()),
-                    None => {
-                        println!("FAIL - validation errors above; crm.json NOT written");
-                        std::process::exit(1);
-                    }
-                }
+                print_ingest_outcome(&r);
+            }
+            CrmCmd::Import { file } => {
+                let strict = AppConfig::resolve(cli.data_root.as_deref(), None)?;
+                let r = moneyball_core::crm::fetch::import_csv(&strict, &file)
+                    .with_context(|| "crm import failed")?;
+                println!(
+                    "crm import ({}): {} tickets from {}",
+                    r.name,
+                    r.tickets,
+                    file.display()
+                );
+                print_ingest_outcome(&r);
             }
             CrmCmd::Secret { name } => {
                 eprintln!("paste the value for \"{}\" and press Enter:", name);
@@ -232,6 +242,17 @@ fn run_crm_check(cfg: &AppConfig, file: &std::path::Path) -> Result<bool> {
         );
     }
     Ok(report.passed())
+}
+
+fn print_ingest_outcome(r: &moneyball_core::crm::fetch::CrmFetchReport) {
+    print_check_lines(&r.check);
+    match &r.path {
+        Some(p) => println!("PASS - crm.json written: {}", p.display()),
+        None => {
+            println!("FAIL - validation errors above; crm.json NOT written");
+            std::process::exit(1);
+        }
+    }
 }
 
 fn print_check_lines(report: &moneyball_core::crm::CheckReport) {
