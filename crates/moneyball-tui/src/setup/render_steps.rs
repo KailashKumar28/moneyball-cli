@@ -45,7 +45,7 @@ pub(crate) fn render_setup(f: &mut ratatui::Frame, area: Rect, s: &SetupState) {
         )));
     }
     footer_lines.push(Line::from(Span::styled(
-        "  enter next  \u{00B7}  esc back  \u{00B7}  ctrl+c quit",
+        "  enter next  \u{00B7}  esc exit setup  \u{00B7}  ctrl+c quit",
         Style::default().fg(Color::DarkGray),
     )));
     f.render_widget(
@@ -551,7 +551,7 @@ fn render_llm_paste_key(s: &SetupState) -> Vec<Line<'static>> {
     )));
     lines.push(Line::from(""));
     lines.push(Line::from(Span::styled(
-        "  enter to validate + continue  \u{00B7}  esc back",
+        "  enter to validate + continue  \u{00B7}  esc exit setup",
         Style::default().fg(Color::DarkGray),
     )));
     lines

@@ -198,9 +198,8 @@ pub(crate) fn handle_setup_key(app: &mut App, mut state: SetupState, k: KeyEvent
     // Char / Enter / Backspace fall through to the default handler below.
     match k.code {
         KeyCode::Esc => {
-            // Esc: clear the active input if any, else go back a step,
-            // else (first step) leave the wizard for the chat view -
-            // the footer advertises "esc back", so it must be true.
+            // Esc: clear the active input if any, else leave the wizard
+            // for the chat - the footer advertises "esc exit setup".
             let cleared = match state.step {
                 0 if !state.workspace_path.is_empty() => {
                     state.workspace_path.clear();
@@ -225,13 +224,10 @@ pub(crate) fn handle_setup_key(app: &mut App, mut state: SetupState, k: KeyEvent
             };
             if cleared {
                 state.error = None;
-            } else if state.step > 0 {
-                state.step -= 1;
-                state.meta_substep = 0;
-                state.error = None;
             } else {
-                // Leaving from the first step returns to the chat; an
-                // unconfigured workspace shows the welcome screen again.
+                // Esc leaves the wizard for the chat (Claude Code modal
+                // behavior) - saved steps are kept; /setup resumes with
+                // current values prefilled.
                 app.view = View::Brief;
                 app.status = Some("setup closed - /setup reopens it".into());
                 return;
