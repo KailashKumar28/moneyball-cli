@@ -175,9 +175,24 @@ fn handle_paste(app: &mut App, text: String) {
 
 fn handle_key(app: &mut App, k: KeyEvent) {
     if k.modifiers.contains(KeyModifiers::CONTROL) && k.code == KeyCode::Char('c') {
-        app.quit = true;
+        // Double-press to quit: a single stray Ctrl+C clears the input
+        // instead of killing the session (and the wizard) instantly.
+        let armed = app
+            .ctrl_c_armed
+            .is_some_and(|t| t.elapsed() < std::time::Duration::from_secs(2));
+        if armed {
+            app.quit = true;
+        } else {
+            app.ctrl_c_armed = Some(std::time::Instant::now());
+            app.input.clear();
+            app.cursor = 0;
+            app.completions.clear();
+            app.completion_idx = None;
+            app.status = Some("press ctrl+c again to quit".into());
+        }
         return;
     }
+    app.ctrl_c_armed = None;
     match &app.view.clone() {
         View::Setup(state) => setup::handle_setup_key(app, state.clone(), k),
         View::Brief => handle_brief_key(app, k),
@@ -261,16 +276,18 @@ fn handle_brief_key(app: &mut App, k: KeyEvent) {
             arm_cancel(app);
             app.chat.scroll_to_bottom();
         }
+        // Char-aware moves: the cursor is a byte index, so stepping by 1
+        // through a multibyte char would panic the next insert.
         KeyCode::Left => {
             arm_cancel(app);
-            if app.cursor > 0 {
-                app.cursor -= 1;
+            if let Some(p) = app.input[..app.cursor].chars().next_back() {
+                app.cursor -= p.len_utf8();
             }
         }
         KeyCode::Right => {
             arm_cancel(app);
-            if app.cursor < app.input.len() {
-                app.cursor += 1;
+            if let Some(n) = app.input[app.cursor..].chars().next() {
+                app.cursor += n.len_utf8();
             }
         }
         _ => {

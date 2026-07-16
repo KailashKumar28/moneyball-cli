@@ -31,6 +31,9 @@ pub struct App {
     pub snap_date: Option<String>,
     /// Loaded snapshot had no CRM data - l/q/v are not real zeros.
     pub crm_missing: bool,
+    /// First Ctrl+C timestamp - a second within 2s quits (codex/Claude
+    /// Code pattern: one stray Ctrl+C never kills the session).
+    pub ctrl_c_armed: Option<std::time::Instant>,
     pub quit: bool,
     pub quit_emoji: String,
     /// Chat-style message log. Every interaction (slash-command, free-form
@@ -160,6 +163,7 @@ impl App {
             brief: None,
             snap_date: None,
             crm_missing: false,
+            ctrl_c_armed: None,
             quit: false,
             quit_emoji: String::new(),
             chat,

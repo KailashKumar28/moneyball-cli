@@ -8,9 +8,6 @@ bottom after a release-sized batch.)
 
 ## Now (next slices, in order)
 
-- [ ] **Package C - input safety + exits**: char-aware cursor moves +
-      completion slices; double-Ctrl+C to quit; /setup Esc actually goes
-      back/exits; paste into chat respects cursor + strips control chars.
 - [ ] **UX polish batch** (from UX critique): spinner + elapsed + esc hint
       while working; context bar middle-truncation (snapshot/status always
       visible); single command registry drives palette + /help + footer
@@ -56,6 +53,12 @@ bottom after a release-sized batch.)
   with `cargo install` (gate #7); E2E-reproduce bugs before fixing them.
 
 ## Done log
+
+- [x] 2026-07-16 Package C shipped: char-aware Left/Right (multibyte
+      input no longer panics - tmux-verified with "cafe"+accent), single
+      Ctrl+C clears input + arms, second within 2s quits, /setup Esc
+      clears input -> steps back -> exits to chat (hint now true),
+      paste is cursor-aware with control chars stripped.
 
 - [x] 2026-07-16 Package B shipped: bracketed paste (multi-line paste =
       one editable insert, never auto-submits), unknown /commands
