@@ -36,8 +36,9 @@ csv = "1"
 anyhow = "1"
 thiserror = "1"
 
-# Secrets
-keyring = "3"
+# Secrets live in ~/.moneyball/auth.json (0600) - codex-style file store.
+# (We moved off `keyring`: macOS ties keychain ACLs to the code signature,
+# so every locally-built binary re-prompted the user for access.)
 
 # HTTP (Meta Graph API, Anthropic streaming later)
 reqwest = { version = "0.12", features = ["json", "stream", "blocking", "rustls-tls"] }

@@ -14,4 +14,3 @@ anyhow.workspace = true
 thiserror.workspace = true
 csv.workspace = true
 reqwest.workspace = true
-keyring.workspace = true
