@@ -33,6 +33,16 @@ pub const CANONICAL_STAGES: &[&str] = &[
 pub const QUALIFIED_PLUS: &[&str] = &["Contactable", "Visit", "Revisit", "Booking"];
 pub const VISIT_PLUS: &[&str] = &["Visit", "Revisit", "Booking"];
 
+/// Funnel milestones for one ticket: (qualified, visited, booked).
+/// Booked counts on `funnel == "WON"` regardless of stage.
+pub fn milestones(stage: &str, funnel: &str) -> (bool, bool, bool) {
+    (
+        QUALIFIED_PLUS.contains(&stage),
+        VISIT_PLUS.contains(&stage),
+        funnel == "WON" || stage == "Booking",
+    )
+}
+
 // ---------- ticket iteration ----------
 
 /// Iterate tickets in either accepted crm.json shape: a flat array of

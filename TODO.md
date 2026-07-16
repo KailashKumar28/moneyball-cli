@@ -14,9 +14,9 @@ bottom after a release-sized batch.)
 - [ ] **LeadZump via existing endpoint**: build `crm.toml` from the old
       fin_campaign_analysis pipeline's JSON endpoint; keep the
       "Stattic Ad" typo untouched (join rule - see AGENTS.md Don'ts).
-- [ ] **/funnel <product>**: per-entity funnel (campaign -> adset -> ad:
-      spend, m/l/q/v/b). Headless sub-command first, then TUI. Meta-side
-      numbers work today; CRM stages now available via crm.json.
+- [ ] **/funnel <product>**: headless `moneyball funnel` DONE with exact
+      mb.py parity (campaign/adset/ad, kill math, learning). Remaining:
+      wire into the TUI as `/funnel <product>` (tool cell + LLM readout).
 - [ ] **/diagnose <product>**: the 5 diagnostic checks over a snapshot,
       one summary cell + per-check detail. Headless first.
 
@@ -50,6 +50,11 @@ bottom after a release-sized batch.)
   with `cargo install` (gate #7); E2E-reproduce bugs before fixing them.
 
 ## Done log
+
+- [x] 2026-07-16 funnel headless: `moneyball funnel <product> --by
+      campaign|adset|ad --window N` - exact numeric parity vs
+      `pipeline/mb.py funnel` on live data (incl. kill table, learning
+      status, CRM join). Milestone semantics unified in crm::milestones.
 
 - [x] 2026-07-16 CRM phase 4 (headless): `moneyball crm connect` - probe
       endpoint, LLM drafts crm.toml once (parse-retry loop against a

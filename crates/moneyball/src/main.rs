@@ -52,6 +52,17 @@ enum Cmd {
         #[arg(long, default_value_t = 28)]
         days: u32,
     },
+    /// Per-entity funnel for a product: Meta + CRM joined, kill math.
+    Funnel {
+        /// Product name (as configured in the workspace).
+        product: String,
+        /// Aggregation level: campaign, adset or ad.
+        #[arg(long, default_value = "adset")]
+        by: String,
+        /// Window in complete days ending yesterday.
+        #[arg(long, default_value_t = 7)]
+        window: u32,
+    },
     /// Connect CRM data - print the crm.json contract, validate an export.
     Crm {
         #[command(subcommand)]
@@ -155,6 +166,14 @@ fn main() -> Result<()> {
                 println!("  {:<40} {:>5} rows", name, n);
             }
             println!("snapshot written: {}", report.path.display());
+        }
+        Cmd::Funnel {
+            product,
+            by,
+            window,
+        } => {
+            let strict = AppConfig::resolve(cli.data_root.as_deref(), cli.date.as_deref())?;
+            moneyball_core::funnel::run(&strict, &product, &by, window, cli.date.as_deref())?;
         }
         Cmd::Crm { cmd } => match cmd {
             CrmCmd::Contract => print!("{}", moneyball_core::crm::CONTRACT_MD),

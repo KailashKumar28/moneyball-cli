@@ -10,6 +10,7 @@ pub mod config;
 pub mod crm;
 pub mod error;
 pub mod fetch;
+pub mod funnel;
 pub mod llm;
 pub mod logo;
 pub mod meta;

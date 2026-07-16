@@ -151,14 +151,15 @@ fn compute_product(product: &str, snap: &Snapshot, window: &Window, goal: f64) -
         };
         let stage = crate::crm::ticket_stage(ticket);
         let funnel = crate::crm::ticket_funnel(ticket);
+        let (is_q, is_v, is_b) = crate::crm::milestones(&stage, &funnel);
         *l.entry(cid.clone()).or_default() += 1;
-        if crate::crm::QUALIFIED_PLUS.contains(&stage.as_str()) {
+        if is_q {
             *q.entry(cid.clone()).or_default() += 1;
         }
-        if crate::crm::VISIT_PLUS.contains(&stage.as_str()) {
+        if is_v {
             *v.entry(cid.clone()).or_default() += 1;
         }
-        if funnel == "WON" || stage == "Booking" {
+        if is_b {
             *b.entry(cid.clone()).or_default() += 1;
         }
     });
@@ -294,7 +295,7 @@ const LEAD_TYPES: &[&str] = &[
     "offsite_conversion.fb_pixel_lead",
 ];
 
-fn count_m_leads(actions: &[serde_json::Value]) -> u64 {
+pub(crate) fn count_m_leads(actions: &[serde_json::Value]) -> u64 {
     if actions.is_empty() {
         return 0;
     }
@@ -322,7 +323,7 @@ fn count_m_leads(actions: &[serde_json::Value]) -> u64 {
 
 // ---------- IST epoch math ----------
 
-fn ist_midnight_epoch(date: NaiveDate) -> i64 {
+pub(crate) fn ist_midnight_epoch(date: NaiveDate) -> i64 {
     let naive = date.and_hms_opt(0, 0, 0).unwrap();
     let utc = naive - Duration::hours(IST_OFFSET_HOURS) - Duration::minutes(IST_OFFSET_MINUTES);
     Utc.from_utc_datetime(&utc).timestamp()
