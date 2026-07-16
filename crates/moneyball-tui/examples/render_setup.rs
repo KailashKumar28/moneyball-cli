@@ -12,12 +12,12 @@ fn main() {
     let step: usize = args.get(1).and_then(|s| s.parse().ok()).unwrap_or(0);
     let substep: u8 = args.get(2).and_then(|s| s.parse().ok()).unwrap_or(0);
 
-    let cfg = AppConfig::resolve_optional(
-        Some("/Users/Kailash/D/moneyball-test/moneyball-data"),
-        None,
-    );
+    let cfg =
+        AppConfig::resolve_optional(Some("/Users/Kailash/D/moneyball-test/moneyball-data"), None);
     let mut app = App::new_for_test(cfg);
-    let mut s = SetupState::new(PathBuf::from("/Users/Kailash/D/moneyball-test/moneyball-data"));
+    let mut s = SetupState::new(PathBuf::from(
+        "/Users/Kailash/D/moneyball-test/moneyball-data",
+    ));
     s.workspace_path = "/Users/Kailash/D/moneyball-test/moneyball-data".into();
     s.step = step;
     s.meta_substep = substep;
@@ -25,21 +25,23 @@ fn main() {
     // Pre-populate state based on step.
     if step == 1 && substep >= 1 {
         // Generate 26 dummy ad accounts (matching the user's real discovery).
-        s.meta_discovered = (1..=26).map(|i| AdAccount {
-            id: format!("act_{:016}", 10000000000000000i64 + (i as i64) * 100000000),
-            name: match i {
-                1 => "Lake and Bloom - Prepaid".into(),
-                2 => "Fincity Official".into(),
-                3 => "Fincity Akash".into(),
-                4 => "New Account 3".into(),
-                5 => "Akash Gupta".into(),
-                6 => "Purva - Prepaid".into(),
-                7 => "Fincity FB AdRoll".into(),
-                n if n <= 18 => format!("Fincity Account #{}", n),
-                n => format!("Old Account {}", n),
-            },
-            account_status: Some(if i == 7 || i == 17 { 2 } else { 1 }),
-        }).collect();
+        s.meta_discovered = (1..=26)
+            .map(|i| AdAccount {
+                id: format!("act_{:016}", 10000000000000000i64 + (i as i64) * 100000000),
+                name: match i {
+                    1 => "Lake and Bloom - Prepaid".into(),
+                    2 => "Fincity Official".into(),
+                    3 => "Fincity Akash".into(),
+                    4 => "New Account 3".into(),
+                    5 => "Akash Gupta".into(),
+                    6 => "Purva - Prepaid".into(),
+                    7 => "Fincity FB AdRoll".into(),
+                    n if n <= 18 => format!("Fincity Account #{}", n),
+                    n => format!("Old Account {}", n),
+                },
+                account_status: Some(if i == 7 || i == 17 { 2 } else { 1 }),
+            })
+            .collect();
         s.meta_selections = vec![false; s.meta_discovered.len()];
         s.meta_highlight = 0;
         s.meta_scroll = 0;

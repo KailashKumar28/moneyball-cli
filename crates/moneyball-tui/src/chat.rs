@@ -83,6 +83,12 @@ pub mod cells {
     #[derive(Debug, Clone)]
     pub struct System(pub String);
 
+    /// Reserved for a future width-aware brief cell. Currently unused -
+    /// the /brief path pushes a pre-formatted ToolResult. Kept as a struct
+    /// + impl so the cell enum is stable for the future swap.
+    #[derive(Debug, Clone)]
+    pub struct BriefView;
+
     #[derive(Debug, Clone, Copy, PartialEq, Eq)]
     pub enum ToolStatus {
         Pending,
@@ -94,10 +100,10 @@ pub mod cells {
     impl ToolStatus {
         pub fn icon(self) -> &'static str {
             match self {
-                ToolStatus::Pending => "\u{25CB}",  // circle
-                ToolStatus::Running => "\u{25D0}",  // half-filled
-                ToolStatus::Done => "\u{25CF}",     // filled
-                ToolStatus::Failed => "\u{2716}",   // x mark
+                ToolStatus::Pending => "\u{25CB}", // circle
+                ToolStatus::Running => "\u{25D0}", // half-filled
+                ToolStatus::Done => "\u{25CF}",    // filled
+                ToolStatus::Failed => "\u{2716}",  // x mark
             }
         }
         pub fn color(self) -> Color {
@@ -115,7 +121,12 @@ pub mod cells {
             // `>` prompt glyph + user text, then a timestamp on the next line.
             vec![
                 Line::from(vec![
-                    Span::styled("\u{276F} ", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)),
+                    Span::styled(
+                        "\u{276F} ",
+                        Style::default()
+                            .fg(Color::Cyan)
+                            .add_modifier(Modifier::BOLD),
+                    ),
                     Span::styled(self.text.clone(), Style::default().fg(Color::White)),
                 ]),
                 Line::from(Span::styled(
@@ -132,18 +143,29 @@ pub mod cells {
             let mut out = Vec::new();
             let text = &self.text;
             // Wrap long text on word boundaries; trim trailing blank lines.
-            let wrapped = wrap_text(text, width.saturating_sub(indent.len() as u16).max(20) as usize);
+            let wrapped = wrap_text(
+                text,
+                width.saturating_sub(indent.len() as u16).max(20) as usize,
+            );
             for (i, line) in wrapped.iter().enumerate() {
                 let mut spans: Vec<Span<'static>> = Vec::new();
                 spans.push(Span::styled(indent, Style::default()));
                 if self.streaming && i == wrapped.len() - 1 {
-                    spans.push(Span::styled(line.clone(), Style::default().fg(Color::White)));
+                    spans.push(Span::styled(
+                        line.clone(),
+                        Style::default().fg(Color::White),
+                    ));
                     spans.push(Span::styled(
                         "\u{2588}",
-                        Style::default().fg(Color::Cyan).add_modifier(Modifier::SLOW_BLINK),
+                        Style::default()
+                            .fg(Color::Cyan)
+                            .add_modifier(Modifier::SLOW_BLINK),
                     ));
                 } else {
-                    spans.push(Span::styled(line.clone(), Style::default().fg(Color::White)));
+                    spans.push(Span::styled(
+                        line.clone(),
+                        Style::default().fg(Color::White),
+                    ));
                 }
                 out.push(Line::from(spans));
             }
@@ -154,7 +176,9 @@ pub mod cells {
                 if self.streaming {
                     spans.push(Span::styled(
                         "\u{2588}",
-                        Style::default().fg(Color::Cyan).add_modifier(Modifier::SLOW_BLINK),
+                        Style::default()
+                            .fg(Color::Cyan)
+                            .add_modifier(Modifier::SLOW_BLINK),
                     ));
                 }
                 out.push(Line::from(spans));
@@ -165,12 +189,21 @@ pub mod cells {
 
     impl ChatCell for ToolCall {
         fn display_lines(&self, _width: u16) -> Vec<Line<'static>> {
-            let arg = if self.args.is_empty() { String::new() } else { format!(" {}", self.args) };
+            let arg = if self.args.is_empty() {
+                String::new()
+            } else {
+                format!(" {}", self.args)
+            };
             vec![Line::from(vec![
                 Span::styled("  \u{23BF} ", Style::default().fg(Color::DarkGray)),
                 Span::styled(self.status.icon(), Style::default().fg(self.status.color())),
                 Span::styled(" moneyball ", Style::default().fg(Color::DarkGray)),
-                Span::styled(self.name.clone(), Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)),
+                Span::styled(
+                    self.name.clone(),
+                    Style::default()
+                        .fg(Color::Cyan)
+                        .add_modifier(Modifier::BOLD),
+                ),
                 Span::styled(arg, Style::default().fg(Color::Gray)),
             ])]
         }
@@ -182,16 +215,25 @@ pub mod cells {
             let indent = "      ";
             let max_w = width.saturating_sub(indent.len() as u16).max(20) as usize;
             for ln in &self.output {
-                for wrapped in wrap_text(ln, max_w) {
-                    out.push(Line::from(Span::styled(
-                        format!("{}{}", indent, wrapped),
-                        Style::default().fg(if self.success { Color::Gray } else { Color::Red }),
-                    )));
-                }
+                // Tool output is pre-formatted (aligned tables); never word-wrap
+                // it - `wrap_text` collapses runs of spaces and destroys column
+                // alignment. Clip to the panel width instead, keeping whitespace.
+                out.push(Line::from(Span::styled(
+                    format!("{}{}", indent, clip(ln, max_w)),
+                    Style::default().fg(if self.success {
+                        Color::Gray
+                    } else {
+                        Color::Red
+                    }),
+                )));
             }
             out.push(Line::from(Span::styled(
                 format!("      ({})", fmt_duration(self.duration_ms)),
-                Style::default().fg(if self.success { Color::Green } else { Color::Red }),
+                Style::default().fg(if self.success {
+                    Color::Green
+                } else {
+                    Color::Red
+                }),
             )));
             out
         }
@@ -205,11 +247,27 @@ pub mod cells {
             let mut out = Vec::new();
             for ln in self.0.split('\n') {
                 out.push(Line::from(Span::styled(
-                    if ln.is_empty() { "  ".to_string() } else { format!("  {}", ln) },
+                    if ln.is_empty() {
+                        "  ".to_string()
+                    } else {
+                        format!("  {}", ln)
+                    },
                     Style::default().fg(Color::DarkGray),
                 )));
             }
             out
+        }
+    }
+
+    /// BriefView cell - renders a brief as chat lines adapted to the
+    /// current column width. At wide widths, one product per line (table).
+    /// At narrow widths, three lines per product (name, metrics, KPIs).
+    impl ChatCell for BriefView {
+        fn display_lines(&self, _width: u16) -> Vec<Line<'static>> {
+            // Stub - the live /brief path uses ToolResult with the
+            // multi-line format from format_brief_as_lines. The Brief cell
+            // will swap in once we wire a width-aware brief view.
+            vec![]
         }
     }
 }
@@ -224,6 +282,11 @@ pub enum Cell {
     ToolCall(cells::ToolCall),
     ToolResult(cells::ToolResult),
     System(cells::System),
+    /// Reserved for a future width-aware brief view cell. Currently
+    /// unused in the production path - the /brief handler pushes a
+    /// pre-formatted ToolResult. Kept as a variant so the cell enum is
+    /// stable and we can swap in a real BriefView implementation later.
+    BriefPlaceholder,
 }
 
 impl Cell {
@@ -236,6 +299,7 @@ impl Cell {
             Cell::ToolCall(c) => Box::new(c),
             Cell::ToolResult(c) => Box::new(c),
             Cell::System(c) => Box::new(c),
+            Cell::BriefPlaceholder => Box::new(cells::System(String::new())),
         }
     }
 }
@@ -248,6 +312,7 @@ impl ChatCell for Cell {
             Cell::ToolCall(c) => c.display_lines(width),
             Cell::ToolResult(c) => c.display_lines(width),
             Cell::System(c) => c.display_lines(width),
+            Cell::BriefPlaceholder => vec![],
         }
     }
     fn desired_height(&self, width: u16) -> u16 {
@@ -257,6 +322,7 @@ impl ChatCell for Cell {
             Cell::ToolCall(c) => c.desired_height(width),
             Cell::ToolResult(c) => c.desired_height(width),
             Cell::System(c) => c.desired_height(width),
+            Cell::BriefPlaceholder => 0,
         }
     }
 }
@@ -271,14 +337,20 @@ pub struct ChatLog {
 }
 
 impl ChatLog {
-    pub fn new() -> Self { Self::default() }
+    pub fn new() -> Self {
+        Self::default()
+    }
 
-    pub fn len(&self) -> usize { self.cells.len() }
-    pub fn is_empty(&self) -> bool { self.cells.is_empty() }
+    pub fn len(&self) -> usize {
+        self.cells.len()
+    }
+    pub fn is_empty(&self) -> bool {
+        self.cells.is_empty()
+    }
 
     pub fn push(&mut self, c: Cell) {
         self.cells.push(c);
-        self.scroll = 0;  // auto-pin to bottom on new content
+        self.scroll = 0; // auto-pin to bottom on new content
     }
 
     /// Append a streaming delta to the most recent assistant cell, or
@@ -301,20 +373,44 @@ impl ChatLog {
     }
 
     /// Push a tool call + result pair (call first, result immediately after).
-    pub fn push_tool(&mut self, name: &str, args: &str, output: Vec<String>, success: bool, duration_ms: u64) {
+    pub fn push_tool(
+        &mut self,
+        name: &str,
+        args: &str,
+        output: Vec<String>,
+        success: bool,
+        duration_ms: u64,
+    ) {
         self.cells.push(Cell::ToolCall(cells::ToolCall {
-            name: name.into(), args: args.into(),
-            status: if success { cells::ToolStatus::Done } else { cells::ToolStatus::Failed },
+            name: name.into(),
+            args: args.into(),
+            status: if success {
+                cells::ToolStatus::Done
+            } else {
+                cells::ToolStatus::Failed
+            },
         }));
         self.cells.push(Cell::ToolResult(cells::ToolResult {
-            name: name.into(), output, success, duration_ms,
+            name: name.into(),
+            output,
+            success,
+            duration_ms,
         }));
     }
 
-    pub fn scroll_up(&mut self, n: u16)   { self.scroll = self.scroll.saturating_add(n); }
-    pub fn scroll_down(&mut self, n: u16) { self.scroll = self.scroll.saturating_sub(n); }
-    pub fn scroll_to_bottom(&mut self)    { self.scroll = 0; }
-    pub fn scroll_to_top(&mut self)       { /* approximate via huge value */ self.scroll = u16::MAX; }
+    pub fn scroll_up(&mut self, n: u16) {
+        self.scroll = self.scroll.saturating_add(n);
+    }
+    pub fn scroll_down(&mut self, n: u16) {
+        self.scroll = self.scroll.saturating_sub(n);
+    }
+    pub fn scroll_to_bottom(&mut self) {
+        self.scroll = 0;
+    }
+    pub fn scroll_to_top(&mut self) {
+        /* approximate via huge value */
+        self.scroll = u16::MAX;
+    }
 
     /// Render the full log within `height` rows for the given viewport
     /// width. Returns the lines (top-to-bottom).
@@ -323,11 +419,13 @@ impl ChatLog {
     /// to the bottom of the log. If > 0, we offset upward by `scroll`
     /// logical lines.
     pub fn render(&self, width: u16, height: u16) -> Vec<Line<'static>> {
-        if height == 0 { return vec![]; }
+        if height == 0 {
+            return vec![];
+        }
         // Compute every cell's height and flatten to logical lines so
         // scroll can be expressed in line units (cheap).
         let mut flat: Vec<Line<'static>> = Vec::new();
-        let mut breaks: Vec<usize> = vec![0];  // index into flat where each cell starts
+        let mut breaks: Vec<usize> = vec![0]; // index into flat where each cell starts
         for cell in &self.cells {
             let lines = cell.display_lines(width);
             // Add a blank separator line between cells (but not before the first).
@@ -349,11 +447,27 @@ impl ChatLog {
 
 // ---------- helpers ----------
 
+/// Clip a pre-formatted line to `width` columns, preserving internal whitespace
+/// (unlike `wrap_text`, which collapses space runs). Adds an ellipsis when cut.
+fn clip(s: &str, width: usize) -> String {
+    if width == 0 || s.chars().count() <= width {
+        return s.to_string();
+    }
+    let mut out: String = s.chars().take(width.saturating_sub(1)).collect();
+    out.push('\u{2026}');
+    out
+}
+
 fn wrap_text(text: &str, width: usize) -> Vec<String> {
-    if width == 0 || text.is_empty() { return vec![text.to_string()]; }
+    if width == 0 || text.is_empty() {
+        return vec![text.to_string()];
+    }
     let mut out: Vec<String> = Vec::new();
     for paragraph in text.split('\n') {
-        if paragraph.is_empty() { out.push(String::new()); continue; }
+        if paragraph.is_empty() {
+            out.push(String::new());
+            continue;
+        }
         let mut current = String::new();
         for word in paragraph.split_whitespace() {
             if word.len() > width {
@@ -379,12 +493,17 @@ fn wrap_text(text: &str, width: usize) -> Vec<String> {
                 current.push_str(word);
             }
         }
-        if !current.is_empty() { out.push(current); }
+        if !current.is_empty() {
+            out.push(current);
+        }
     }
     out
 }
 
 fn fmt_duration(ms: u64) -> String {
-    if ms < 1000 { format!("{}ms", ms) }
-    else { format!("{:.1}s", ms as f64 / 1000.0) }
+    if ms < 1000 {
+        format!("{}ms", ms)
+    } else {
+        format!("{:.1}s", ms as f64 / 1000.0)
+    }
 }

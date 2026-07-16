@@ -11,7 +11,7 @@
 //!   moneyball --resume <id>  -> resume a specific session
 //!   moneyball --list   -> list all saved sessions and exit
 
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 use anyhow::{Context, Result};
 use chrono::{DateTime, Utc};
@@ -23,11 +23,28 @@ use serde::{Deserialize, Serialize};
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum SessionCell {
-    System { text: String },
-    UserPrompt { text: String, at: DateTime<Utc> },
-    AssistantText { text: String, streaming: bool },
-    ToolCall { name: String, args: String, status: String },
-    ToolResult { name: String, output: Vec<String>, success: bool, duration_ms: u64 },
+    System {
+        text: String,
+    },
+    UserPrompt {
+        text: String,
+        at: DateTime<Utc>,
+    },
+    AssistantText {
+        text: String,
+        streaming: bool,
+    },
+    ToolCall {
+        name: String,
+        args: String,
+        status: String,
+    },
+    ToolResult {
+        name: String,
+        output: Vec<String>,
+        success: bool,
+        duration_ms: u64,
+    },
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -48,7 +65,7 @@ pub struct Session {
 
 impl Session {
     pub fn new(data_root: PathBuf) -> Self {
-        let id = make_session_id();
+        let id = make_session_id(Utc::now());
         Self {
             meta: SessionMeta {
                 id,
@@ -102,14 +119,15 @@ pub fn latest() -> Result<Option<Session>> {
         })
         .collect();
     // Most-recently-started first.
-    sessions.sort_by(|a, b| b.meta.started_at.cmp(&a.meta.started_at));
+    sessions.sort_by_key(|b| std::cmp::Reverse(b.meta.started_at));
     Ok(sessions.into_iter().next())
 }
 
 pub fn load(id: &str) -> Result<Session> {
     let p = session_path(id)?;
     let raw = std::fs::read_to_string(&p).with_context(|| format!("read {}", p.display()))?;
-    let s: Session = serde_json::from_str(&raw).with_context(|| format!("parse {}", p.display()))?;
+    let s: Session =
+        serde_json::from_str(&raw).with_context(|| format!("parse {}", p.display()))?;
     Ok(s)
 }
 
@@ -127,11 +145,11 @@ pub fn list() -> Result<Vec<SessionMeta>> {
             serde_json::from_str::<Session>(&raw).ok().map(|s| s.meta)
         })
         .collect();
-    metas.sort_by(|a, b| b.started_at.cmp(&a.started_at));
+    metas.sort_by_key(|b| std::cmp::Reverse(b.started_at));
     Ok(metas)
 }
 
-fn make_session_id() -> String {
+pub fn make_session_id(_now: chrono::DateTime<chrono::Utc>) -> String {
     // UTC timestamp + 4-char random suffix so two sessions in the same
     // second don't collide.
     let now = Utc::now();
@@ -156,7 +174,9 @@ fn rand_u32() -> u32 {
     let pid = std::process::id() as u32;
     // simple xorshift
     let mut x = nanos ^ (pid.rotate_left(13));
-    x ^= x << 13; x ^= x >> 17; x ^= x << 5;
+    x ^= x << 13;
+    x ^= x >> 17;
+    x ^= x << 5;
     x
 }
 
@@ -165,10 +185,15 @@ fn rand_u32() -> u32 {
 pub fn fmt_meta_line(m: &SessionMeta) -> String {
     let dur = Utc::now().signed_duration_since(m.started_at);
     let secs = dur.num_seconds().max(0);
-    let human = if secs < 60 { format!("{}s ago", secs) }
-        else if secs < 3600 { format!("{}m ago", secs / 60) }
-        else if secs < 86400 { format!("{}h ago", secs / 3600) }
-        else { format!("{}d ago", secs / 86400) };
+    let human = if secs < 60 {
+        format!("{}s ago", secs)
+    } else if secs < 3600 {
+        format!("{}m ago", secs / 60)
+    } else if secs < 86400 {
+        format!("{}h ago", secs / 3600)
+    } else {
+        format!("{}d ago", secs / 86400)
+    };
     let label_part = m.label.clone().unwrap_or_else(|| "(no label)".into());
     let end_part = match m.ended_at {
         Some(_) => "ended",

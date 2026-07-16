@@ -35,8 +35,6 @@ struct ErrorEnvelope {
 struct ApiError {
     message: String,
     #[serde(default)]
-    r#type: Option<String>,
-    #[serde(default)]
     code: Option<u32>,
 }
 
@@ -50,7 +48,9 @@ pub fn validate_token(token: &str) -> Result<()> {
         .send()
         .map_err(|e| Error::Meta(format!("network: {}", e)))?;
     let status = resp.status();
-    let body: serde_json::Value = resp.json().map_err(|e| Error::Meta(format!("json: {}", e)))?;
+    let body: serde_json::Value = resp
+        .json()
+        .map_err(|e| Error::Meta(format!("json: {}", e)))?;
     if !status.is_success() {
         return Err(Error::Meta(parse_error(&body, status)));
     }
@@ -71,12 +71,14 @@ pub fn list_ad_accounts(token: &str) -> Result<Vec<AdAccount>> {
         .send()
         .map_err(|e| Error::Meta(format!("network: {}", e)))?;
     let status = resp.status();
-    let body: serde_json::Value = resp.json().map_err(|e| Error::Meta(format!("json: {}", e)))?;
+    let body: serde_json::Value = resp
+        .json()
+        .map_err(|e| Error::Meta(format!("json: {}", e)))?;
     if !status.is_success() {
         return Err(Error::Meta(parse_error(&body, status)));
     }
-    let parsed: ApiResponse = serde_json::from_value(body)
-        .map_err(|e| Error::Meta(format!("decode: {}", e)))?;
+    let parsed: ApiResponse =
+        serde_json::from_value(body).map_err(|e| Error::Meta(format!("decode: {}", e)))?;
     Ok(parsed.data)
 }
 
@@ -89,7 +91,10 @@ fn http_client() -> Result<reqwest::blocking::Client> {
 
 fn parse_error(body: &serde_json::Value, status: reqwest::StatusCode) -> String {
     if let Ok(env) = serde_json::from_value::<ErrorEnvelope>(body.clone()) {
-        format!("Meta {}: {} (code {:?})", status, env.error.message, env.error.code)
+        format!(
+            "Meta {}: {} (code {:?})",
+            status, env.error.message, env.error.code
+        )
     } else {
         format!("Meta {}: {}", status, body)
     }
@@ -97,5 +102,8 @@ fn parse_error(body: &serde_json::Value, status: reqwest::StatusCode) -> String 
 
 pub fn account_id_for_storage(act_id_or_id: &str) -> String {
     // Meta returns "act_<digits>"; strip prefix so the config matches mb.py.
-    act_id_or_id.strip_prefix("act_").unwrap_or(act_id_or_id).to_string()
+    act_id_or_id
+        .strip_prefix("act_")
+        .unwrap_or(act_id_or_id)
+        .to_string()
 }

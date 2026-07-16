@@ -8,10 +8,10 @@ use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
 
 // Status glyphs
-pub const BRAND: &str = "\u{25C6}";  // black diamond
-pub const OK: &str = "\u{25CF}";      // black circle
-pub const LOAD: &str = "\u{25D0}";    // circle with left half black
-pub const IDLE: &str = "\u{25CB}";    // white circle
+pub const BRAND: &str = "\u{25C6}"; // black diamond
+pub const OK: &str = "\u{25CF}"; // black circle
+pub const LOAD: &str = "\u{25D0}"; // circle with left half black
+pub const IDLE: &str = "\u{25CB}"; // white circle
 
 // Status kinds drive the color of the trailing status indicator.
 #[derive(Debug, Clone, Copy)]
@@ -59,13 +59,26 @@ pub fn logo() -> Vec<Line<'static>> {
     vec![
         Line::from(vec![
             Span::raw("  "),
-            Span::styled(BRAND, Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)),
+            Span::styled(
+                BRAND,
+                Style::default()
+                    .fg(Color::Cyan)
+                    .add_modifier(Modifier::BOLD),
+            ),
             Span::raw(" "),
-            Span::styled("MONEYBALL", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)),
+            Span::styled(
+                "MONEYBALL",
+                Style::default()
+                    .fg(Color::Cyan)
+                    .add_modifier(Modifier::BOLD),
+            ),
             Span::styled("  \u{00B7}  ", Style::default().fg(Color::DarkGray)),
-            Span::styled("read-only Meta-ads advisor", Style::default().fg(Color::Gray)),
+            Span::styled(
+                "read-only Meta-ads advisor",
+                Style::default().fg(Color::Gray),
+            ),
         ]),
-        Line::from(""),  // spacer line so the logo doesn't crowd the context bar
+        Line::from(""), // spacer line so the logo doesn't crowd the context bar
     ]
 }
 
@@ -73,10 +86,13 @@ pub fn logo() -> Vec<Line<'static>> {
 pub fn context_line(workspace: &str, snapshot: Option<&str>, status: Status) -> Line<'static> {
     let snap_part = match snapshot {
         Some(d) => format!("  \u{00B7}  snapshot: {}", d),
-        None => format!("  \u{00B7}  no snapshot"),
+        None => "  \u{00B7}  no snapshot".to_string(),
     };
     Line::from(vec![
-        Span::styled("  \u{2514}\u{2500} workspace: ", Style::default().fg(Color::DarkGray)),
+        Span::styled(
+            "  \u{2514}\u{2500} workspace: ",
+            Style::default().fg(Color::DarkGray),
+        ),
         Span::styled(workspace.to_string(), Style::default().fg(Color::Gray)),
         Span::styled(snap_part, Style::default().fg(Color::DarkGray)),
         Span::styled("  \u{00B7}  ", Style::default().fg(Color::DarkGray)),
@@ -93,7 +109,9 @@ pub fn welcome_text(products: &[String]) -> Vec<Line<'static>> {
         Line::from(""),
         Line::from(Span::styled(
             "  Waiting for first snapshot",
-            Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD),
+            Style::default()
+                .fg(Color::Yellow)
+                .add_modifier(Modifier::BOLD),
         )),
         Line::from(""),
         Line::from("  moneyball is configured but there's no snapshot data to read yet."),
@@ -108,7 +126,11 @@ pub fn welcome_text(products: &[String]) -> Vec<Line<'static>> {
 
     if !products.is_empty() {
         lines.push(Line::from(Span::styled(
-            format!("  {} product{} configured:", products.len(), if products.len() == 1 { "" } else { "s" }),
+            format!(
+                "  {} product{} configured:",
+                products.len(),
+                if products.len() == 1 { "" } else { "s" }
+            ),
             Style::default().fg(Color::Cyan),
         )));
         for p in products {
@@ -119,7 +141,9 @@ pub fn welcome_text(products: &[String]) -> Vec<Line<'static>> {
 
     lines.push(Line::from(Span::styled(
         "  Quick actions",
-        Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD),
+        Style::default()
+            .fg(Color::Cyan)
+            .add_modifier(Modifier::BOLD),
     )));
     lines.push(Line::from("    /brief     reload from disk"));
     lines.push(Line::from("    /setup     re-run the setup wizard"));
