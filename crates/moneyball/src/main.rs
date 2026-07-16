@@ -339,8 +339,21 @@ fn run_crm_connect(cfg: &AppConfig) -> Result<()> {
     Ok(())
 }
 
-/// One stderr prompt -> one trimmed stdin line.
+/// One prompt -> one trimmed line. On a real terminal this is a
+/// rustyline editor (arrow keys, backspace, paste all behave); piped
+/// stdin (tests, scripts) falls back to a plain line read.
 fn ask(prompt: &str) -> Result<String> {
+    use std::io::IsTerminal;
+    if std::io::stdin().is_terminal() {
+        let mut rl = rustyline::DefaultEditor::new()?;
+        return match rl.readline(prompt) {
+            Ok(s) => Ok(s.trim().to_string()),
+            Err(
+                rustyline::error::ReadlineError::Interrupted | rustyline::error::ReadlineError::Eof,
+            ) => Ok(String::new()),
+            Err(e) => Err(e.into()),
+        };
+    }
     use std::io::Write;
     eprint!("{}", prompt);
     std::io::stderr().flush()?;
