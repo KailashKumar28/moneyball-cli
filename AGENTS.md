@@ -12,6 +12,8 @@ See [ARCHITECTURE.md](ARCHITECTURE.md) for the BINDING structure & style
 contract: crate layout, module/size rules, anti-verbosity rules, TUI/LLM
 patterns, and the definition-of-done gates. Read it before writing code.
 See [HANDOFF.md](HANDOFF.md) for recent decisions (prune, don't grow).
+See [TODO.md](TODO.md) for the project backlog - pick work from the top,
+check items off in the same commit that ships them.
 
 ## Definition of done
 
