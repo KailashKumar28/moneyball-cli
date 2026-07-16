@@ -1,67 +1,59 @@
 # AGENTS.md - moneyball-cli
-`moneyball` is a Rust CLI for Meta-ads portfolios: TUI REPL + slash-commands +
-sub-commands + daily advisor. TUI is the full management surface; no web UI.
-Users bring their own Meta token + CRM; moneyball reads fetcher output via a
-documented snapshot schema. **Never call Meta or CRM APIs in moneyball core.**
 
-## Hard-won lessons from session 1
-- **Iterate, don't sprint.** One slice at a time: implement + test + show the user actual output + get sign-off BEFORE moving on.
-- **UI placeholders are bugs.** Every wizard step is a real form with clear instructions.
-- **Defaults adapt to where the user is.** Workspace = `<cwd>/moneyball-data`, never `~/moneyball-data`. Auto-create user-confirmed paths.
-- **Always render via `TestBackend` before installing.** Catches UI issues before the user screenshots them.
-- **First-run TUI NEVER errors.** `main.rs` uses `resolve_optional()`; sub-commands that strictly need a workspace (`brief`) re-resolve strict.
-- **One fix at a time, then wait for sign-off.**
+Read-only Meta-ads advisor. The READ/analysis path (brief, funnel, advisor
+math) never touches the network; the only network modules are `meta.rs`
+(discovery), `fetch.rs` (explicit snapshot pull), `llm.rs` (model calls) -
+and nothing ever writes to Meta. Analysis reads snapshots via the documented
+schema, whether written by `/fetch` or an external pipeline. TUI is the management
+surface; no web UI.
 
-## Architecture (locked 2026-07-13)
-Rust workspace, edition 2021, MSRV 1.96. Headless-core split: `moneyball-core`
-= logic (snapshot, brief, funnel, advisor, ledger writes); `moneyball-tui` =
-thin ratatui front-end; `moneyball` binary = `clap` dispatcher. Same code
-path; TUI subscribes to typed event deltas. Only writes: `ledger.jsonl` and
-`runs/<date>/`. `MB_AGENT=1` = agent mode. Tests = `cargo test`, hermetic.
-
-## First-run wizard (4 steps)
-1. Workspace path - `<cwd>/moneyball-data` default, auto-create on Enter.
-2. Connect Meta (optional, recommended) - paste long-lived Marketing API
-   token or `skip`. Multi-select checkboxes: Up/Down/PgUp/PgDn/Home/End to
-   move, Space=toggle, `a`=all/none, Enter=confirm. Optional rename step
-   after. Token saved to OS keychain via `keyring` (macOS Keychain / Linux
-   Secret Service).
-3. Confirm products - auto-filled if Meta connected; `Name AdAccount` or
-   `demo` to add manually.
-4. Goals per product - blank Enter accepts defaults of 10.
-
-**Removed:** the `target_rs_per_q` setup step. That value is per-product and
-per-industry (~₹100 e-commerce, ~₹2,500 real-estate, higher for B2B). The
-advisor should derive it from observed performance, not pin it in setup.
-Config field exists but stays `None` after setup; tunable later via
-`/goal propose` or direct JSON edit.
-
-## Code style (Rust)
-- Snapshot numeric fields are `String` (Meta returns strings); use `parse_f64`/`parse_u64` helpers in `AdsDailyRow`.
-- M-Leads: mirror `mb.py:leads_from_actions` exactly - first-match canonical list, then "lead"-substring fallback. See `count_m_leads` in `brief.rs`.
-- CRM tickets can be flat array OR `{campaign_id: {tickets: [...]}}` - normalize via `for_each_crm_ticket`.
-- Window math: `d0 = yesterday - ndays + 1`, `d1 = yesterday`; snap day excluded. IST epoch helper.
-- Errors: `thiserror` in `error.rs`; `anyhow` only at binary edge. No `unwrap()` in library code.
-- Hand-rolled table formatter in `brief.rs:format_brief_table` (parity with `mb.py:_tab`).
-
-## Where new things go
-- Sub-command `foo` -> clap variant in `crates/moneyball/src/main.rs` + math in `crates/moneyball-core/src/foo.rs`. Don't add to TUI `submit()` until headless parity-tested.
-- TUI view -> new `View` variant with `render_*` + `handle_*_key`.
-- Render harness -> `crates/moneyball-tui/examples/render_*.rs` via `TestBackend`.
-- Test -> `crates/moneyball-core/tests/` with hermetic fixture under `fixtures/snap/<date>/`.
+See [ARCHITECTURE.md](ARCHITECTURE.md) for the BINDING structure & style
+contract: crate layout, module/size rules, anti-verbosity rules, TUI/LLM
+patterns, and the definition-of-done gates. Read it before writing code.
+See [HANDOFF.md](HANDOFF.md) for recent decisions (prune, don't grow).
 
 ## Definition of done
-1. `cargo build` clean. 2. `cargo test` green. 3. Render via TestBackend and confirm. 4. Run vs `2026-07-13`, parity with `python3 pipeline/mb.py <cmd>`. 5. **Show user actual stdout.** 6. `cargo install --path crates/moneyball --locked --quiet`.
+
+1. `cargo build --workspace` clean.
+2. `cargo test --workspace` green.
+3. `cargo clippy --workspace --all-targets -- -D warnings` clean.
+4. Render via TestBackend (`cargo run --example render_*`); confirm visually.
+5. Headless CLI parity vs `python3 pipeline/mb.py <cmd>`.
+6. **Show user actual stdout.**
+7. `cargo install --path crates/moneyball --locked --quiet`.
+
+## Hard-won lessons
+
+- **Iterate, don't sprint.** One slice = one bug fix, one feature, or one QA
+  pass. Show user actual output + get sign-off before starting the next.
+- **UI placeholders are bugs.** Setup wizard steps must each render a
+  `prompt_line(...)` with explicit instructions (see `render_step_*` in lib.rs).
+  No empty body panels - verify with `render_views` harness before commit.
+- **Defaults adapt to where the user is.** Workspace = `<cwd>/moneyball-data`,
+  never `~/moneyball-data`. Auto-create user-confirmed paths.
+- **First-run TUI NEVER errors.** `main.rs` uses `resolve_optional()`; sub-
+  commands that strictly need a workspace (`brief`) re-resolve strict.
+- **ASCII only in TUI output.** Replace multibyte with ASCII (`U+25B8` -> `>`,
+  `U+20B9` -> `Rs.`). Some terminal fonts can't render multibyte.
+
+## Where new things go
+
+- Sub-command `foo` -> clap variant in `crates/moneyball/src/main.rs` + math in
+  `crates/moneyball-core/src/foo.rs`. Don't add to TUI `submit()` until headless
+  parity-tested.
+- TUI view -> new `View` variant with `render_*` + `handle_*_key`.
+- Render harness -> `crates/moneyball-tui/examples/render_*.rs` via
+  `TestBackend`.
+- Test -> `crates/moneyball-core/tests/` with hermetic fixture under
+  `fixtures/snap/<date>/`.
 
 ## Don'ts
-- Do NOT import from `pipeline/mb.py` or any third-party pipeline. Reimplement.
-- Do NOT call Meta or CRM APIs from moneyball-core. Reads snapshots only.
-- Do NOT write anywhere except `ledger.jsonl` and `runs/<date>/`.
-- Do NOT fix "Stattic Ad" Meta typo (breaks LeadZump ad-id join). Do NOT bucket CRM by `created_at` for short windows - use `delivery_time`.
-- Do NOT use `AppConfig::resolve()` in `main.rs`. Use `resolve_optional()`; re-resolve strict in sub-commands.
-- Do NOT trust `openclaw/openclaw` or `NousResearch/hermes-agent` as design refs (implausible stars). Use Claude Code / gemini-cli / pi or Codex instead.
 
-## Current state
-Built: `brief` (parity-verified vs `mb.py scoreboard`), TUI with brief view +
-slash-completion + Esc quit, first-run wizard. Installed at
-`~/.cargo/bin/moneyball`. Next: `funnel` (parity), then Meta-connect wizard.
+- Do NOT import from `pipeline/mb.py` or any third-party pipeline. Reimplement.
+- Do NOT write anywhere except `ledger.jsonl` and `runs/<date>/`.
+- Do NOT fix "Stattic Ad" Meta typo (breaks LeadZump ad-id join). Do NOT bucket
+  CRM by `created_at` for short windows - use `delivery_time`.
+- Do NOT use `AppConfig::resolve()` in `main.rs`. Use `resolve_optional()`;
+  re-resolve strict in sub-commands.
+- Do NOT trust `openclaw/openclaw` or `NousResearch/hermes-agent` as design refs
+  (implausible stars). Use Claude Code / gemini-cli / pi or Codex.

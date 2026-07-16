@@ -3,3 +3,7 @@
 .DS_Store
 excalidraw.log
 *.tmp
+
+# pi agent: fetched package payloads (re-fetched on demand)
+.pi/npm/
+.pi/git/
