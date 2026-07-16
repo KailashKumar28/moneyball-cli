@@ -46,11 +46,26 @@ pub struct App {
     pub stream: Option<std::sync::mpsc::Receiver<StreamEvent>>,
 }
 
-/// Events sent by the LLM streaming worker thread.
+/// Events sent by background worker threads (LLM streaming, Meta fetch),
+/// drained by the event loop each tick so the UI never blocks.
 pub enum StreamEvent {
     Delta(String),
-    Done { ms: u64, provider: String },
+    Done {
+        ms: u64,
+        provider: String,
+    },
     Failed(String),
+    /// `/fetch` worker finished pulling a snapshot from Meta.
+    FetchDone {
+        report: moneyball_core::fetch::FetchReport,
+        days: u32,
+        ms: u64,
+    },
+    FetchFailed {
+        err: String,
+        days: u32,
+        ms: u64,
+    },
 }
 
 impl App {

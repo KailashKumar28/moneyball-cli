@@ -286,12 +286,18 @@ You have access to a 7-day snapshot of the portfolio (per-product spend, leads, 
 Answer the user's question using that context. If the question can't be answered from the snapshot, say so plainly and suggest a slash command that would help (/brief, /funnel <product>, /diagnose <product>).\n\
 Keep the answer focused and concrete. Cite the numbers you use. 3-6 sentences unless the user explicitly asks for more.";
 
-/// Pull `days` of insights from Meta, write the snapshot, then load and
-/// show the brief (numbers + streaming LLM commentary). Shared by /fetch
+/// Pull `days` of insights from Meta on a worker thread (the network pull
+/// takes seconds - blocking the event loop here froze the UI). The result
+/// arrives as StreamEvent::FetchDone/FetchFailed on the tick drain, which
+/// hands it to `on_fetch_done`/`on_fetch_failed` below. Shared by /fetch
 /// and by /brief's self-heal path when no snapshot exists yet.
 fn run_fetch(app: &mut App, days: u32) {
     use crate::chat::cells;
     use crate::chat::Cell;
+    if app.stream.is_some() {
+        app.status = Some("still working - esc to interrupt, then resend".into());
+        return;
+    }
     app.chat.push(Cell::AssistantText(cells::AssistantText {
         text: format!(
             "fetching {} days of insights from Meta (this can take a moment)...",
@@ -299,43 +305,59 @@ fn run_fetch(app: &mut App, days: u32) {
         ),
         streaming: false,
     }));
-    let started = std::time::Instant::now();
-    match moneyball_core::fetch::fetch_snapshot(&app.cfg, days) {
-        Ok(report) => {
-            let mut out: Vec<String> = report
-                .per_product
-                .iter()
-                .map(|(name, n)| format!("{:<40} {:>5} rows", name, n))
-                .collect();
-            out.push(String::new());
-            out.push(format!("snapshot written: {}", report.path.display()));
-            app.chat.push_tool(
-                "fetch",
-                &format!("{} days", days),
-                out,
-                true,
-                started.elapsed().as_millis() as u64,
-            );
-            // Load the fresh snapshot and show the brief right away.
-            app.load_brief();
-            if let Some(b) = &app.brief {
-                let lines = format_brief_as_lines(b);
-                let user_prompt = build_brief_prompt(b);
-                app.chat.push_tool("brief", "", lines, true, 0);
-                let sys = format!("{}\n\n{}", BRIEF_SYSTEM_PROMPT, app_state_block(app));
-                call_agent(app, &sys, &user_prompt);
-            }
-        }
-        Err(e) => {
-            app.chat.push_tool(
-                "fetch",
-                &format!("{} days", days),
-                vec![format!("{}", e)],
-                false,
-                started.elapsed().as_millis() as u64,
-            );
-        }
+    let (tx, rx) = std::sync::mpsc::channel::<StreamEvent>();
+    let cfg = app.cfg.clone();
+    std::thread::spawn(move || {
+        let started = std::time::Instant::now();
+        let ev = match moneyball_core::fetch::fetch_snapshot(&cfg, days) {
+            Ok(report) => StreamEvent::FetchDone {
+                report,
+                days,
+                ms: started.elapsed().as_millis() as u64,
+            },
+            Err(e) => StreamEvent::FetchFailed {
+                err: format!("{}", e),
+                days,
+                ms: started.elapsed().as_millis() as u64,
+            },
+        };
+        let _ = tx.send(ev);
+    });
+    app.stream = Some(rx);
+}
+
+/// Fetch worker succeeded: show the per-product rows, then load the fresh
+/// snapshot and chain into the brief + streaming LLM commentary. Called
+/// from the event loop's drain AFTER it cleared `app.stream`, so
+/// `call_agent` is free to start the LLM stream.
+pub(crate) fn on_fetch_done(
+    app: &mut App,
+    report: moneyball_core::fetch::FetchReport,
+    days: u32,
+    ms: u64,
+) {
+    let mut out: Vec<String> = report
+        .per_product
+        .iter()
+        .map(|(name, n)| format!("{:<40} {:>5} rows", name, n))
+        .collect();
+    out.push(String::new());
+    out.push(format!("snapshot written: {}", report.path.display()));
+    app.chat
+        .push_tool("fetch", &format!("{} days", days), out, true, ms);
+    app.load_brief();
+    if let Some(b) = &app.brief {
+        let lines = format_brief_as_lines(b);
+        let user_prompt = build_brief_prompt(b);
+        app.chat.push_tool("brief", "", lines, true, 0);
+        let sys = format!("{}\n\n{}", BRIEF_SYSTEM_PROMPT, app_state_block(app));
+        call_agent(app, &sys, &user_prompt);
     }
+}
+
+pub(crate) fn on_fetch_failed(app: &mut App, err: String, days: u32, ms: u64) {
+    app.chat
+        .push_tool("fetch", &format!("{} days", days), vec![err], false, ms);
 }
 
 /// Live app state injected into every LLM system prompt so the model

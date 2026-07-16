@@ -41,39 +41,51 @@ pub(crate) fn event_loop(t: &mut Tui, app: &mut App) -> Result<()> {
     Ok(())
 }
 
-/// Drain any pending LLM stream deltas into the chat's streaming cell.
-/// Runs every tick, so text appears as it arrives (~10 redraws/sec).
+/// Drain any pending worker events (LLM stream deltas, fetch results)
+/// into the app. Runs every tick, so text appears as it arrives
+/// (~10 redraws/sec). The receiver borrow is released before each event
+/// is handled because fetch completion chains into a NEW stream
+/// (`on_fetch_done` -> call_agent).
 fn drain_stream(app: &mut App) {
     use std::sync::mpsc::TryRecvError;
-    let Some(rx) = &app.stream else { return };
-    let mut finished = false;
     loop {
-        match rx.try_recv() {
+        let ev = {
+            let Some(rx) = &app.stream else { return };
+            rx.try_recv()
+        };
+        match ev {
             Ok(StreamEvent::Delta(d)) => app.chat.append_assistant(&d),
             Ok(StreamEvent::Done { ms, provider }) => {
                 app.chat
                     .append_assistant(&format!(" ({}ms via {})", ms, provider));
                 app.chat.finish_streaming();
-                finished = true;
-                break;
+                app.stream = None;
+                return;
             }
             Ok(StreamEvent::Failed(e)) => {
                 app.chat
                     .append_assistant(&format!("llm call failed: {}", e));
                 app.chat.finish_streaming();
-                finished = true;
-                break;
+                app.stream = None;
+                return;
             }
-            Err(TryRecvError::Empty) => break,
+            Ok(StreamEvent::FetchDone { report, days, ms }) => {
+                app.stream = None;
+                commands::on_fetch_done(app, report, days, ms);
+                return;
+            }
+            Ok(StreamEvent::FetchFailed { err, days, ms }) => {
+                app.stream = None;
+                commands::on_fetch_failed(app, err, days, ms);
+                return;
+            }
+            Err(TryRecvError::Empty) => return,
             Err(TryRecvError::Disconnected) => {
                 app.chat.finish_streaming();
-                finished = true;
-                break;
+                app.stream = None;
+                return;
             }
         }
-    }
-    if finished {
-        app.stream = None;
     }
 }
 
