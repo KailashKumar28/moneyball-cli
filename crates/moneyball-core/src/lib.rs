@@ -5,6 +5,7 @@
 //! loop. It has no TUI dependency - the TUI and any other front-end
 //! consume it as a library.
 
+pub mod agent;
 pub mod brief;
 pub mod config;
 pub mod crm;
