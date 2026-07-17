@@ -108,6 +108,16 @@ pub fn load(snap_path: &Path) -> Result<Snapshot> {
         .and_then(|n| n.to_str())
         .ok_or_else(|| Error::Config(format!("bad snapshot path: {}", snap_path.display())))?
         .to_string();
+    // The dir name IS the snapshot date. External pipelines write these
+    // dirs, so stray names (backups, scratch) are expected input - fail
+    // here so every constructed Snapshot carries a parseable date
+    // (brief/funnel rely on that).
+    if chrono::NaiveDate::parse_from_str(&date, "%Y-%m-%d").is_err() {
+        return Err(Error::Config(format!(
+            "snapshot dir name is not a YYYY-MM-DD date: {}",
+            snap_path.display()
+        )));
+    }
     let mut ads_daily = Vec::new();
     let mut adsets = serde_json::Value::Array(vec![]);
     let mut creatives = serde_json::Value::Array(vec![]);

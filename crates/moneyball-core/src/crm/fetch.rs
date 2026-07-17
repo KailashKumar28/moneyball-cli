@@ -242,6 +242,17 @@ fn validate_and_write(
         .map(|w| w.crm.stages.clone())
         .unwrap_or_default();
     let crm = Value::Array(source::transform(records, map));
+    // Zero tickets never reach disk: an empty export means a wrong date
+    // window, a bad map.root, or a broken pull - writing [] would
+    // replace a good crm.json and turn /brief's CRM columns into
+    // silent zeros (the exact misinformation mod.rs warns about).
+    if crm.as_array().map(Vec::is_empty).unwrap_or(true) {
+        return Err(Error::Config(format!(
+            "{}: 0 tickets after transform - refusing to write crm.json; \
+             check the spec's date window and map.root",
+            name
+        )));
+    }
     let snap = cfg
         .snap_for(None)
         .ok()

@@ -647,49 +647,4 @@ mod paste_tests {
         }
     }
 
-    /// Round-trip test: a keychain write that returns Ok should also
-    /// be readable. Catches the macOS bug where an ad-hoc binary's
-    /// write is silently dropped (the wizard's verify-after-write
-    /// guard relies on this). Skipped on headless environments where
-    /// the keychain isn't available, and prints a clear warning if
-    /// the env has the macOS ACL bug (since CI on ad-hoc binaries
-    /// would otherwise fail forever).
-    #[test]
-    fn keychain_round_trip_persists_for_wizard() {
-        let provider = "test_round_trip_provider";
-        let token = "sk-test-1234567890abcdef";
-        // Best-effort cleanup before the test.
-        moneyball_core::secrets::clear_llm_key(provider).ok();
-        if moneyball_core::secrets::store_llm_key(provider, token).is_err() {
-            eprintln!(
-                "[moneyball] skipping keychain round-trip test: write failed \
-                 (likely headless / no keychain access in this env)"
-            );
-            return;
-        }
-        let read_back = moneyball_core::secrets::load_llm_key(provider);
-        moneyball_core::secrets::clear_llm_key(provider).ok();
-        match read_back.as_deref() {
-            Some(t) if t == token => {} // success
-            Some(other) => panic!(
-                "keychain read returned a different value than was written: \
-                 {:?} (likely a keychain corruption / multi-process race)",
-                other
-            ),
-            None => {
-                // The macOS ad-hoc-binary ACL bug. The wizard now
-                // catches this with a verify-after-write guard; this
-                // test just warns (since CI on a non-signed binary
-                // would otherwise fail forever). If you see this in
-                // a properly-signed build, the wizard guard is the
-                // safety net.
-                eprintln!(
-                    "[moneyball] keychain round-trip test: write returned Ok \
-                     but read returned None. This is the macOS ad-hoc-binary \
-                     ACL bug - the wizard now rejects this case via \
-                     verify-after-write. Sign the binary to make this pass."
-                );
-            }
-        }
-    }
 }

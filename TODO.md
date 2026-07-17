@@ -56,6 +56,17 @@ bottom after a release-sized batch.)
 
 ## Done log
 
+- [x] 2026-07-17 Audit package D (all five P0s from the full architecture
+      audit): heal_history now runs before base_len capture (Esc during a
+      tool no longer corrupts sessions with per-turn duplicates); snapshot
+      dir names validated as dates in snap_for + snapshot::load (stray
+      dirs error cleanly instead of panicking brief/funnel - E2E verified);
+      empty CRM exports refuse to overwrite crm.json (E2E: header-only CSV
+      import leaves good data untouched); pasted-curl query-param
+      credentials secretized before disk/LLM (per-param prompt, E2E via
+      tmux); secrets tests hermetic via MONEYBALL_AUTH_PATH seam + atomic
+      auth.json save (tmp+rename, pid-unique).
+
 - [x] 2026-07-17 CRM keys-only connect shipped: preset catalog
       (LeadZump proven, LeadSquared docs-based), crm connect = pick CRM
       -> paste keys (with where-to-find help) -> live test pull gates

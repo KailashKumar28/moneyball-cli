@@ -50,8 +50,8 @@ pub fn compute(
     cfg: &AppConfig,
     history: &[HistoryRow],
 ) -> ProductRowsAndFeasibility {
-    let snap_date =
-        NaiveDate::parse_from_str(&snap.date, "%Y-%m-%d").expect("snapshot date is YYYY-MM-DD");
+    let snap_date = NaiveDate::parse_from_str(&snap.date, "%Y-%m-%d")
+        .expect("snapshot::load validated the date");
     let d1 = snap_date - Duration::days(1); // yesterday
     let d0 = d1 - Duration::days(6); // 7-day window: d0..=d1
 

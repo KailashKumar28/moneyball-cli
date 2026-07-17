@@ -32,6 +32,11 @@ struct AuthFile {
 /// `~/.moneyball/auth.json` - global (not per-workspace): keys belong to
 /// the user, not to a data directory.
 pub fn auth_path() -> Result<PathBuf> {
+    // Test seam: hermetic tests must never touch the user's real
+    // credentials (ARCHITECTURE gate 3).
+    if let Some(p) = std::env::var_os("MONEYBALL_AUTH_PATH") {
+        return Ok(PathBuf::from(p));
+    }
     let home = std::env::var_os("HOME")
         .map(PathBuf::from)
         .ok_or_else(|| Error::Secrets("HOME not set".into()))?;
@@ -53,12 +58,19 @@ fn save_file(f: &AuthFile) -> Result<()> {
     std::fs::create_dir_all(p.parent().expect("auth path has parent"))?;
     let body = serde_json::to_string_pretty(f)
         .map_err(|e| Error::Secrets(format!("serialize auth: {}", e)))?;
-    std::fs::write(&p, body)?;
+    // Atomic replace: a crash (or a concurrent reader) mid-write must
+    // never leave a half-written auth.json - load_file treats parse
+    // failures as an empty file, and the next save would then silently
+    // wipe every stored key. Pid-unique tmp name so two processes
+    // saving at once cannot clobber each other's tmp.
+    let tmp = p.with_file_name(format!("auth.json.tmp.{}", std::process::id()));
+    std::fs::write(&tmp, body)?;
     #[cfg(unix)]
     {
         use std::os::unix::fs::PermissionsExt;
-        let _ = std::fs::set_permissions(&p, std::fs::Permissions::from_mode(0o600));
+        let _ = std::fs::set_permissions(&tmp, std::fs::Permissions::from_mode(0o600));
     }
+    std::fs::rename(&tmp, &p)?;
     Ok(())
 }
 
@@ -116,4 +128,33 @@ pub fn clear_crm_key(name: &str) -> Result<()> {
     let mut f = load_file();
     f.crm_keys.remove(name);
     save_file(&f)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Hermetic round trip through the MONEYBALL_AUTH_PATH seam - the
+    /// user's real ~/.moneyball/auth.json is never touched. (Replaces
+    /// the old moneyball-tui keychain test that rewrote the real file.)
+    #[test]
+    fn round_trip_persists_via_override_path() {
+        let dir =
+            std::env::temp_dir().join(format!("mb-secrets-test-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let file = dir.join("auth.json");
+        std::env::set_var("MONEYBALL_AUTH_PATH", &file);
+
+        store_llm_key("test_provider", "sk-test-1234").unwrap();
+        store_crm_key("test_crm", "tok-5678").unwrap();
+        assert_eq!(load_llm_key("test_provider").as_deref(), Some("sk-test-1234"));
+        assert_eq!(load_crm_key("test_crm").as_deref(), Some("tok-5678"));
+        // No stray tmp file left behind by the atomic save.
+        assert_eq!(std::fs::read_dir(&dir).unwrap().count(), 1);
+        clear_llm_key("test_provider").unwrap();
+        assert_eq!(load_llm_key("test_provider"), None);
+
+        std::env::remove_var("MONEYBALL_AUTH_PATH");
+        std::fs::remove_dir_all(&dir).ok();
+    }
 }

@@ -209,6 +209,12 @@ impl AppConfig {
             });
         }
         if let Some(d) = date {
+            if chrono::NaiveDate::parse_from_str(d, "%Y-%m-%d").is_err() {
+                return Err(Error::Config(format!(
+                    "snapshot date must be YYYY-MM-DD, got \"{}\"",
+                    d
+                )));
+            }
             let p = snap.join(d);
             if !p.is_dir() {
                 return Err(Error::NoSnapshot {
@@ -225,7 +231,9 @@ impl AppConfig {
             let p = entry.path();
             if p.is_dir() {
                 if let Some(name) = p.file_name().and_then(|n| n.to_str()) {
-                    if name.len() == 10 && name.chars().nth(4) == Some('-') {
+                    // Only real dates compete for "latest" - external
+                    // pipelines leave stray dirs (backups etc.) here.
+                    if chrono::NaiveDate::parse_from_str(name, "%Y-%m-%d").is_ok() {
                         latest = Some(match latest {
                             Some(prev) if prev > p => prev,
                             _ => p,

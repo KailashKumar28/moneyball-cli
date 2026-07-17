@@ -64,6 +64,28 @@ fn custom_flow(cfg: &AppConfig) -> Result<()> {
         *v = format!("secret:{}", sname);
         eprintln!("  header {} stored as secret:{}", k, sname);
     }
+    // Query params carry credentials in many CRMs (LeadSquared puts
+    // accessKey/secretKey there). Secretize per param - dates and flags
+    // must stay literal so the LLM can turn them into templates.
+    for (k, v) in input.query.iter_mut() {
+        let looks_secret = looks_credential(k);
+        let hint = if looks_secret { "[Y/n]" } else { "[y/N]" };
+        let a = ask(&format!(
+            "query param \"{}\" - store its value as a secret? {}: ",
+            k, hint
+        ))?;
+        let yes = if a.is_empty() {
+            looks_secret
+        } else {
+            a.eq_ignore_ascii_case("y")
+        };
+        if yes {
+            let sname = format!("{}_{}", name, k.to_lowercase().replace('-', "_"));
+            moneyball_core::secrets::store_crm_key(&sname, v)?;
+            *v = format!("secret:{}", sname);
+            eprintln!("  query {} stored as secret:{}", k, sname);
+        }
+    }
 
     eprintln!("probing the endpoint for a sample...");
     let sample = connect::probe_sample(&input)?;
@@ -132,6 +154,15 @@ fn test_and_map_stages(cfg: &AppConfig, spec_path: &std::path::Path) -> Result<(
     }
     println!("connected. daily pull: moneyball crm fetch --days 28  (cron-able)");
     Ok(())
+}
+
+/// Does this query-param name look like it carries a credential?
+/// Drives only the DEFAULT of the store-as-secret prompt above.
+fn looks_credential(key: &str) -> bool {
+    let k = key.to_lowercase();
+    ["key", "token", "secret", "auth", "sig", "pass", "pwd"]
+        .iter()
+        .any(|n| k.contains(n))
 }
 
 const CANONICAL: &[&str] = moneyball_core::crm::CANONICAL_STAGES;

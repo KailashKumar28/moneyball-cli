@@ -165,9 +165,16 @@ pub fn run_turn(
     tx: &Sender<Ev>,
 ) {
     let started = std::time::Instant::now();
+    // Heal BEFORE capturing base_len: a dangling ToolCall from a prior
+    // aborted turn gets its synthesized output inserted at an index
+    // below the split point, so capturing base_len first would leave it
+    // pointing one item short and split_off would re-emit (and the
+    // drain would re-persist) the last pre-turn item on every turn.
+    // Within a turn no new dangling call can appear - each ToolCall is
+    // answered inline or the loop returns - so once is enough.
+    heal_history(&mut history);
     let base_len = history.len();
     loop {
-        heal_history(&mut history);
         let resp = crate::llm::stream_turn(
             provider_id,
             provider,
@@ -220,7 +227,7 @@ pub fn run_turn(
                 args: call.arguments.clone(),
             });
             if cancel.load(Ordering::SeqCst) {
-                break; // heal_history synthesizes the aborted output
+                break; // next turn's heal_history synthesizes the aborted output
             }
             let _ = tx.send(Ev::ToolBegin {
                 call_id: call.id.clone(),

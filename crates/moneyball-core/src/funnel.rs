@@ -87,8 +87,8 @@ pub fn compute(
     days: u32,
     by: By,
 ) -> Vec<FunnelRow> {
-    let snap_date =
-        NaiveDate::parse_from_str(&snap.date, "%Y-%m-%d").expect("snapshot date is YYYY-MM-DD");
+    let snap_date = NaiveDate::parse_from_str(&snap.date, "%Y-%m-%d")
+        .expect("snapshot::load validated the date");
     let d1 = snap_date - Duration::days(1);
     let d0 = d1 - Duration::days(days.max(1) as i64 - 1);
     let (d0s, d1s) = (

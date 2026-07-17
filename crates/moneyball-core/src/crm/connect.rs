@@ -18,10 +18,14 @@ use super::CheckReport;
 /// What the user supplies interactively before the LLM drafts the rest.
 pub struct ConnectInput {
     pub name: String,
-    /// Endpoint URL, including any query params it needs to return leads.
+    /// Endpoint URL WITHOUT its query string - params live in `query`
+    /// so credential values can be secretized before they touch the
+    /// LLM or the spec on disk.
     pub url: String,
     /// Header name -> value ref (`secret:<n>` / `env:<VAR>` / literal).
     pub headers: Vec<(String, String)>,
+    /// Query param -> value ref, split off the pasted URL.
+    pub query: Vec<(String, String)>,
     pub method: String,
     /// JSON body for POST endpoints.
     pub body: Option<String>,
@@ -33,7 +37,7 @@ impl ConnectInput {
             url: self.url.clone(),
             method: self.method.clone(),
             headers: self.headers.iter().cloned().collect(),
-            query: Default::default(),
+            query: self.query.iter().cloned().collect(),
             body: self.body.clone(),
         }
     }
@@ -75,14 +79,61 @@ impl ConnectInput {
         if method.is_empty() {
             method = if body.is_some() { "POST" } else { "GET" }.into();
         }
+        // Split the query string into pairs: API docs put credentials
+        // there (LeadSquared: accessKey/secretKey), and the connect
+        // flow must be able to secretize each value individually.
+        let mut query = Vec::new();
+        if let Some(qpos) = url.find('?') {
+            let qs = url.split_off(qpos + 1);
+            url.pop(); // the '?'
+            for pair in qs.split('&').filter(|p| !p.is_empty()) {
+                let (k, v) = pair.split_once('=').unwrap_or((pair, ""));
+                query.push((percent_decode(k), percent_decode(v)));
+            }
+        }
         Ok(Self {
             name,
             url,
             headers,
+            query,
             method,
             body,
         })
     }
+}
+
+/// Undo URL encoding on a query key/value (`%2B`, `+`). The executor
+/// re-encodes at request time, so keeping pairs decoded avoids double
+/// encoding.
+fn percent_decode(s: &str) -> String {
+    let bytes = s.as_bytes();
+    let mut out = Vec::with_capacity(bytes.len());
+    let mut i = 0;
+    while i < bytes.len() {
+        match bytes[i] {
+            b'%' if i + 2 < bytes.len() => {
+                match u8::from_str_radix(&s[i + 1..i + 3], 16) {
+                    Ok(b) => {
+                        out.push(b);
+                        i += 3;
+                    }
+                    Err(_) => {
+                        out.push(b'%');
+                        i += 1;
+                    }
+                }
+            }
+            b'+' => {
+                out.push(b' ');
+                i += 1;
+            }
+            b => {
+                out.push(b);
+                i += 1;
+            }
+        }
+    }
+    String::from_utf8_lossy(&out).into_owned()
 }
 
 /// Minimal shell-style tokenizer: whitespace-separated, single/double
@@ -230,9 +281,11 @@ const DRAFT_SYSTEM: &str = "You write moneyball crm.toml source specs. Output ON
 document - no prose, no markdown fences, no explanation. The toml must follow this schema \
 exactly (keys and sections as shown; omit what you cannot infer):\n\n\
 name = \"<crm name>\"\n\n\
-[request]\nurl = \"<given verbatim>\"\nmethod = \"GET\"\n\
+[request]\nurl = \"<given verbatim>\"\nmethod = \"<given verbatim>\"\n\
+body = '<given verbatim, if a request body was provided; {page} is a template>'\n\
 [request.headers]\n# given verbatim (values are secret:/env: refs - keep them)\n\
-[request.query]\n# only params the endpoint needs; {from_date} {to_date} {page} {page_size} are templates\n\n\
+[request.query]\n# given params verbatim (secret:/env: refs stay); date-like literal values may \
+become the {from_date} {to_date} templates; {page} {page_size} are also templates\n\n\
 [paging]\n# only if the sample shows paging fields; mode = \"page\" needs param (+ optionally size_param, size)\n\n\
 [map]\nroot = \"<dot path to the record array; \\\"\\\" if the response IS the array>\"\n\
 ad_id = \"<dot path to the Meta ad id>\"\nstage = \"<dot path to the pipeline stage>\"\n\
@@ -245,16 +298,30 @@ Map stages by funnel meaning: unreachable -> NonContactable, in-contact/qualifie
 site/store visit -> Visit, repeat visit -> Revisit, won/booked/purchased -> Booking, dead -> Lost.";
 
 fn draft_prompt(input: &ConnectInput, sample: &str, feedback: &str) -> String {
-    let headers = input
-        .headers
-        .iter()
-        .map(|(k, v)| format!("\"{}\" = \"{}\"", k, v))
-        .collect::<Vec<_>>()
-        .join("\n");
+    let kv = |pairs: &[(String, String)]| {
+        pairs
+            .iter()
+            .map(|(k, v)| format!("\"{}\" = \"{}\"", k, v))
+            .collect::<Vec<_>>()
+            .join("\n")
+    };
+    let body = match &input.body {
+        Some(b) => format!("Request body (use verbatim as request.body): {}\n", b),
+        None => String::new(),
+    };
     format!(
-        "CRM name: {}\nEndpoint URL (use verbatim): {}\nAuth headers (use verbatim):\n{}\n\n\
+        "CRM name: {}\nEndpoint URL (use verbatim): {}\nHTTP method: {}\n{}\
+         Headers (use verbatim under [request.headers]):\n{}\n\
+         Query params (use verbatim under [request.query]; secret:/env: refs stay as-is):\n{}\n\n\
          One sample response from this endpoint:\n{}\n\n{}",
-        input.name, input.url, headers, sample, feedback
+        input.name,
+        input.url,
+        input.method,
+        body,
+        kv(&input.headers),
+        kv(&input.query),
+        sample,
+        feedback
     )
 }
 
@@ -267,10 +334,26 @@ mod tests {
         let c = r#"curl -X POST 'https://x.ai/api/q?a=1' -H 'authorization: tok' \
             -H "content-type: application/json" --data '{"page": 0}'"#;
         let i = ConnectInput::from_curl("x".into(), c).unwrap();
-        assert_eq!(i.url, "https://x.ai/api/q?a=1");
+        assert_eq!(i.url, "https://x.ai/api/q");
+        assert_eq!(i.query, vec![("a".to_string(), "1".to_string())]);
         assert_eq!(i.method, "POST");
         assert_eq!(i.body.as_deref(), Some(r#"{"page": 0}"#));
         assert_eq!(i.headers[0], ("authorization".into(), "tok".into()));
+    }
+
+    #[test]
+    fn from_curl_splits_and_decodes_query_credentials() {
+        let c = "curl 'https://api.example.com/Leads.Get?accessKey=u%24r&secretKey=abc+def&fromDate=2026-01-01'";
+        let i = ConnectInput::from_curl("ls".into(), c).unwrap();
+        assert_eq!(i.url, "https://api.example.com/Leads.Get");
+        assert_eq!(
+            i.query,
+            vec![
+                ("accessKey".to_string(), "u$r".to_string()),
+                ("secretKey".to_string(), "abc def".to_string()),
+                ("fromDate".to_string(), "2026-01-01".to_string()),
+            ]
+        );
     }
 
     #[test]
