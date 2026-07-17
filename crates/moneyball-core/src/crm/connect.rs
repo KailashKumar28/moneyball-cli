@@ -207,7 +207,8 @@ pub fn draft_spec(cfg: &AppConfig, input: &ConnectInput, sample: &Value) -> Resu
 pub fn dry_run(cfg: &AppConfig, spec_toml: &str, sample: &Value) -> Result<(usize, CheckReport)> {
     let spec = source::parse(spec_toml)?;
     let records = source::records(sample, &spec.map.root)?;
-    let tickets = Value::Array(source::transform(records, &spec.map));
+    let (mapped, _dropped) = source::transform(records, &spec.map);
+    let tickets = Value::Array(mapped);
     Ok((records.len(), super::check_with_workspace(cfg, &tickets)))
 }
 

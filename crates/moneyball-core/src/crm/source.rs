@@ -162,16 +162,28 @@ pub fn records<'a>(resp: &'a Value, root: &str) -> Result<&'a Vec<Value>> {
     })
 }
 
-/// Transform raw CRM records into contract tickets. Missing fields become
-/// missing keys - the validator reports them per-row afterwards.
-pub fn transform(records: &[Value], map: &MapSpec) -> Vec<Value> {
-    records
+/// Transform raw CRM records into contract tickets. Records with NO ad
+/// id are dropped and counted (second return): every real CRM holds
+/// organic/direct leads, the contract requires ad_id, and the
+/// production LeadZump pipeline keys its export by ad id so such leads
+/// never reach moneyball there either (mb.py parity). Placeholder ids
+/// like "Stattic Ad" are non-empty and kept untouched (AGENTS.md join
+/// rule). Other missing fields become missing keys - the validator
+/// reports them per-row afterwards.
+pub fn transform(records: &[Value], map: &MapSpec) -> (Vec<Value>, usize) {
+    let mut dropped = 0usize;
+    let tickets = records
         .iter()
-        .map(|rec| {
-            let mut t = serde_json::Map::new();
-            if let Some(v) = get_path(rec, &map.ad_id) {
-                t.insert("ad_id".into(), Value::String(scalar_string(v)));
+        .filter_map(|rec| {
+            let ad_id = get_path(rec, &map.ad_id)
+                .map(scalar_string)
+                .unwrap_or_default();
+            if ad_id.trim().is_empty() {
+                dropped += 1;
+                return None;
             }
+            let mut t = serde_json::Map::new();
+            t.insert("ad_id".into(), Value::String(ad_id));
             if let Some(v) = get_path(rec, &map.stage).map(scalar_string) {
                 let stage = map.stage_map.get(&v).cloned().unwrap_or(v);
                 t.insert("stage".into(), Value::String(stage));
@@ -184,9 +196,10 @@ pub fn transform(records: &[Value], map: &MapSpec) -> Vec<Value> {
                     t.insert("funnel".into(), Value::String(scalar_string(v)));
                 }
             }
-            Value::Object(t)
+            Some(Value::Object(t))
         })
-        .collect()
+        .collect();
+    (tickets, dropped)
 }
 
 /// CSV rows as records: header row names the fields, every value is a
@@ -340,10 +353,31 @@ delivery = "mx_Delivery_Time"
             "mx_Delivery_Time": "2026-07-15T09:30:00+05:30"
         })];
         let spec = parse(SPEC).unwrap();
-        let tickets = transform(&recs, &spec.map);
+        let (tickets, dropped) = transform(&recs, &spec.map);
+        assert_eq!(dropped, 0);
         assert_eq!(tickets[0]["ad_id"], "120211");
         assert_eq!(tickets[0]["stage"], "Visit");
         assert_eq!(tickets[0]["delivery"], "2026-07-15T09:30:00+05:30");
+    }
+
+    #[test]
+    fn transform_drops_and_counts_records_without_ad_id() {
+        let recs = vec![
+            serde_json::json!({"mx_Ad_Id": 120211, "ProspectStage": "Won",
+                               "mx_Delivery_Time": "2026-07-15T09:30:00+05:30"}),
+            serde_json::json!({"ProspectStage": "Won",
+                               "mx_Delivery_Time": "2026-07-15T10:00:00+05:30"}),
+            serde_json::json!({"mx_Ad_Id": "", "ProspectStage": "Won",
+                               "mx_Delivery_Time": "2026-07-15T11:00:00+05:30"}),
+            // Placeholder ids are non-empty and KEPT (join rule).
+            serde_json::json!({"mx_Ad_Id": "Stattic Ad", "ProspectStage": "Won",
+                               "mx_Delivery_Time": "2026-07-15T12:00:00+05:30"}),
+        ];
+        let spec = parse(SPEC).unwrap();
+        let (tickets, dropped) = transform(&recs, &spec.map);
+        assert_eq!(dropped, 2);
+        assert_eq!(tickets.len(), 2);
+        assert_eq!(tickets[1]["ad_id"], "Stattic Ad");
     }
 
     #[test]

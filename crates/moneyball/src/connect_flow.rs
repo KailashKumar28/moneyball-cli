@@ -34,8 +34,19 @@ pub fn run(cfg: &AppConfig) -> Result<()> {
 /// Catalog path: credentials only, then test, then stage mapping.
 fn preset_flow(cfg: &AppConfig, p: &presets::Preset) -> Result<()> {
     for s in p.secrets {
-        let v = ask(&format!("{} ({}): ", s.label, s.help))?;
+        // Re-runs (e.g. after fixing a stage map) keep the stored
+        // credential on an empty answer instead of re-demanding it.
+        let stored = moneyball_core::secrets::load_crm_key(&p.secret_name(s)).is_some();
+        let prompt = if stored {
+            format!("{} ({}) [enter keeps the stored value]: ", s.label, s.help)
+        } else {
+            format!("{} ({}): ", s.label, s.help)
+        };
+        let v = ask(&prompt)?;
         if v.is_empty() {
+            if stored {
+                continue;
+            }
             anyhow::bail!("{} is required", s.label);
         }
         moneyball_core::secrets::store_crm_key(&p.secret_name(s), &v)?;
@@ -131,8 +142,18 @@ fn test_and_map_stages(cfg: &AppConfig, spec_path: &std::path::Path) -> Result<(
     eprintln!("running a live test pull (7 days)...");
     let r = crm_fetch::fetch_crm(cfg, 7)?;
     println!(
-        "test pull ({}): {} tickets over {} page(s)",
-        r.name, r.tickets, r.pages
+        "test pull ({}): {} ad-attributed ticket(s) over {} page(s){}",
+        r.name,
+        r.tickets,
+        r.pages,
+        if r.dropped_no_ad_id > 0 {
+            format!(
+                " ({} organic/direct lead(s) dropped - no ad id)",
+                r.dropped_no_ad_id
+            )
+        } else {
+            String::new()
+        }
     );
     print_check_lines(&r.check);
     if r.path.is_none() {

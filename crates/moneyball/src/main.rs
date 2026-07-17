@@ -202,8 +202,15 @@ fn main() -> Result<()> {
                 let r = moneyball_core::crm::fetch::fetch_crm(&strict, days)
                     .with_context(|| "crm fetch failed")?;
                 println!(
-                    "crm fetch ({}): {} tickets over {} page(s)",
-                    r.name, r.tickets, r.pages
+                    "crm fetch ({}): {} ad-attributed ticket(s) over {} page(s){}",
+                    r.name,
+                    r.tickets,
+                    r.pages,
+                    if r.dropped_no_ad_id > 0 {
+                        format!(" ({} organic/direct dropped - no ad id)", r.dropped_no_ad_id)
+                    } else {
+                        String::new()
+                    }
                 );
                 print_ingest_outcome(&r);
             }
@@ -216,10 +223,15 @@ fn main() -> Result<()> {
                 let r = moneyball_core::crm::fetch::import_csv(&strict, &file)
                     .with_context(|| "crm import failed")?;
                 println!(
-                    "crm import ({}): {} tickets from {}",
+                    "crm import ({}): {} ad-attributed ticket(s) from {}{}",
                     r.name,
                     r.tickets,
-                    file.display()
+                    file.display(),
+                    if r.dropped_no_ad_id > 0 {
+                        format!(" ({} organic/direct dropped - no ad id)", r.dropped_no_ad_id)
+                    } else {
+                        String::new()
+                    }
                 );
                 print_ingest_outcome(&r);
             }

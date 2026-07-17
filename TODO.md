@@ -71,6 +71,17 @@ bottom after a release-sized batch.)
 
 ## Done log
 
+- [x] 2026-07-18 LeadZump connected for real (user's live token): the
+      blocker was the contract treating ad_id as required per ticket
+      while every real CRM holds organic/direct leads - transform now
+      drops no-ad-id records and counts them (matches the production
+      pipeline, which keys its export by ad id; "Stattic Ad"
+      placeholders are non-empty and kept per the join rule). Reports
+      say "141 ad-attributed ticket(s) (154 organic/direct dropped)".
+      preset re-runs keep stored credentials on empty input. E2E on
+      moneyball-test: connect -> PASS -> "Fresh" mapped keep-as-is ->
+      crm.json written -> brief shows real l7d/q7d.
+
 - [x] 2026-07-17 Audit package G core: deleted the dead async LLM
       client stack (~500 lines: Client, complete/complete_with_tools,
       tool body builders, parse_completion parsers, Completion/

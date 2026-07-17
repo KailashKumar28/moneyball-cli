@@ -24,6 +24,9 @@ pub struct CrmFetchReport {
     pub name: String,
     pub tickets: usize,
     pub pages: u32,
+    /// In-window records dropped for having no ad id (organic/direct
+    /// leads - normal in every CRM; they never join to Meta spend).
+    pub dropped_no_ad_id: usize,
     /// Set only when validation passed and crm.json was written.
     pub path: Option<PathBuf>,
     pub check: CheckReport,
@@ -190,14 +193,23 @@ pub fn fetch_crm(cfg: &AppConfig, days: u32) -> Result<CrmFetchReport> {
 
     let report = validate_and_write(cfg, spec.name, &records, &spec.map, pages)?;
     if !cfg.agent {
+        let dropped = if report.dropped_no_ad_id > 0 {
+            format!(
+                ", {} non-ad lead(s) dropped (no ad id)",
+                report.dropped_no_ad_id
+            )
+        } else {
+            String::new()
+        };
         eprintln!(
-            "  done: {} ticket(s) over {} page(s) in {}{}",
+            "  done: {} ticket(s) over {} page(s) in {}{}{}",
             report.tickets,
             report.pages,
             fmt_elapsed(start.elapsed()),
             total_elements
                 .map(|t| format!(" (of {} total)", t))
-                .unwrap_or_default()
+                .unwrap_or_default(),
+            dropped
         );
     }
     Ok(report)
@@ -236,16 +248,17 @@ fn validate_and_write(
     map: &source::MapSpec,
     pages: u32,
 ) -> Result<CrmFetchReport> {
-    let crm = Value::Array(source::transform(records, map));
+    let (tickets, dropped_no_ad_id) = source::transform(records, map);
+    let crm = Value::Array(tickets);
     // Zero tickets never reach disk: an empty export means a wrong date
     // window, a bad map.root, or a broken pull - writing [] would
     // replace a good crm.json and turn /brief's CRM columns into
     // silent zeros (the exact misinformation mod.rs warns about).
     if crm.as_array().map(Vec::is_empty).unwrap_or(true) {
         return Err(Error::Config(format!(
-            "{}: 0 tickets after transform - refusing to write crm.json; \
-             check the spec's date window and map.root",
-            name
+            "{}: 0 tickets after transform ({} record(s) dropped for having \
+             no ad id) - check the spec's date window, map.root, and map.ad_id",
+            name, dropped_no_ad_id
         )));
     }
     let check = super::check_with_workspace(cfg, &crm);
@@ -278,6 +291,7 @@ fn validate_and_write(
         name,
         tickets: crm.as_array().map(Vec::len).unwrap_or(0),
         pages,
+        dropped_no_ad_id,
         path,
         check,
     })
