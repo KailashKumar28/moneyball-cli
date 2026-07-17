@@ -246,8 +246,10 @@ pub fn truncate_chars(s: &str, cap: usize) -> &str {
     &s[..end]
 }
 
-/// Dot-path lookup: `a.b.c` descends nested objects.
-fn get_path<'a>(v: &'a Value, path: &str) -> Option<&'a Value> {
+/// Dot-path lookup: `a.b.c` descends nested objects. Exposed because
+/// the page loop uses it to compute each record's delivery epoch for
+/// the client-side date cutover (`fetch_crm`).
+pub fn get_path<'a>(v: &'a Value, path: &str) -> Option<&'a Value> {
     let mut cur = v;
     for seg in path.split('.') {
         cur = cur.get(seg)?;

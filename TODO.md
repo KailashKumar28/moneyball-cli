@@ -8,12 +8,20 @@ bottom after a release-sized batch.)
 
 ## Now (next slices, in order)
 
+- [ ] **LeadZump date filter**: today the preset pulls the whole ticket
+      book (`condition: null`, no date window) and hits MAX_PAGES=500 on
+      every connect. Evidence + DSL details in docs/CRM_CONNECTORS.md.
+      Verify the `operator` for a date comparison against the live
+      endpoint, then update the preset's body template; while there,
+      teach `crm/fetch.rs` to honor `totalElements` so the loop terminates
+      cleanly without the backstop.
 - [ ] **Validate LeadSquared for real**: point a `crm.toml` at a live
       LeadSquared account (AccessKey/SecretKey), confirm the preset field
       paths (`mx_*` attribution, ProspectStage) and paging behavior.
 - [ ] **LeadZump via existing endpoint**: build `crm.toml` from the old
       fin_campaign_analysis pipeline's JSON endpoint; keep the
       "Stattic Ad" typo untouched (join rule - see AGENTS.md Don'ts).
+      (Superseded by the LeadZump date-filter item above once that lands.)
 - [ ] **/diagnose <product>**: the 5 diagnostic checks over a snapshot,
       one summary cell + per-check detail. Headless first.
 

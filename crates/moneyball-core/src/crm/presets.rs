@@ -75,7 +75,7 @@ size = 200
 root = "content"
 ad_id = "adId.adId"
 stage = "stage.name"
-delivery = "delivery"
+delivery = "createdAt"
 funnel = "status.funnelStage"
 
 [map.stage_map]
@@ -86,7 +86,14 @@ funnel = "status.funnelStage"
                 label: "API token",
                 help: "the LeadZump auth token (same value your team uses as LEADZUMP_TOKEN)",
             }],
-            note: "pulls all tickets; pages of 200",
+            // LeadZump's tickets/eager/query DSL only supports EQUALS on
+            // {field, operator, value} - no comparison operators, so the
+            // server-side body cannot filter by date. We pull all
+            // tickets (terminated via totalElements), then the page
+            // loop drops anything older than from_date and stops paging
+            // once it sees a full page of out-of-window records. See
+            // docs/CRM_CONNECTORS.md for the evidence base.
+            note: "pulls tickets; --days filters via the page loop (server DSL has no date operator); pages of 200",
         },
         Preset {
             id: "leadsquared",
