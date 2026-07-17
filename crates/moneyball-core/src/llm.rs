@@ -1272,11 +1272,11 @@ mod tests {
 
     #[test]
     fn anthropic_body_with_tools_uses_input_schema() {
-        let t = crate::tools::diagnose_tool();
+        let t = crate::tools::funnel_tool();
         let v = build_messages_body_with_tools("claude-sonnet-4-5", Some("sys"), "hi", &[t]);
         assert!(v["tools"].is_array());
         assert!(v["tools"][0].get("input_schema").is_some());
-        assert!(v["tools"][0]["name"].as_str().unwrap() == "diagnose");
+        assert!(v["tools"][0]["name"].as_str().unwrap() == "funnel");
     }
 
     // ---------- tool-calling response parsers ----------

@@ -56,6 +56,21 @@ bottom after a release-sized batch.)
 
 ## Done log
 
+- [x] 2026-07-17 Audit package F (truth + TUI P1s): /diagnose and
+      /ledger stubs removed from COMMANDS, /help, and the agent prompt
+      (dead tools.rs registry deleted with them); /keychain registered;
+      /help now generated from COMMANDS so the three command surfaces
+      cannot drift; AGENT_SYSTEM_PROMPT tells the truth (two tools,
+      never answer from memory) instead of claiming snapshot-in-context;
+      funnel tool description matches its real adset-table output and
+      requires product; agent ToolCall cells finalize on ToolEnd with
+      real name + measured duration (0 renders as no duration, never
+      "(0ms)"); scroll offset clamped to content (Home no longer parks
+      the view thousands of lines past the top); logo actually spells
+      MONEYBALL; CRM contract doc no longer instructs partners to create
+      the ads-free snapshot dirs the code refuses. E2E vs MiniMax:
+      tool cell goes Running -> Done with duration, /help + logo render.
+
 - [x] 2026-07-17 Audit package E (turn robustness P1s): SSE error events
       and 200-status error bodies now fail the turn loudly (per-wire
       classify + terminal-event tracking; empty terminal-less streams

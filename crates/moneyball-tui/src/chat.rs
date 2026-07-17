@@ -201,14 +201,18 @@ pub mod cells {
                     }),
                 )));
             }
-            out.push(Line::from(Span::styled(
-                format!("      ({})", fmt_duration(self.duration_ms)),
-                Style::default().fg(if self.success {
-                    Color::Green
-                } else {
-                    Color::Red
-                }),
-            )));
+            // 0 means "not measured" (replayed sessions) - print no
+            // duration rather than a fabricated "(0ms)".
+            if self.duration_ms > 0 {
+                out.push(Line::from(Span::styled(
+                    format!("      ({})", fmt_duration(self.duration_ms)),
+                    Style::default().fg(if self.success {
+                        Color::Green
+                    } else {
+                        Color::Red
+                    }),
+                )));
+            }
             out
         }
     }
@@ -308,6 +312,11 @@ impl ChatCell for Cell {
 pub struct ChatLog {
     pub cells: Vec<Cell>,
     pub scroll: u16,
+    /// Highest useful scroll offset (total lines - viewport), computed
+    /// by the last render. Mutations clamp against it so Home/held-Up
+    /// can never park the offset thousands of lines past the top
+    /// (where Down appears dead). Interior-mutable: render takes &self.
+    max_scroll: std::cell::Cell<u16>,
 }
 
 impl ChatLog {
@@ -373,7 +382,10 @@ impl ChatLog {
     }
 
     pub fn scroll_up(&mut self, n: u16) {
-        self.scroll = self.scroll.saturating_add(n);
+        self.scroll = self
+            .scroll
+            .saturating_add(n)
+            .min(self.max_scroll.get());
     }
     pub fn scroll_down(&mut self, n: u16) {
         self.scroll = self.scroll.saturating_sub(n);
@@ -382,8 +394,24 @@ impl ChatLog {
         self.scroll = 0;
     }
     pub fn scroll_to_top(&mut self) {
-        /* approximate via huge value */
-        self.scroll = u16::MAX;
+        self.scroll = self.max_scroll.get();
+    }
+
+    /// Flip the most recent Running tool cell to Done/Failed - the
+    /// ToolEnd half of the ARCHITECTURE 6b cell contract.
+    pub fn finalize_tool(&mut self, ok: bool) {
+        for cell in self.cells.iter_mut().rev() {
+            if let Cell::ToolCall(c) = cell {
+                if matches!(c.status, cells::ToolStatus::Running) {
+                    c.status = if ok {
+                        cells::ToolStatus::Done
+                    } else {
+                        cells::ToolStatus::Failed
+                    };
+                }
+                return;
+            }
+        }
     }
 
     /// Render the full log within `height` rows for the given viewport
@@ -413,6 +441,11 @@ impl ChatLog {
         }
         // Pick the visible window. scroll=0 -> show last `height` lines.
         let total = flat.len();
+        self.max_scroll.set(
+            total
+                .saturating_sub(height as usize)
+                .min(u16::MAX as usize) as u16,
+        );
         let end = total.saturating_sub(self.scroll as usize);
         let start = end.saturating_sub(height as usize);
         flat.into_iter().skip(start).take(height as usize).collect()

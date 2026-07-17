@@ -101,62 +101,24 @@ pub fn brief_tool() -> Tool {
     )
 }
 
-/// `funnel` - per-product lead funnel: lost / non-contactable /
-/// contactable / visit / booking breakdown for the last 7 days.
+/// `funnel` - the per-adset 7-day performance table for one product.
+/// The description must match what the handler actually returns
+/// (funnel::table), or the model plans around data it never gets.
 pub fn funnel_tool() -> Tool {
     Tool::new(
         "funnel",
-        "Return the per-product lead funnel for the 7-day window: lost / non-contactable / contactable / visit / booking counts. Use this when the user asks about lead quality, drop-off, or 'why is X not converting'.",
+        "Return the per-adset 7-day table for ONE product: spend, Meta leads (m), cost per lead, CRM leads (l), qualified (q), visits (v), Rs per qualified, L->Q %, kill-table eligibility (kill=true means spend cleared the kill threshold; never recommend killing rows marked immature or learning), and learning status. Use this when the user asks why a product is not converting, which adsets to scale or kill, or about lead quality within a product.",
         json!({
             "type": "object",
             "properties": {
                 "product": {
                     "type": "string",
-                    "description": "Product name as it appears in config.json. If omitted, returns funnel for every product."
-                }
-            },
-            "required": []
-        }),
-    )
-}
-
-/// `diagnose` - run a pre-flight health check on a product (ad-account
-/// health, setup-debt items, conversion leads volume, etc).
-pub fn diagnose_tool() -> Tool {
-    Tool::new(
-        "diagnose",
-        "Run a 5-point diagnostic health check on a single product: ad account status, setup debt, conversion leads volume gate, geo exclusions, higher-intent form. Use this when the user asks 'is X healthy', 'why are leads low', or 'what's broken'.",
-        json!({
-            "type": "object",
-            "properties": {
-                "product": {
-                    "type": "string",
-                    "description": "Product name as it appears in config.json."
+                    "description": "Product name exactly as it appears in config.json."
                 }
             },
             "required": ["product"]
         }),
     )
-}
-
-/// `ledger` - return the prediction-vs-actual history (what moneyball
-/// said would happen vs what actually happened).
-pub fn ledger_tool() -> Tool {
-    Tool::new(
-        "ledger",
-        "Return the prediction ledger: dated rows of (product, predicted_leads, actual_leads) so the user can see how accurate moneyball's forecasts have been.",
-        json!({
-            "type": "object",
-            "properties": {},
-            "additionalProperties": false
-        }),
-    )
-}
-
-/// The full registry of moneyball tools. Keep the descriptions short
-/// enough that the LLM still has context budget for the question.
-pub fn registry() -> Vec<Tool> {
-    vec![brief_tool(), funnel_tool(), diagnose_tool(), ledger_tool()]
 }
 
 // ---------- wire-protocol tool serialization ----------
@@ -213,20 +175,10 @@ mod tests {
     }
 
     #[test]
-    fn diagnose_tool_requires_product_arg() {
-        let t = diagnose_tool();
+    fn funnel_tool_requires_product_arg() {
+        let t = funnel_tool();
         let required = t.parameters["required"].as_array().unwrap();
         assert!(required.iter().any(|v| v == "product"));
-    }
-
-    #[test]
-    fn registry_includes_all_four_tools() {
-        let r = registry();
-        let names: Vec<&str> = r.iter().map(|t| t.name.as_str()).collect();
-        assert!(names.contains(&"brief"));
-        assert!(names.contains(&"funnel"));
-        assert!(names.contains(&"diagnose"));
-        assert!(names.contains(&"ledger"));
     }
 
     #[test]

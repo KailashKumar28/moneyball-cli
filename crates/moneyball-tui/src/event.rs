@@ -59,21 +59,46 @@ fn drain_stream(app: &mut App) {
                 match aev {
                     Ev::AssistantDelta(d) => app.chat.append_assistant(&d),
                     Ev::AssistantDone { .. } => app.chat.finish_streaming(),
-                    Ev::ToolBegin { name, args, .. } => {
+                    Ev::ToolBegin {
+                        call_id,
+                        name,
+                        args,
+                    } => {
                         app.chat.finish_streaming();
+                        app.running_tool =
+                            Some((call_id, name.clone(), std::time::Instant::now()));
                         app.chat.push(chat::Cell::ToolCall(chat::cells::ToolCall {
                             name,
                             args: crate::app::compact_args(&args),
                             status: chat::cells::ToolStatus::Running,
                         }));
                     }
-                    Ev::ToolEnd { output, ok, .. } => {
+                    Ev::ToolEnd {
+                        call_id,
+                        output,
+                        ok,
+                    } => {
+                        // Finalize the Running cell (6b contract) and
+                        // carry the real name + elapsed time into the
+                        // result instead of "tool"/0ms.
+                        app.chat.finalize_tool(ok);
+                        let (name, ms) = match app.running_tool.take() {
+                            Some((id, name, started)) if id == call_id => {
+                                // Sub-ms tools round up so a measured
+                                // duration is never rendered as "none".
+                                (name, (started.elapsed().as_millis() as u64).max(1))
+                            }
+                            other => {
+                                app.running_tool = other;
+                                ("tool".into(), 0)
+                            }
+                        };
                         app.chat
                             .push(chat::Cell::ToolResult(chat::cells::ToolResult {
-                                name: "tool".into(),
+                                name,
                                 output: output.lines().map(String::from).collect(),
                                 success: ok,
-                                duration_ms: 0,
+                                duration_ms: ms,
                             }));
                     }
                     Ev::TurnComplete {

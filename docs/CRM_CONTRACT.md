@@ -74,9 +74,12 @@ fine, a truncated export silently undercounts).
 Two ways to deliver it:
 
 1. **Write the file directly** - a daily cron/scheduler in your CRM writes
-   `crm.json` into that day's snapshot directory (create the directory if
-   `moneyball fetch` has not run yet that day; the fetcher never deletes
-   existing files).
+   `crm.json` into the NEWEST snapshot directory that already contains
+   `ads_daily.json`. Never create a fresh date directory yourself: a
+   snapshot dir with CRM data but no ads data makes `/brief` read zero
+   spend for everything (moneyball's own `crm fetch` refuses to do this
+   for the same reason). If today's dir is missing, either run
+   `moneyball fetch` first or write into the newest dir that has ads.
 2. **Expose an HTTP endpoint** - e.g. `GET /moneyball/crm.json` returning
    the array (optionally accepting `?days=N`). `moneyball crm fetch` pulls
    it on schedule.

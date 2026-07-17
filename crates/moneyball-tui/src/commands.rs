@@ -7,15 +7,19 @@ use moneyball_core::brief::{self};
 
 // Two chrono types collide on import name; alias the plain Utc.
 
+// CLAUDE.md hard rule: only commands with real handlers may appear
+// here - this list feeds the palette, /help, AND every LLM system
+// prompt (app_state_block). Re-add /diagnose and /ledger in the same
+// commit that wires them.
 pub(crate) const COMMANDS: &[(&str, &str)] = &[
     ("/brief", "7-day portfolio brief"),
     ("/fetch", "pull daily insights from Meta into a snapshot"),
     ("/funnel", "per-entity funnel for a product"),
-    ("/diagnose", "run all 5 diagnostic commands for a product"),
     ("/ask", "free-form question (LLM picks commands)"),
     ("/snapshot", "list or validate snapshots"),
-    ("/ledger", "prediction ledger view"),
+    ("/keychain", "show which providers have API keys configured"),
     ("/setup", "re-run the setup wizard"),
+    ("/help", "list slash commands"),
     ("/quit", "exit moneyball"),
 ];
 
@@ -148,12 +152,6 @@ your own pipeline at\n\n    {}/<YYYY-MM-DD>/\n\nand /brief reads whatever it wri
         "/funnel" => {
             run_funnel(app, arg);
         }
-        "/diagnose" => {
-            app.chat.push(Cell::AssistantText(cells::AssistantText {
-                text: format!("/diagnose {} - wired in the next iteration.", arg),
-                streaming: false,
-            }));
-        }
         "/ask" => {
             // /ask is now equivalent to free-form chat (the LLM is the
             // default). Strip the prefix and fall through to the free-
@@ -207,12 +205,6 @@ your own pipeline at\n\n    {}/<YYYY-MM-DD>/\n\nand /brief reads whatever it wri
                 );
             }
         }
-        "/ledger" => {
-            app.chat.push(Cell::AssistantText(cells::AssistantText {
-                text: "/ledger shows prediction history. wiring next.".into(),
-                streaming: false,
-            }));
-        }
         "/keychain" => {
             // Diagnostic: report which provider is configured, which
             // have a keychain entry, and (if so) the first 4 chars of
@@ -258,8 +250,14 @@ your own pipeline at\n\n    {}/<YYYY-MM-DD>/\n\nand /brief reads whatever it wri
             }
         }
         "/help" | "/?" => {
+            // Generated from COMMANDS so the three command surfaces
+            // (palette, /help, app_state_block) cannot drift.
+            let mut text = String::from("slash commands:");
+            for (c, desc) in COMMANDS {
+                text.push_str(&format!("\n  {:<10} {}", c, desc));
+            }
             app.chat.push(Cell::AssistantText(cells::AssistantText {
-                text: "slash commands: /brief /funnel <product> /diagnose <product> /ask <question> /snapshot /ledger /setup /keychain /quit".into(),
+                text,
                 streaming: false,
             }));
         }
@@ -293,8 +291,8 @@ Keep it tight - 5-8 sentences, no preamble, no bullets unless the user asks.";
 /// System prompt for the free-form chat agent. Same persona, but the
 /// user is asking a free-form question rather than triggering /brief.
 const AGENT_SYSTEM_PROMPT: &str = "You are moneyball's portfolio advisor for Meta ads.\n\
-You have access to a 7-day snapshot of the portfolio (per-product spend, leads, qualified leads, L->Q, goal, gap, plus feasibility math).\n\
-Answer the user's question using that context. If the question can't be answered from the snapshot, say so plainly and suggest a slash command that would help (/brief, /funnel <product>, /diagnose <product>).\n\
+You have two tools that read the on-disk snapshot: brief (7-day per-product summary plus feasibility math) and funnel (per-adset 7-day table for one product). Call them whenever the user asks about portfolio numbers - never answer from memory or invent figures.\n\
+If a tool reports missing data (no snapshot, no CRM), relay its suggested fix to the user instead of guessing.\n\
 Keep the answer focused and concrete. Cite the numbers you use. 3-6 sentences unless the user explicitly asks for more.";
 
 /// Pull `days` of insights from Meta on a worker thread (the network pull

@@ -51,6 +51,10 @@ pub struct App {
     /// True while an agent turn (not a fetch) is in flight - decides
     /// what Esc means.
     pub turn_active: bool,
+    /// The tool currently executing on the agent worker: (call_id,
+    /// name, started). Set on ToolBegin, taken on ToolEnd so the
+    /// result cell carries the real name and elapsed time.
+    pub running_tool: Option<(String, String, std::time::Instant)>,
     /// Live worker events, drained by the event loop each tick.
     /// `Some` while a turn or fetch is in flight.
     pub stream: Option<std::sync::mpsc::Receiver<StreamEvent>>,
@@ -171,6 +175,7 @@ impl App {
             session: None,
             cancel: Arc::new(AtomicBool::new(false)),
             turn_active: false,
+            running_tool: None,
             stream: None,
         }
     }
@@ -191,6 +196,7 @@ impl App {
     pub(crate) fn replay(&mut self, items: Vec<Item>) {
         use crate::chat::cells;
         use crate::chat::Cell;
+        let mut last_tool = String::from("tool");
         for item in &items {
             match item {
                 Item::User { text } => {
@@ -213,6 +219,7 @@ impl App {
                     }));
                 }
                 Item::ToolCall { name, args, .. } => {
+                    last_tool = name.clone();
                     self.chat.push(Cell::ToolCall(cells::ToolCall {
                         name: name.clone(),
                         args: compact_args(args),
@@ -223,9 +230,11 @@ impl App {
                     output, is_error, ..
                 } => {
                     self.chat.push(Cell::ToolResult(cells::ToolResult {
-                        name: "tool".into(),
+                        name: last_tool.clone(),
                         output: output.lines().map(String::from).collect(),
                         success: !is_error,
+                        // Elapsed time is not persisted; 0 renders as
+                        // no duration, never a fabricated "(0ms)".
                         duration_ms: 0,
                     }));
                 }
