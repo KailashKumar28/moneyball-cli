@@ -170,6 +170,24 @@ impl CheckReport {
     }
 }
 
+/// `check` with its inputs resolved from the workspace: stage names
+/// from config, join target = the latest loadable snapshot (if any).
+/// The one prelude for every validation path (fetch, import, connect
+/// dry-run, `crm check`) - it was copy-pasted three times before and
+/// had already started drifting.
+pub fn check_with_workspace(cfg: &crate::AppConfig, crm: &Value) -> CheckReport {
+    let stages = cfg
+        .workspace
+        .as_ref()
+        .map(|w| w.crm.stages.clone())
+        .unwrap_or_default();
+    let snap = cfg
+        .snap_for(None)
+        .ok()
+        .and_then(|p| crate::snapshot::load(&p).ok());
+    check(crm, &stages, snap.as_ref())
+}
+
 /// Validate a parsed crm.json against the contract. `stages` is the
 /// recognized stage set (pass `&[]` to use CANONICAL_STAGES); `snap`,
 /// when given, enables the ad_id join-rate check against `ads_daily`.

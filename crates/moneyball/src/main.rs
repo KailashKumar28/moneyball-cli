@@ -251,16 +251,7 @@ fn run_crm_check(cfg: &AppConfig, file: &std::path::Path) -> Result<bool> {
             return Ok(false);
         }
     };
-    let stages = cfg
-        .workspace
-        .as_ref()
-        .map(|w| w.crm.stages.clone())
-        .unwrap_or_default();
-    let snap = cfg
-        .snap_for(None)
-        .ok()
-        .and_then(|p| moneyball_core::snapshot::load(&p).ok());
-    let report = moneyball_core::crm::check(&parsed, &stages, snap.as_ref());
+    let report = moneyball_core::crm::check_with_workspace(cfg, &parsed);
     println!("crm check: {} ({} tickets)", file.display(), report.tickets);
     print_check_lines(&report);
     if report.passed() {

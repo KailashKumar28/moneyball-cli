@@ -236,11 +236,6 @@ fn validate_and_write(
     map: &source::MapSpec,
     pages: u32,
 ) -> Result<CrmFetchReport> {
-    let stages = cfg
-        .workspace
-        .as_ref()
-        .map(|w| w.crm.stages.clone())
-        .unwrap_or_default();
     let crm = Value::Array(source::transform(records, map));
     // Zero tickets never reach disk: an empty export means a wrong date
     // window, a bad map.root, or a broken pull - writing [] would
@@ -253,11 +248,7 @@ fn validate_and_write(
             name
         )));
     }
-    let snap = cfg
-        .snap_for(None)
-        .ok()
-        .and_then(|p| crate::snapshot::load(&p).ok());
-    let check = super::check(&crm, &stages, snap.as_ref());
+    let check = super::check_with_workspace(cfg, &crm);
     let path = if check.passed() {
         // Never create an ads-free "latest" snapshot: writing crm.json
         // into an empty today-dir would make /brief read zero spend for

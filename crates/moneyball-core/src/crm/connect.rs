@@ -208,19 +208,7 @@ pub fn dry_run(cfg: &AppConfig, spec_toml: &str, sample: &Value) -> Result<(usiz
     let spec = source::parse(spec_toml)?;
     let records = source::records(sample, &spec.map.root)?;
     let tickets = Value::Array(source::transform(records, &spec.map));
-    let stages = cfg
-        .workspace
-        .as_ref()
-        .map(|w| w.crm.stages.clone())
-        .unwrap_or_default();
-    let snap = cfg
-        .snap_for(None)
-        .ok()
-        .and_then(|p| crate::snapshot::load(&p).ok());
-    Ok((
-        records.len(),
-        super::check(&tickets, &stages, snap.as_ref()),
-    ))
+    Ok((records.len(), super::check_with_workspace(cfg, &tickets)))
 }
 
 fn provider_of(cfg: &AppConfig) -> Result<(String, ModelProviderInfo, String)> {

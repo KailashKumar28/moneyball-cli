@@ -1,9 +1,9 @@
-//! Tool-calling protocol types + tool registry. Mirrors openai/codex's
-//! approach: each tool is a (name, description, JSON-Schema) triple;
-//! the LLM client exposes a `complete_with_tools` method that returns
-//! either a final assistant message or a list of tool calls. The agent
-//! loop in moneyball-tui executes the tool calls and feeds the results
-//! back as a second turn.
+//! Tool definitions the agent loop puts on the wire. Each tool is a
+//! (name, description, JSON-Schema) triple (codex's approach); the
+//! wire-specific serialization lives in llm.rs body builders, and the
+//! handlers live in moneyball-tui (they need App + snapshot access).
+//! Only tools with real handlers may be defined here - descriptions
+//! are promises to the model.
 
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
@@ -36,47 +36,6 @@ pub struct ToolCall {
     pub id: String,
     pub name: String,
     pub arguments: Value,
-}
-
-/// A tool's response, fed back to the LLM as the next turn.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ToolResult {
-    pub tool_call_id: String,
-    pub content: String,
-    #[serde(default)]
-    pub is_error: bool,
-}
-
-impl ToolResult {
-    pub fn ok(tool_call_id: impl Into<String>, content: impl Into<String>) -> Self {
-        Self {
-            tool_call_id: tool_call_id.into(),
-            content: content.into(),
-            is_error: false,
-        }
-    }
-    pub fn err(tool_call_id: impl Into<String>, content: impl Into<String>) -> Self {
-        Self {
-            tool_call_id: tool_call_id.into(),
-            content: content.into(),
-            is_error: true,
-        }
-    }
-}
-
-/// What the LLM returned for a single turn. Either text (a final
-/// answer) or one-or-more tool calls (the agent must run them and
-/// call back).
-#[derive(Debug, Clone)]
-pub enum Completion {
-    Text(String),
-    ToolCalls(Vec<ToolCall>),
-}
-
-impl Completion {
-    pub fn is_tool_call(&self) -> bool {
-        matches!(self, Completion::ToolCalls(_))
-    }
 }
 
 // ---------- built-in tool definitions ----------
@@ -121,43 +80,6 @@ pub fn funnel_tool() -> Tool {
     )
 }
 
-// ---------- wire-protocol tool serialization ----------
-//
-// Each provider wire format wants tools in a slightly different shape.
-// `tools_for(wire)` returns the JSON value the provider expects.
-
-/// OpenAI Responses / ChatCompletions tool schema.
-fn openai_tool(t: &Tool) -> Value {
-    json!({
-        "type": "function",
-        "function": {
-            "name": t.name,
-            "description": t.description,
-            "parameters": t.parameters,
-        }
-    })
-}
-
-/// Anthropic Messages tool schema.
-fn anthropic_tool(t: &Tool) -> Value {
-    json!({
-        "name": t.name,
-        "description": t.description,
-        "input_schema": t.parameters,
-    })
-}
-
-/// Convert the registry into the provider's expected format.
-pub fn tools_payload(wire: WireApi, tools: &[Tool]) -> Value {
-    match wire {
-        WireApi::Responses | WireApi::ChatCompletions => {
-            Value::Array(tools.iter().map(openai_tool).collect())
-        }
-        WireApi::Messages => Value::Array(tools.iter().map(anthropic_tool).collect()),
-    }
-}
-
-use crate::provider::WireApi;
 
 #[cfg(test)]
 mod tests {
@@ -181,20 +103,5 @@ mod tests {
         assert!(required.iter().any(|v| v == "product"));
     }
 
-    #[test]
-    fn tools_payload_openai_uses_function_type() {
-        let v = tools_payload(WireApi::ChatCompletions, &[brief_tool()]);
-        let arr = v.as_array().unwrap();
-        assert_eq!(arr.len(), 1);
-        assert_eq!(arr[0]["type"], "function");
-        assert_eq!(arr[0]["function"]["name"], "brief");
-    }
 
-    #[test]
-    fn tools_payload_anthropic_uses_input_schema() {
-        let v = tools_payload(WireApi::Messages, &[brief_tool()]);
-        let arr = v.as_array().unwrap();
-        assert_eq!(arr[0]["name"], "brief");
-        assert!(arr[0].get("input_schema").is_some());
-    }
 }

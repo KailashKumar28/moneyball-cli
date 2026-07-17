@@ -27,7 +27,6 @@ pub use session::{SessionLog, SessionMeta};
 
 pub use config::{AppConfig, WorkspaceConfig};
 pub use error::{Error, Result};
-pub use llm::Client as LlmClient;
 pub use provider::{ModelProviderInfo, WireApi};
 pub use snapshot::Snapshot;
-pub use tools::{Completion, Tool, ToolCall, ToolResult};
+pub use tools::{Tool, ToolCall};

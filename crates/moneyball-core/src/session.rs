@@ -100,8 +100,15 @@ fn parse_session(raw: &str) -> Result<(SessionMeta, Vec<Item>)> {
     Ok((meta, items))
 }
 
-/// `~/.moneyball/sessions/`, created lazily.
+/// `~/.moneyball/sessions/`, created lazily. `MONEYBALL_SESSIONS_DIR`
+/// overrides it - the seam hermetic tests use so they never touch the
+/// user's real transcripts (same pattern as MONEYBALL_AUTH_PATH).
 pub fn sessions_dir() -> Result<PathBuf> {
+    if let Some(d) = std::env::var_os("MONEYBALL_SESSIONS_DIR") {
+        let dir = PathBuf::from(d);
+        std::fs::create_dir_all(&dir).with_context(|| format!("mkdir {}", dir.display()))?;
+        return Ok(dir);
+    }
     let home = std::env::var_os("HOME")
         .or_else(|| std::env::var_os("USERPROFILE"))
         .map(PathBuf::from)
@@ -186,6 +193,55 @@ pub fn fmt_meta_line(m: &SessionMeta) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Full file round trip through the MONEYBALL_SESSIONS_DIR seam:
+    /// create -> append -> open replays the same items, and the file
+    /// is append-only JSONL (header first, one item per line).
+    #[test]
+    fn create_append_open_round_trip_on_disk() {
+        let dir = std::env::temp_dir().join(format!("mb-sessions-test-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        std::env::set_var("MONEYBALL_SESSIONS_DIR", &dir);
+
+        let log = SessionLog::create(PathBuf::from("/w")).unwrap();
+        let id = log.meta.id.clone();
+        let items = vec![
+            Item::User { text: "hi".into() },
+            Item::ToolCall {
+                call_id: "c".into(),
+                name: "brief".into(),
+                args: serde_json::json!({}),
+            },
+            Item::ToolOutput {
+                call_id: "c".into(),
+                output: "out".into(),
+                is_error: false,
+            },
+            Item::Assistant { text: "a".into() },
+        ];
+        for i in &items {
+            log.append(i).unwrap();
+        }
+
+        let (reopened, replayed) = SessionLog::open(&id).unwrap();
+        assert_eq!(reopened.meta.id, id);
+        assert_eq!(replayed.len(), items.len());
+        assert!(matches!(&replayed[0], Item::User { text } if text == "hi"));
+        assert!(matches!(&replayed[3], Item::Assistant { text } if text == "a"));
+        // Appending to the reopened log continues the same file.
+        reopened
+            .append(&Item::User {
+                text: "again".into(),
+            })
+            .unwrap();
+        let (_, replayed2) = SessionLog::open(&id).unwrap();
+        assert_eq!(replayed2.len(), items.len() + 1);
+        // latest_id sees this session through the same seam.
+        assert_eq!(latest_id().unwrap().as_deref(), Some(id.as_str()));
+
+        std::env::remove_var("MONEYBALL_SESSIONS_DIR");
+        std::fs::remove_dir_all(&dir).ok();
+    }
 
     #[test]
     fn parse_session_replays_header_and_items() {

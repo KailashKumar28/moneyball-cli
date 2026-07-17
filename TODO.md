@@ -27,6 +27,17 @@ bottom after a release-sized batch.)
 
 ## Next
 
+- [ ] **Audit package G remainder** (structure P1/P2s from the 2026-07
+      architecture audit): move `connect_flow.rs` orchestration into
+      core behind an ask() seam; dedupe the three brief formatters;
+      split `submit()` and bring commands.rs (~800) / setup/mod.rs
+      (~980) / llm.rs back under the 400-line cap; snap_dir() at all
+      call sites; module-doc drift (tools.rs done, check others);
+      /brief double-context (short user item + let the loop call the
+      brief tool); remaining P2 hygiene (ASCII strings, busy indicator,
+      IST vs Local snapshot dating, query_params support, usage/cost
+      parsing, atomic config writes, render examples for new cells).
+
 - [ ] **/ledger**: wire the prediction ledger view (stub today). Append
       predictions to `ledger.jsonl`, show hit-rate over time.
 - [ ] **Scheduled CRM fetch**: document cron/launchd recipe for
@@ -59,6 +70,19 @@ bottom after a release-sized batch.)
   with `cargo install` (gate #7); E2E-reproduce bugs before fixing them.
 
 ## Done log
+
+- [x] 2026-07-17 Audit package G core: deleted the dead async LLM
+      client stack (~500 lines: Client, complete/complete_with_tools,
+      tool body builders, parse_completion parsers, Completion/
+      ToolResult/tools_payload + their tests) - llm.rs 1442 -> 850ish;
+      run_turn now takes a StreamFn seam (pi pattern) with four
+      hermetic loop tests (tool round + ItemDone ordering, length-stop
+      fails calls without executing, cancel -> marker + TurnAborted,
+      error -> Failed with no items); SessionLog got a
+      MONEYBALL_SESSIONS_DIR seam + on-disk create/append/open round-
+      trip test; the stages+snapshot+check prelude that was copy-pasted
+      in fetch/connect/main is now crm::check_with_workspace. E2E:
+      headless brief + crm check on live workspace unchanged (98% join).
 
 - [x] 2026-07-17 Agent-core P1 pair: (1) items now persist AS THEY
       COMPLETE via Ev::ItemDone (codex rollout rule) - terminal events
