@@ -129,7 +129,18 @@ fn drain_stream(app: &mut App) {
             }
             Err(TryRecvError::Empty) => return,
             Err(TryRecvError::Disconnected) => {
+                // The worker died without a final event (panic in a
+                // tool or the forwarder). Never a silent dead turn:
+                // say so, and release the turn so Esc/submit work.
                 app.chat.finish_streaming();
+                if app.turn_active {
+                    app.chat.push(chat::Cell::System(chat::cells::System(
+                        "agent worker stopped unexpectedly - resend your message".into(),
+                    )));
+                }
+                app.turn_active = false;
+                app.cancel
+                    .store(false, std::sync::atomic::Ordering::SeqCst);
                 app.stream = None;
                 return;
             }

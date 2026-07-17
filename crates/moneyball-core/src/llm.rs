@@ -34,6 +34,12 @@ const DEFAULT_TIMEOUT: Duration = Duration::from_secs(60);
 /// for a brief commentary; bump if /ask starts producing longer replies.
 const DEFAULT_MAX_TOKENS: u32 = 4096;
 
+/// max_tokens for full agent turns on the Messages wire: an analysis
+/// plus tool calls routinely outgrows the one-shot commentary budget,
+/// and a length stop costs a whole model round trip (run_turn fails
+/// the calls back). 8192 fits every Messages-wire model we target.
+const AGENT_MAX_TOKENS: u32 = 8192;
+
 /// HTTP client wrapper. Cheap to clone (reqwest::Client is Arc-internal).
 #[derive(Debug, Clone)]
 pub struct Client {
@@ -234,23 +240,11 @@ pub fn stream_blocking(
     let status = resp.status();
     if !status.is_success() {
         let text = resp.text().unwrap_or_default();
-        if status == reqwest::StatusCode::UNAUTHORIZED || status == reqwest::StatusCode::FORBIDDEN {
-            return Err(Error::LlmAuth(format!(
-                "provider '{}' rejected the key (HTTP {}): {}",
-                provider_id,
-                status,
-                truncate(&text, 200)
-            )));
-        }
-        return Err(Error::Llm(format!(
-            "provider '{}' returned HTTP {}: {}",
-            provider_id,
-            status,
-            truncate(&text, 200)
-        )));
+        return Err(status_error(provider_id, status, &text));
     }
 
     let mut full = String::new();
+    let mut terminated = false;
     let reader = BufReader::new(resp);
     for line in reader.lines() {
         let line = line.map_err(|e| Error::Llm(format!("stream read: {}", e)))?;
@@ -258,11 +252,22 @@ pub fn stream_blocking(
             continue; // event:/id:/blank keep-alive lines
         };
         if payload == "[DONE]" {
+            terminated = true;
             break;
         }
         let Ok(v) = serde_json::from_str::<Value>(payload) else {
             continue;
         };
+        match classify_event(provider.wire_api, &v) {
+            SseSignal::Error(msg) => {
+                return Err(Error::Llm(format!(
+                    "provider '{}' stream error: {}",
+                    provider_id, msg
+                )))
+            }
+            SseSignal::Terminal | SseSignal::Stop(_) => terminated = true,
+            SseSignal::None => {}
+        }
         if let Some(d) = extract_stream_delta(provider.wire_api, &v) {
             if !d.is_empty() {
                 full.push_str(&d);
@@ -270,7 +275,93 @@ pub fn stream_blocking(
             }
         }
     }
+    // An empty stream with no terminal event is a failure dressed as
+    // success - e.g. an HTTP 200 whose body is a plain JSON error with
+    // no data: lines. Never return Ok("") for those.
+    if full.is_empty() && !terminated {
+        return Err(Error::Llm(format!(
+            "provider '{}' stream ended without content or a terminal event",
+            provider_id
+        )));
+    }
     Ok(full)
+}
+
+/// 401/403 keep the LlmAuth contract (the wizard re-prompts on it);
+/// everything else is a plain Llm error. One place for all four
+/// request paths - copy drift here is what lost the contract before.
+fn status_error(provider_id: &str, status: reqwest::StatusCode, body: &str) -> Error {
+    if status == reqwest::StatusCode::UNAUTHORIZED || status == reqwest::StatusCode::FORBIDDEN {
+        Error::LlmAuth(format!(
+            "provider '{}' rejected the key (HTTP {}): {}",
+            provider_id,
+            status,
+            truncate(body, 200)
+        ))
+    } else {
+        Error::Llm(format!(
+            "provider '{}' returned HTTP {}: {}",
+            provider_id,
+            status,
+            truncate(body, 200)
+        ))
+    }
+}
+
+/// Non-delta signals a stream can carry, per wire protocol. The stream
+/// loops act on these so a mid-stream provider failure never ends as a
+/// "successful" partial answer, and a max_tokens stop is never silent.
+enum SseSignal {
+    /// Provider reported an error mid-stream (Anthropic `event: error`,
+    /// Responses `response.failed`, chat `{"error": ...}` frames).
+    Error(String),
+    /// The stream terminated properly (message_stop / response.completed;
+    /// chat's `[DONE]` is handled by the line loop itself).
+    Terminal,
+    /// The model stopped for this reason (stop_reason / finish_reason).
+    Stop(String),
+    None,
+}
+
+fn classify_event(wire: WireApi, v: &Value) -> SseSignal {
+    let err_msg = |v: &Value| {
+        v.pointer("/error/message")
+            .and_then(|m| m.as_str())
+            .map(String::from)
+            .unwrap_or_else(|| truncate(&v.to_string(), 200))
+    };
+    match wire {
+        WireApi::Messages => match v.get("type").and_then(|t| t.as_str()) {
+            Some("error") => SseSignal::Error(err_msg(v)),
+            Some("message_stop") => SseSignal::Terminal,
+            Some("message_delta") => match v.pointer("/delta/stop_reason").and_then(|s| s.as_str())
+            {
+                Some(r) => SseSignal::Stop(r.to_string()),
+                None => SseSignal::None,
+            },
+            _ => SseSignal::None,
+        },
+        WireApi::ChatCompletions => {
+            if v.get("error").is_some() {
+                return SseSignal::Error(err_msg(v));
+            }
+            match v.pointer("/choices/0/finish_reason").and_then(|s| s.as_str()) {
+                Some(r) => SseSignal::Stop(r.to_string()),
+                None => SseSignal::None,
+            }
+        }
+        WireApi::Responses => match v.get("type").and_then(|t| t.as_str()) {
+            Some("response.failed") | Some("error") => SseSignal::Error(err_msg(v)),
+            Some("response.completed") => SseSignal::Terminal,
+            Some("response.incomplete") => SseSignal::Stop("max_tokens".into()),
+            _ => SseSignal::None,
+        },
+    }
+}
+
+/// Did the model stop because it ran out of output budget?
+fn is_length_stop(reason: &str) -> bool {
+    matches!(reason, "max_tokens" | "length")
 }
 
 /// Pull the text fragment out of one SSE JSON event, per wire protocol.
@@ -339,7 +430,7 @@ pub fn stream_turn(
         WireApi::Messages => json!({
             "model": model,
             "system": system,
-            "max_tokens": DEFAULT_MAX_TOKENS,
+            "max_tokens": AGENT_MAX_TOKENS,
             "messages": messages_history(history),
             "tools": tools.iter().map(|t| json!({
                 "name": t.name, "description": t.description, "input_schema": t.parameters
@@ -381,16 +472,12 @@ pub fn stream_turn(
     let status = resp.status();
     if !status.is_success() {
         let text = resp.text().unwrap_or_default();
-        return Err(Error::Llm(format!(
-            "provider '{}' returned HTTP {}: {}",
-            provider_id,
-            status,
-            truncate(&text, 200)
-        )));
+        return Err(status_error(provider_id, status, &text));
     }
 
     let mut out = TurnResponse::default();
     let mut acc = ToolCallAcc::default();
+    let mut terminated = false;
     let reader = BufReader::new(resp);
     for line in reader.lines() {
         if cancel.load(Ordering::SeqCst) {
@@ -401,11 +488,28 @@ pub fn stream_turn(
             continue;
         };
         if payload == "[DONE]" {
+            terminated = true;
             break;
         }
         let Ok(v) = serde_json::from_str::<Value>(payload) else {
             continue;
         };
+        match classify_event(provider.wire_api, &v) {
+            SseSignal::Error(msg) => {
+                return Err(Error::Llm(format!(
+                    "provider '{}' stream error: {}",
+                    provider_id, msg
+                )))
+            }
+            SseSignal::Terminal => terminated = true,
+            SseSignal::Stop(reason) => {
+                terminated = true;
+                if is_length_stop(&reason) {
+                    out.truncated = true;
+                }
+            }
+            SseSignal::None => {}
+        }
         if let Some(d) = extract_stream_delta(provider.wire_api, &v) {
             if !d.is_empty() {
                 out.text.push_str(&d);
@@ -415,6 +519,15 @@ pub fn stream_turn(
         acc.feed(provider.wire_api, &v);
     }
     out.tool_calls = acc.finish();
+    // Empty and terminal-less = a failure dressed as success (200 with
+    // a non-SSE error body, dropped connection before any frame). A
+    // silent dead turn violates the loop contract - fail loudly.
+    if !terminated && out.text.is_empty() && out.tool_calls.is_empty() {
+        return Err(Error::Llm(format!(
+            "provider '{}' stream ended without content or a terminal event",
+            provider_id
+        )));
+    }
     Ok(out)
 }
 
@@ -1310,6 +1423,80 @@ mod tests {
         );
         let v2: Value = serde_json::from_str(r#"{"type":"response.completed"}"#).unwrap();
         assert!(extract_stream_delta(WireApi::Responses, &v2).is_none());
+    }
+
+    #[test]
+    fn classify_error_terminal_and_stop_per_wire() {
+        let cases: &[(WireApi, &str, &str)] = &[
+            (
+                WireApi::Messages,
+                r#"{"type":"error","error":{"type":"overloaded_error","message":"Overloaded"}}"#,
+                "error",
+            ),
+            (WireApi::Messages, r#"{"type":"message_stop"}"#, "terminal"),
+            (
+                WireApi::Messages,
+                r#"{"type":"message_delta","delta":{"stop_reason":"max_tokens"},"usage":{}}"#,
+                "length",
+            ),
+            (
+                WireApi::ChatCompletions,
+                r#"{"error":{"message":"bad model"}}"#,
+                "error",
+            ),
+            (
+                WireApi::ChatCompletions,
+                r#"{"choices":[{"delta":{},"finish_reason":"length"}]}"#,
+                "length",
+            ),
+            (
+                WireApi::ChatCompletions,
+                r#"{"choices":[{"delta":{},"finish_reason":"stop"}]}"#,
+                "stop",
+            ),
+            (
+                WireApi::Responses,
+                r#"{"type":"response.failed","response":{},"error":{"message":"boom"}}"#,
+                "error",
+            ),
+            (WireApi::Responses, r#"{"type":"response.completed"}"#, "terminal"),
+        ];
+        for (wire, payload, want) in cases {
+            let v: Value = serde_json::from_str(payload).unwrap();
+            let got = match classify_event(*wire, &v) {
+                SseSignal::Error(_) => "error".to_string(),
+                SseSignal::Terminal => "terminal".to_string(),
+                SseSignal::Stop(r) if is_length_stop(&r) => "length".to_string(),
+                SseSignal::Stop(r) => r,
+                SseSignal::None => "none".to_string(),
+            };
+            assert_eq!(&got, want, "payload: {}", payload);
+        }
+        // Plain deltas are not signals.
+        let v: Value = serde_json::from_str(
+            r#"{"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"x"}}"#,
+        )
+        .unwrap();
+        assert!(matches!(
+            classify_event(WireApi::Messages, &v),
+            SseSignal::None
+        ));
+    }
+
+    #[test]
+    fn status_error_keeps_llm_auth_contract() {
+        assert!(matches!(
+            status_error("p", reqwest::StatusCode::UNAUTHORIZED, "no"),
+            Error::LlmAuth(_)
+        ));
+        assert!(matches!(
+            status_error("p", reqwest::StatusCode::FORBIDDEN, "no"),
+            Error::LlmAuth(_)
+        ));
+        assert!(matches!(
+            status_error("p", reqwest::StatusCode::INTERNAL_SERVER_ERROR, "boom"),
+            Error::Llm(_)
+        ));
     }
 
     #[test]

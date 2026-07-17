@@ -206,11 +206,49 @@ pub fn run_turn(
                 return;
             }
         };
-        if !resp.text.is_empty() {
-            history.push(Item::Assistant {
-                text: resp.text.clone(),
-            });
-            let _ = tx.send(Ev::AssistantDone { text: resp.text });
+        let mut text = resp.text;
+        if resp.truncated && resp.tool_calls.is_empty() {
+            // Length-stopped plain answer: never present it as complete.
+            let note = "\n[response cut off: the model hit its max_tokens limit]";
+            let _ = tx.send(Ev::AssistantDelta(note.to_string()));
+            text.push_str(note);
+        }
+        if !text.is_empty() {
+            history.push(Item::Assistant { text: text.clone() });
+            let _ = tx.send(Ev::AssistantDone { text });
+        }
+        if resp.truncated && !resp.tool_calls.is_empty() {
+            // pi's contract: a length stop fails ALL tool calls - the
+            // args may be cut mid-JSON (parse_args would run the tool
+            // with silently wrong args). Feed errors back and let the
+            // model retry.
+            for call in resp.tool_calls {
+                history.push(Item::ToolCall {
+                    call_id: call.id.clone(),
+                    name: call.name.clone(),
+                    args: call.arguments.clone(),
+                });
+                let output = "not executed: the response hit the max_tokens limit \
+                              mid-call, so the arguments may be truncated - re-issue \
+                              the call"
+                    .to_string();
+                history.push(Item::ToolOutput {
+                    call_id: call.id.clone(),
+                    output: output.clone(),
+                    is_error: true,
+                });
+                let _ = tx.send(Ev::ToolBegin {
+                    call_id: call.id.clone(),
+                    name: call.name,
+                    args: call.arguments,
+                });
+                let _ = tx.send(Ev::ToolEnd {
+                    call_id: call.id,
+                    output,
+                    ok: false,
+                });
+            }
+            continue;
         }
         if resp.tool_calls.is_empty() {
             let _ = tx.send(Ev::TurnComplete {
@@ -266,6 +304,10 @@ pub fn run_turn(
 pub struct TurnResponse {
     pub text: String,
     pub tool_calls: Vec<ToolCall>,
+    /// The model hit its max_tokens budget (stop_reason max_tokens /
+    /// finish_reason length): text is incomplete and any tool-call args
+    /// may be cut mid-JSON - they must not be executed as-is.
+    pub truncated: bool,
 }
 
 #[cfg(test)]

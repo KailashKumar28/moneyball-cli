@@ -33,6 +33,15 @@ use moneyball_core::AppConfig;
 pub type Tui = Terminal<CrosstermBackend<Stdout>>;
 
 pub fn init() -> Result<Tui> {
+    // Panic hook FIRST (codex-tui pattern): a panic anywhere in the
+    // event loop unwinds past the normal restore() call, and without
+    // this the user's shell is left in raw mode + alt screen with the
+    // panic message invisible until they run `reset`.
+    let prev = std::panic::take_hook();
+    std::panic::set_hook(Box::new(move |info| {
+        let _ = restore();
+        prev(info);
+    }));
     enable_raw_mode()?;
     let mut out = io::stdout();
     // Mouse capture lets the wheel scroll the transcript instead of the
@@ -52,11 +61,15 @@ pub fn init() -> Result<Tui> {
 }
 
 pub fn restore() -> Result<()> {
-    disable_raw_mode()?;
-    // Best-effort: release the mouse even if leaving the alt screen fails.
+    // Every step best-effort: one failure must not skip the rest, or
+    // the terminal stays half-broken (e.g. raw mode off but still in
+    // the alt screen).
+    let raw = disable_raw_mode();
     let _ = execute!(io::stdout(), crossterm::event::DisableMouseCapture);
     let _ = execute!(io::stdout(), crossterm::event::DisableBracketedPaste);
-    execute!(io::stdout(), LeaveAlternateScreen)?;
+    let alt = execute!(io::stdout(), LeaveAlternateScreen);
+    raw?;
+    alt?;
     Ok(())
 }
 

@@ -56,6 +56,18 @@ bottom after a release-sized batch.)
 
 ## Done log
 
+- [x] 2026-07-17 Audit package E (turn robustness P1s): SSE error events
+      and 200-status error bodies now fail the turn loudly (per-wire
+      classify + terminal-event tracking; empty terminal-less streams
+      are errors, never Ok("")); stop_reason/finish_reason observed -
+      length stops fail ALL tool calls back to the model (pi contract)
+      and cut-off plain answers get a visible note; agent turns on the
+      Messages wire raised to 8192 max_tokens; stream_turn restored the
+      LlmAuth contract via a shared status_error; TUI panic hook
+      restores the terminal (codex pattern) and restore() is best-effort
+      per step; a dead agent worker now releases the turn with a visible
+      cell instead of bricking Esc. Live E2E vs MiniMax passed.
+
 - [x] 2026-07-17 Audit package D (all five P0s from the full architecture
       audit): heal_history now runs before base_len capture (Esc during a
       tool no longer corrupts sessions with per-turn duplicates); snapshot
