@@ -40,6 +40,10 @@ bottom after a release-sized batch.)
       the end of /setup instead of leaving CRM discovery to docs.
 - [ ] **MB_AGENT output coverage**: machine-readable JSON for `brief`,
       `crm check`, `crm fetch` (exists for some sub-commands only).
+- [ ] **Auto-compaction**: real history compaction (LLM summary of old
+      turns) once sessions regularly outgrow the context window - /clear
+      is the manual escape hatch shipped 2026-07-17; codex's /compact is
+      the reference.
 
 ## User-side / verification (not code)
 
@@ -55,6 +59,18 @@ bottom after a release-sized batch.)
   with `cargo install` (gate #7); E2E-reproduce bugs before fixing them.
 
 ## Done log
+
+- [x] 2026-07-17 Agent-core P1 pair: (1) items now persist AS THEY
+      COMPLETE via Ev::ItemDone (codex rollout rule) - terminal events
+      carry no payload and the base_len/split_off machinery is gone
+      entirely, so the shifted-window bug class cannot recur; a crash
+      mid-turn loses at most the item in flight (E2E: session JSONL
+      shows user/tool_call/tool_output/assistant appended during the
+      turn). (2) Context-overflow escape hatch: /clear (alias /new)
+      starts a fresh history + session file (old one stays resumable),
+      and context-window errors get an actionable /clear hint in the
+      failure cell. E2E: /clear -> turn -> /quit -> --continue resumes
+      the fresh session correctly. ARCHITECTURE 6b seam updated.
 
 - [x] 2026-07-17 Audit package F (truth + TUI P1s): /diagnose and
       /ledger stubs removed from COMMANDS, /help, and the agent prompt

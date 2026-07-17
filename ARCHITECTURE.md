@@ -135,9 +135,13 @@ requires updating this section first.
   understand agent loops; the loop + files + a few sharp tools is the
   product. Escape hatches go through existing commands, not new machinery.
 - **TUI<->core seam**: `Op` in (UserInput/Interrupt/Shutdown), `Ev` out
-  (TurnStarted, AssistantDelta/Done, ToolBegin/End keyed by call_id,
-  TurnAborted, TurnComplete, Error) over std mpsc. The TUI creates a cell
-  on ToolBegin and finalizes it on ToolEnd; it never sees wire formats.
+  (AssistantDelta/Done, ToolBegin/End keyed by call_id, ItemDone,
+  TurnAborted, TurnComplete, Failed) over std mpsc. Items are emitted via
+  `ItemDone` the moment they are final and the UI records each immediately
+  (codex appends to the rollout as it goes - a crash mid-turn loses at
+  most the item in flight); the terminal events carry no item payload.
+  The TUI creates a cell on ToolBegin and finalizes it on ToolEnd; it
+  never sees wire formats.
 
 ## 7. Enforcement gates (definition of done for any change)
 

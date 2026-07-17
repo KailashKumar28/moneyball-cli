@@ -39,12 +39,15 @@ pub enum Item {
     },
 }
 
-/// Events the agent worker sends to the UI thread. The final events
-/// carry complete content so deltas never need persisting (codex rule).
+/// Events the agent worker sends to the UI thread. Items are emitted
+/// one by one AS THEY COMPLETE (codex appends to the rollout as it
+/// goes) - a crash or quit mid-turn loses at most the item in flight,
+/// and the final events carry no payload to re-sync.
 pub enum Ev {
     AssistantDelta(String),
     /// One assistant message finished (there may be several per turn
-    /// when tool rounds intervene).
+    /// when tool rounds intervene). UI-only; the matching ItemDone
+    /// carries the same text for persistence.
     AssistantDone {
         text: String,
     },
@@ -58,22 +61,19 @@ pub enum Ev {
         output: String,
         ok: bool,
     },
-    /// Turn ended normally. Carries every item appended this turn -
-    /// the App replaces its history tail with these (one turn in
-    /// flight, so clone-and-return is race-free).
+    /// One transcript item is final - record it (history + session
+    /// JSONL) immediately.
+    ItemDone(Item),
+    /// Turn ended normally.
     TurnComplete {
-        items: Vec<Item>,
         ms: u64,
         provider: String,
     },
-    /// User interrupted (cancel flag). Partial items are included and a
-    /// <turn_aborted> marker has been appended.
-    TurnAborted {
-        items: Vec<Item>,
-    },
+    /// User interrupted (cancel flag). A <turn_aborted> marker item
+    /// has already been emitted via ItemDone.
+    TurnAborted,
     Failed {
         error: String,
-        items: Vec<Item>,
     },
 }
 
@@ -165,15 +165,20 @@ pub fn run_turn(
     tx: &Sender<Ev>,
 ) {
     let started = std::time::Instant::now();
-    // Heal BEFORE capturing base_len: a dangling ToolCall from a prior
-    // aborted turn gets its synthesized output inserted at an index
-    // below the split point, so capturing base_len first would leave it
-    // pointing one item short and split_off would re-emit (and the
-    // drain would re-persist) the last pre-turn item on every turn.
-    // Within a turn no new dangling call can appear - each ToolCall is
-    // answered inline or the loop returns - so once is enough.
+    // New items are appended to the local prompt history AND emitted as
+    // Ev::ItemDone the moment they are final (codex's rollout rule) -
+    // the UI records each immediately, so a crash mid-turn loses at
+    // most the item in flight.
+    let emit = |history: &mut Vec<Item>, item: Item| {
+        history.push(item.clone());
+        let _ = tx.send(Ev::ItemDone(item));
+    };
+    // Request-building healing only (never emitted): dangling ToolCalls
+    // from a prior aborted turn get synthesized outputs so every wire
+    // request satisfies invariant 1. Within a turn no new dangling call
+    // can appear - each ToolCall is answered inline or the loop
+    // returns - so once is enough.
     heal_history(&mut history);
-    let base_len = history.len();
     loop {
         let resp = crate::llm::stream_turn(
             provider_id,
@@ -191,16 +196,16 @@ pub fn run_turn(
             Ok(r) => r,
             Err(e) => {
                 if cancel.load(Ordering::SeqCst) {
-                    history.push(Item::User {
-                        text: TURN_ABORTED_MARKER.into(),
-                    });
-                    let _ = tx.send(Ev::TurnAborted {
-                        items: history.split_off(base_len),
-                    });
+                    emit(
+                        &mut history,
+                        Item::User {
+                            text: TURN_ABORTED_MARKER.into(),
+                        },
+                    );
+                    let _ = tx.send(Ev::TurnAborted);
                 } else {
                     let _ = tx.send(Ev::Failed {
                         error: e.to_string(),
-                        items: history.split_off(base_len),
                     });
                 }
                 return;
@@ -214,7 +219,7 @@ pub fn run_turn(
             text.push_str(note);
         }
         if !text.is_empty() {
-            history.push(Item::Assistant { text: text.clone() });
+            emit(&mut history, Item::Assistant { text: text.clone() });
             let _ = tx.send(Ev::AssistantDone { text });
         }
         if resp.truncated && !resp.tool_calls.is_empty() {
@@ -223,20 +228,26 @@ pub fn run_turn(
             // with silently wrong args). Feed errors back and let the
             // model retry.
             for call in resp.tool_calls {
-                history.push(Item::ToolCall {
-                    call_id: call.id.clone(),
-                    name: call.name.clone(),
-                    args: call.arguments.clone(),
-                });
+                emit(
+                    &mut history,
+                    Item::ToolCall {
+                        call_id: call.id.clone(),
+                        name: call.name.clone(),
+                        args: call.arguments.clone(),
+                    },
+                );
                 let output = "not executed: the response hit the max_tokens limit \
                               mid-call, so the arguments may be truncated - re-issue \
                               the call"
                     .to_string();
-                history.push(Item::ToolOutput {
-                    call_id: call.id.clone(),
-                    output: output.clone(),
-                    is_error: true,
-                });
+                emit(
+                    &mut history,
+                    Item::ToolOutput {
+                        call_id: call.id.clone(),
+                        output: output.clone(),
+                        is_error: true,
+                    },
+                );
                 let _ = tx.send(Ev::ToolBegin {
                     call_id: call.id.clone(),
                     name: call.name,
@@ -252,18 +263,20 @@ pub fn run_turn(
         }
         if resp.tool_calls.is_empty() {
             let _ = tx.send(Ev::TurnComplete {
-                items: history.split_off(base_len),
                 ms: started.elapsed().as_millis() as u64,
                 provider: provider_id.to_string(),
             });
             return;
         }
         for call in resp.tool_calls {
-            history.push(Item::ToolCall {
-                call_id: call.id.clone(),
-                name: call.name.clone(),
-                args: call.arguments.clone(),
-            });
+            emit(
+                &mut history,
+                Item::ToolCall {
+                    call_id: call.id.clone(),
+                    name: call.name.clone(),
+                    args: call.arguments.clone(),
+                },
+            );
             if cancel.load(Ordering::SeqCst) {
                 break; // next turn's heal_history synthesizes the aborted output
             }
@@ -276,11 +289,14 @@ pub fn run_turn(
                 Ok(o) => (truncate_output(&o), true),
                 Err(e) => (e, false),
             };
-            history.push(Item::ToolOutput {
-                call_id: call.id.clone(),
-                output: output.clone(),
-                is_error: !ok,
-            });
+            emit(
+                &mut history,
+                Item::ToolOutput {
+                    call_id: call.id.clone(),
+                    output: output.clone(),
+                    is_error: !ok,
+                },
+            );
             let _ = tx.send(Ev::ToolEnd {
                 call_id: call.id,
                 output,
@@ -288,12 +304,13 @@ pub fn run_turn(
             });
         }
         if cancel.load(Ordering::SeqCst) {
-            history.push(Item::User {
-                text: TURN_ABORTED_MARKER.into(),
-            });
-            let _ = tx.send(Ev::TurnAborted {
-                items: history.split_off(base_len),
-            });
+            emit(
+                &mut history,
+                Item::User {
+                    text: TURN_ABORTED_MARKER.into(),
+                },
+            );
+            let _ = tx.send(Ev::TurnAborted);
             return;
         }
     }

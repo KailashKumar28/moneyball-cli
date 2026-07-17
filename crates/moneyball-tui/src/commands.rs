@@ -17,6 +17,7 @@ pub(crate) const COMMANDS: &[(&str, &str)] = &[
     ("/funnel", "per-entity funnel for a product"),
     ("/ask", "free-form question (LLM picks commands)"),
     ("/snapshot", "list or validate snapshots"),
+    ("/clear", "start a fresh conversation (new session file)"),
     ("/keychain", "show which providers have API keys configured"),
     ("/setup", "re-run the setup wizard"),
     ("/help", "list slash commands"),
@@ -203,6 +204,35 @@ your own pipeline at\n\n    {}/<YYYY-MM-DD>/\n\nand /brief reads whatever it wri
                     true,
                     started.elapsed().as_millis() as u64,
                 );
+            }
+        }
+        "/clear" | "/new" => {
+            // Escape hatch for context growth (codex /new): fresh
+            // history + fresh session file. The old session stays on
+            // disk untouched (append-only, resumable via -c or --resume).
+            if app.turn_active || app.stream.is_some() {
+                app.status = Some("still responding - esc to interrupt first".into());
+                return;
+            }
+            app.history.clear();
+            app.chat.cells.clear();
+            app.chat.scroll_to_bottom();
+            match moneyball_core::session::SessionLog::create(app.cfg.data_root.clone()) {
+                Ok(log) => {
+                    app.session = Some(log);
+                    app.chat.push(Cell::System(cells::System(
+                        "fresh conversation - previous session saved on disk (resume with \
+                         moneyball --continue)"
+                            .into(),
+                    )));
+                }
+                Err(e) => {
+                    app.session = None;
+                    app.chat.push(Cell::System(cells::System(format!(
+                        "fresh conversation - but the new session log is unavailable ({})",
+                        e
+                    ))));
+                }
             }
         }
         "/keychain" => {

@@ -101,14 +101,13 @@ fn drain_stream(app: &mut App) {
                                 duration_ms: ms,
                             }));
                     }
-                    Ev::TurnComplete {
-                        items,
-                        ms,
-                        provider,
-                    } => {
-                        for item in items {
-                            app.record(item);
-                        }
+                    Ev::ItemDone(item) => {
+                        // Persist the moment an item is final (codex's
+                        // rollout rule) - a crash or quit mid-turn
+                        // loses at most the item in flight.
+                        app.record(item);
+                    }
+                    Ev::TurnComplete { ms, provider } => {
                         app.chat.finish_streaming();
                         // Latency/provider is status metadata, never
                         // part of the persisted message text.
@@ -117,10 +116,7 @@ fn drain_stream(app: &mut App) {
                         app.stream = None;
                         return;
                     }
-                    Ev::TurnAborted { items } => {
-                        for item in items {
-                            app.record(item);
-                        }
+                    Ev::TurnAborted => {
                         app.chat.finish_streaming();
                         app.chat.push(chat::Cell::System(chat::cells::System(
                             "(turn interrupted)".into(),
@@ -129,12 +125,19 @@ fn drain_stream(app: &mut App) {
                         app.stream = None;
                         return;
                     }
-                    Ev::Failed { error, items } => {
-                        for item in items {
-                            app.record(item);
-                        }
+                    Ev::Failed { error } => {
+                        // Context overflow gets an actionable hint -
+                        // without it every later turn fails the same
+                        // way and the session looks bricked.
+                        let hint = if looks_like_context_overflow(&error) {
+                            "\nthe conversation may have outgrown the model's context \
+                             window - /clear starts a fresh session (the old one stays \
+                             on disk)"
+                        } else {
+                            ""
+                        };
                         app.chat
-                            .append_assistant(&format!("llm call failed: {}", error));
+                            .append_assistant(&format!("llm call failed: {}{}", error, hint));
                         app.chat.finish_streaming();
                         app.turn_active = false;
                         app.stream = None;
@@ -171,6 +174,16 @@ fn drain_stream(app: &mut App) {
             }
         }
     }
+}
+
+/// Provider error text that smells like a context-window overflow.
+/// Wording varies per provider; these substrings cover Anthropic,
+/// OpenAI-compatible, and MiniMax phrasings.
+fn looks_like_context_overflow(error: &str) -> bool {
+    let e = error.to_lowercase();
+    ["context length", "context window", "prompt is too long", "maximum context", "token limit"]
+        .iter()
+        .any(|p| e.contains(p))
 }
 
 /// Route a pasted string into the currently focused input field. Without this,
