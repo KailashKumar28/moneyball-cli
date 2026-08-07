@@ -6,6 +6,11 @@ members = [
     "crates/moneyball-tui",
 ]
 
+[workspace.lints.clippy]
+# Byte-index string slicing panics on multibyte text (lead names, error
+# bodies). The one sanctioned slice lives in moneyball-core::text.
+string_slice = "deny"
+
 [workspace.package]
 version = "0.1.0"
 edition = "2021"
@@ -39,6 +44,10 @@ csv = "1"
 # Errors
 anyhow = "1"
 thiserror = "1"
+
+# JSON Schema generation for persisted artifacts (docs/schemas/, pinned
+# by the schema_contract test)
+schemars = "1"
 
 # Secrets live in ~/.moneyball/auth.json (0600) - codex-style file store.
 # (We moved off `keyring`: macOS ties keychain ACLs to the code signature,

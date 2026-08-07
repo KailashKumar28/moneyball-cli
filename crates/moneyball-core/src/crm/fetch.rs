@@ -406,12 +406,7 @@ fn request_page(
 
 /// First ~200 chars of an error body - enough to diagnose, never a dump.
 fn preview(v: &Value) -> String {
-    let s = v.to_string();
-    format!(
-        "{}{}",
-        source::truncate_chars(&s, 200),
-        if s.len() > 200 { "..." } else { "" }
-    )
+    crate::text::truncate_marked(&v.to_string(), 200, "...")
 }
 
 /// Drop records whose delivery (read via `map.delivery`) is older than

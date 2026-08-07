@@ -173,7 +173,14 @@ pub fn run_turn(
 ) {
     let stream: StreamFn = &|history, on_delta| {
         crate::llm::stream_turn(
-            provider_id, provider, model, system, history, tools, cancel, on_delta,
+            provider_id,
+            provider,
+            model,
+            system,
+            history,
+            tools,
+            cancel,
+            on_delta,
         )
     };
     run_turn_with(stream, provider_id, history, exec, cancel, tx)
@@ -367,7 +374,11 @@ mod tests {
     }
     impl ToolExec for FakeExec {
         fn run(&self, name: &str, _args: &Value) -> std::result::Result<String, String> {
-            assert!(self.allow, "tool {} must not execute in this scenario", name);
+            assert!(
+                self.allow,
+                "tool {} must not execute in this scenario",
+                name
+            );
             Ok(format!("{} output", name))
         }
     }

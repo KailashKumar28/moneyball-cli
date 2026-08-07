@@ -382,10 +382,7 @@ impl ChatLog {
     }
 
     pub fn scroll_up(&mut self, n: u16) {
-        self.scroll = self
-            .scroll
-            .saturating_add(n)
-            .min(self.max_scroll.get());
+        self.scroll = self.scroll.saturating_add(n).min(self.max_scroll.get());
     }
     pub fn scroll_down(&mut self, n: u16) {
         self.scroll = self.scroll.saturating_sub(n);
@@ -441,11 +438,8 @@ impl ChatLog {
         }
         // Pick the visible window. scroll=0 -> show last `height` lines.
         let total = flat.len();
-        self.max_scroll.set(
-            total
-                .saturating_sub(height as usize)
-                .min(u16::MAX as usize) as u16,
-        );
+        self.max_scroll
+            .set(total.saturating_sub(height as usize).min(u16::MAX as usize) as u16);
         let end = total.saturating_sub(self.scroll as usize);
         let start = end.saturating_sub(height as usize);
         flat.into_iter().skip(start).take(height as usize).collect()

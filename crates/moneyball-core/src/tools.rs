@@ -80,7 +80,6 @@ pub fn funnel_tool() -> Tool {
     )
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -102,6 +101,4 @@ mod tests {
         let required = t.parameters["required"].as_array().unwrap();
         assert!(required.iter().any(|v| v == "product"));
     }
-
-
 }

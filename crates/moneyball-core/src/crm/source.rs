@@ -248,17 +248,6 @@ pub fn add_stage_mappings(spec_toml: &str, pairs: &[(String, String)]) -> Result
     Ok(out)
 }
 
-/// Cut a string at (or just before) `cap` bytes, on a char boundary.
-/// The byte-slice `&s[..n]` panics on multibyte text - lead names and
-/// error bodies routinely contain it.
-pub fn truncate_chars(s: &str, cap: usize) -> &str {
-    let mut end = cap.min(s.len());
-    while !s.is_char_boundary(end) {
-        end -= 1;
-    }
-    &s[..end]
-}
-
 /// Dot-path lookup: `a.b.c` descends nested objects. Exposed because
 /// the page loop uses it to compute each record's delivery epoch for
 /// the client-side date cutover (`fetch_crm`).

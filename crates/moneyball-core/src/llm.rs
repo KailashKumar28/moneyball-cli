@@ -184,7 +184,10 @@ fn classify_event(wire: WireApi, v: &Value) -> SseSignal {
             if v.get("error").is_some() {
                 return SseSignal::Error(err_msg(v));
             }
-            match v.pointer("/choices/0/finish_reason").and_then(|s| s.as_str()) {
+            match v
+                .pointer("/choices/0/finish_reason")
+                .and_then(|s| s.as_str())
+            {
                 Some(r) => SseSignal::Stop(r.to_string()),
                 None => SseSignal::None,
             }
@@ -226,17 +229,7 @@ fn extract_stream_delta(wire: WireApi, v: &Value) -> Option<String> {
 }
 
 fn truncate(s: &str, n: usize) -> String {
-    // Char-boundary walk: error bodies contain multibyte text (Rs signs,
-    // lead names) and a raw byte slice would panic.
-    let mut end = n.min(s.len());
-    while !s.is_char_boundary(end) {
-        end -= 1;
-    }
-    if end == s.len() {
-        s.to_string()
-    } else {
-        format!("{}...", &s[..end])
-    }
+    crate::text::truncate_marked(s, n, "...")
 }
 
 // ---------- agent turn requests (full history + tools) ----------
@@ -692,23 +685,9 @@ mod tests {
         assert_eq!(v["messages"][0]["role"], "user");
     }
 
-
-
-
-
-
-
     // ---------- tool-calling body builders ----------
 
-
-
-
     // ---------- tool-calling response parsers ----------
-
-
-
-
-
 
     // ---------- streaming delta extraction ----------
 
@@ -727,7 +706,6 @@ mod tests {
         assert!(extract_stream_delta(WireApi::Messages, &v2).is_none());
     }
 
-
     #[test]
     fn stream_delta_responses_wire() {
         let v: Value =
@@ -740,7 +718,6 @@ mod tests {
         let v2: Value = serde_json::from_str(r#"{"type":"response.completed"}"#).unwrap();
         assert!(extract_stream_delta(WireApi::Responses, &v2).is_none());
     }
-
 
     #[test]
     fn status_error_keeps_llm_auth_contract() {
@@ -757,7 +734,6 @@ mod tests {
             Error::Llm(_)
         ));
     }
-
 }
 
 #[cfg(test)]
@@ -831,7 +807,6 @@ mod turn_tests {
         assert_eq!(calls[0].id, "c9");
         assert_eq!(calls[0].arguments["a"], 1);
     }
-
 
     #[test]
     fn bad_args_become_empty_object_not_panic() {

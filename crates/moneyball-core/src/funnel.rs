@@ -214,12 +214,12 @@ pub fn run(cfg: &AppConfig, product: &str, by: &str, days: u32, date: Option<&st
         By::Ad => "ad",
     };
     println!(
-        "FUNNEL {} · by {} · {}d · snapshot {}",
+        "FUNNEL {} - by {} - {}d - snapshot {}",
         product, by_name, days, snap.date
     );
     print!("{}", table(&rows));
     println!(
-        "\nkill = spend >= {}x/{}x/{}x target Rs/qualified with 0/1/2 qualified · immature = leads arrived in trailing {}h",
+        "\nkill = spend >= {}x/{}x/{}x target Rs/qualified with 0/1/2 qualified; immature = leads arrived in trailing {}h",
         KILL_TABLE[0], KILL_TABLE[1], KILL_TABLE[2], LAG_HOURS
     );
     Ok(())

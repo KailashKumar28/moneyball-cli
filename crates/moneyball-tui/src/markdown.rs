@@ -79,7 +79,12 @@ fn block_prefix(line: &str) -> (Vec<Run>, &str, Option<Style>) {
     }
     let hashes = trimmed.chars().take_while(|c| *c == '#').count();
     if (1..=4).contains(&hashes) && trimmed.chars().nth(hashes) == Some(' ') {
-        return (vec![], trimmed[hashes + 1..].trim_start(), Some(bold()));
+        // hashes+1 counts ASCII bytes, so split_at lands on a boundary.
+        return (
+            vec![],
+            trimmed.split_at(hashes + 1).1.trim_start(),
+            Some(bold()),
+        );
     }
     (vec![], line, None)
 }
@@ -100,24 +105,24 @@ fn inline_runs(text: &str) -> Vec<Run> {
     };
     while !rest.is_empty() {
         if let Some(tail) = rest.strip_prefix("**") {
-            if let Some(end) = tail.find("**") {
+            if let Some((body, tail)) = tail.split_once("**") {
                 flush(&mut runs, &mut cur);
                 runs.push(Run {
-                    text: tail[..end].to_string(),
+                    text: body.to_string(),
                     style: bold(),
                 });
-                rest = &tail[end + 2..];
+                rest = tail;
                 continue;
             }
         }
         if let Some(tail) = rest.strip_prefix('`') {
-            if let Some(end) = tail.find('`') {
+            if let Some((body, tail)) = tail.split_once('`') {
                 flush(&mut runs, &mut cur);
                 runs.push(Run {
-                    text: tail[..end].to_string(),
+                    text: body.to_string(),
                     style: code(),
                 });
-                rest = &tail[end + 1..];
+                rest = tail;
                 continue;
             }
         }
@@ -167,6 +172,8 @@ fn wrap_runs(prefix: &[Run], runs: Vec<Run>, width: usize) -> Vec<Vec<Run>> {
 
 /// Split into words and the single spaces between them, preserving both
 /// so styled runs rejoin without losing spacing.
+// char_indices only yields char boundaries, so the slices cannot panic.
+#[allow(clippy::string_slice)]
 fn split_keep_spaces(s: &str) -> Vec<&str> {
     let mut out = Vec::new();
     let mut start = 0;

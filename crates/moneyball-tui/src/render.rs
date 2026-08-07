@@ -174,8 +174,9 @@ fn render_chat_view(f: &mut ratatui::Frame, area: Rect, app: &App) {
             ),
         ])
     } else {
-        let before = app.input[..app.cursor].to_string();
-        let after = app.input[app.cursor..].to_string();
+        // Cursor is kept on char boundaries by event.rs insert/delete/moves.
+        let (before, after) = app.input.split_at(app.cursor);
+        let (before, after) = (before.to_string(), after.to_string());
         Line::from(vec![
             Span::styled(
                 "\u{276F} ",

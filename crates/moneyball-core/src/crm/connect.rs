@@ -112,12 +112,15 @@ fn percent_decode(s: &str) -> String {
     while i < bytes.len() {
         match bytes[i] {
             b'%' if i + 2 < bytes.len() => {
-                match u8::from_str_radix(&s[i + 1..i + 3], 16) {
-                    Ok(b) => {
+                // Decode from the byte pair, not a string slice: `%` followed
+                // by multibyte text would split a char boundary and panic.
+                let hex = std::str::from_utf8(&bytes[i + 1..i + 3]).ok();
+                match hex.and_then(|h| u8::from_str_radix(h, 16).ok()) {
+                    Some(b) => {
                         out.push(b);
                         i += 3;
                     }
-                    Err(_) => {
+                    None => {
                         out.push(b'%');
                         i += 1;
                     }
@@ -236,32 +239,24 @@ fn provider_of(cfg: &AppConfig) -> Result<(String, ModelProviderInfo, String)> {
 }
 
 fn truncated_json(v: &Value) -> String {
+    // Capped: the LLM only needs the shape + examples.
     let s = serde_json::to_string_pretty(v).unwrap_or_default();
-    if s.len() <= SAMPLE_CAP_BYTES {
-        return s;
-    }
-    // Cut on a char boundary; the LLM only needs the shape + examples.
-    let mut end = SAMPLE_CAP_BYTES;
-    while !s.is_char_boundary(end) {
-        end -= 1;
-    }
-    format!("{}\n... (truncated)", &s[..end])
+    crate::text::truncate_marked(&s, SAMPLE_CAP_BYTES, "\n... (truncated)")
 }
 
 /// Pull the toml out of a model response that may wrap it in fences or
 /// lead with prose.
 fn extract_toml(text: &str) -> String {
     let t = text.trim();
-    if let Some(start) = t.find("```") {
-        let after = &t[start + 3..];
+    if let Some((_, after)) = t.split_once("```") {
         let after = after.strip_prefix("toml").unwrap_or(after);
-        if let Some(end) = after.find("```") {
-            return after[..end].trim().to_string();
+        if let Some((body, _)) = after.split_once("```") {
+            return body.trim().to_string();
         }
     }
     // No fences: drop any prose before the first toml key/table.
     match t.find("name") {
-        Some(i) => t[i..].trim().to_string(),
+        Some(i) => t.split_at(i).1.trim().to_string(),
         None => t.to_string(),
     }
 }

@@ -934,7 +934,8 @@ fn parse_goals(
         })?;
 
         // Name = chars from start to '=' (trim trailing whitespace).
-        let name = rest[..eq].trim();
+        // eq/val_end come from find(), so split_at lands on char boundaries.
+        let name = rest.split_at(eq).0.trim();
         if name.is_empty() {
             return Err("empty product name before '='".into());
         }
@@ -947,11 +948,11 @@ fn parse_goals(
         }
 
         // Number = chars after '=' until next whitespace/comma or end-of-input.
-        let after_eq = &rest[eq + 1..];
+        let after_eq = rest.split_at(eq + 1).1;
         let val_end = after_eq
             .find(|c: char| c.is_whitespace() || c == ',')
             .unwrap_or(after_eq.len());
-        let val = after_eq[..val_end].trim();
+        let val = after_eq.split_at(val_end).0.trim();
 
         let v: f64 = val.parse().map_err(|_| {
             format!(
@@ -959,7 +960,12 @@ fn parse_goals(
                 val,
                 name,
                 val,
-                after_eq[val_end..].chars().take(20).collect::<String>()
+                after_eq
+                    .split_at(val_end)
+                    .1
+                    .chars()
+                    .take(20)
+                    .collect::<String>()
             )
         })?;
         if v <= 0.0 || v > 1000.0 {
@@ -968,7 +974,7 @@ fn parse_goals(
         out.insert(name.to_string(), v);
 
         // Advance past the number (and any whitespace/comma immediately after).
-        rest = after_eq[val_end..].trim_start();
+        rest = after_eq.split_at(val_end).1.trim_start();
     }
 
     // Fill in defaults for any missing products so partial input still saves.

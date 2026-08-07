@@ -93,7 +93,11 @@ pub fn compute(
     let trend_rows = trend_rows_for(history, &rows);
     apply_trends(&mut rows, trend_rows);
 
-    ProductRowsAndFeasibility { rows, feasibility }
+    ProductRowsAndFeasibility {
+        rows,
+        feasibility,
+        snapshot_date: snap.date.clone(),
+    }
 }
 
 /// Time window over which brief aggregates. Bundles the date and IST
@@ -344,6 +348,23 @@ fn round2(x: f64) -> f64 {
 pub struct ProductRowsAndFeasibility {
     pub rows: Vec<ProductRow>,
     pub feasibility: Feasibility,
+    /// Date of the snapshot this was computed from (YYYY-MM-DD). Every
+    /// surface shows it - numbers without their as-of date mislead.
+    pub snapshot_date: String,
+}
+
+/// Warning line when the snapshot is old enough to mislead (2+ days).
+/// Shared by the CLI brief, the TUI cell, and the model-facing tool
+/// output so staleness is surfaced proactively, not on challenge.
+pub fn staleness_warning(snapshot_date: &str) -> Option<String> {
+    let d = NaiveDate::parse_from_str(snapshot_date, "%Y-%m-%d").ok()?;
+    let days = (chrono::Local::now().date_naive() - d).num_days();
+    (days >= 2).then(|| {
+        format!(
+            "!! snapshot is {} days old (dated {}) - fetch fresh data before acting on it",
+            days, snapshot_date
+        )
+    })
 }
 
 pub fn run(cfg: &AppConfig, date: Option<&str>) -> Result<()> {
@@ -351,7 +372,7 @@ pub fn run(cfg: &AppConfig, date: Option<&str>) -> Result<()> {
     let snap = crate::snapshot::load(&snap_path)?;
     let history = load_history(&cfg.history_dir().join("scoreboard.csv"));
     let result = compute(&snap, cfg, &history);
-    print_brief(&result, &snap.date);
+    print_brief(&result);
     Ok(())
 }
 
@@ -373,26 +394,34 @@ pub fn load_history(path: &Path) -> Vec<HistoryRow> {
     out
 }
 
-pub fn print_brief(r: &ProductRowsAndFeasibility, snap_date: &str) {
+pub fn print_brief(r: &ProductRowsAndFeasibility) {
     println!(
         "BRIEF  snapshot {}  (7d window; config.json goals)",
-        snap_date
+        r.snapshot_date
     );
+    if let Some(warn) = staleness_warning(&r.snapshot_date) {
+        println!("{}", warn);
+    }
     println!("{}", format_brief_table(&r.rows));
     let f = &r.feasibility;
     println!();
-    println!("FEASIBILITY  portfolio {:.1} q/day at \u{20B9}{}/day = \u{20B9}{}/qualified \u{00B7} goal {:.0}/day",
-        f.tot_q_per_day, comma(f.tot_spend_per_day as i64), comma(f.cur_rpq as i64), f.tot_goal_per_day);
+    println!(
+        "FEASIBILITY  portfolio {:.1} q/day at Rs.{}/day = Rs.{}/qualified - goal {:.0}/day",
+        f.tot_q_per_day,
+        comma(f.tot_spend_per_day as i64),
+        comma(f.cur_rpq as i64),
+        f.tot_goal_per_day
+    );
     if let Some(req) = f.required_at_cur {
         println!(
-            "  required spend at CURRENT efficiency : \u{20B9}{}/day ({:.1}x today)",
+            "  required spend at CURRENT efficiency : Rs.{}/day ({:.1}x today)",
             comma(req as i64),
             req as f64 / f.tot_spend_per_day.max(1) as f64
         );
     }
     if let (Some(b), Some(req)) = (f.best_rpq, f.required_at_best) {
         println!(
-            "  required spend at BEST-OBSERVED \u{20B9}{}/q : \u{20B9}{}/day ({:.1}x today)",
+            "  required spend at BEST-OBSERVED Rs.{}/q : Rs.{}/day ({:.1}x today)",
             comma(b as i64),
             comma(req as i64),
             req as f64 / f.tot_spend_per_day.max(1) as f64

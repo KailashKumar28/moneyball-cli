@@ -65,8 +65,7 @@ fn drain_stream(app: &mut App) {
                         args,
                     } => {
                         app.chat.finish_streaming();
-                        app.running_tool =
-                            Some((call_id, name.clone(), std::time::Instant::now()));
+                        app.running_tool = Some((call_id, name.clone(), std::time::Instant::now()));
                         app.chat.push(chat::Cell::ToolCall(chat::cells::ToolCall {
                             name,
                             args: crate::app::compact_args(&args),
@@ -167,8 +166,7 @@ fn drain_stream(app: &mut App) {
                     )));
                 }
                 app.turn_active = false;
-                app.cancel
-                    .store(false, std::sync::atomic::Ordering::SeqCst);
+                app.cancel.store(false, std::sync::atomic::Ordering::SeqCst);
                 app.stream = None;
                 return;
             }
@@ -181,9 +179,15 @@ fn drain_stream(app: &mut App) {
 /// OpenAI-compatible, and MiniMax phrasings.
 fn looks_like_context_overflow(error: &str) -> bool {
     let e = error.to_lowercase();
-    ["context length", "context window", "prompt is too long", "maximum context", "token limit"]
-        .iter()
-        .any(|p| e.contains(p))
+    [
+        "context length",
+        "context window",
+        "prompt is too long",
+        "maximum context",
+        "token limit",
+    ]
+    .iter()
+    .any(|p| e.contains(p))
 }
 
 /// Route a pasted string into the currently focused input field. Without this,
@@ -329,13 +333,13 @@ fn handle_brief_key(app: &mut App, k: KeyEvent) {
         // through a multibyte char would panic the next insert.
         KeyCode::Left => {
             arm_cancel(app);
-            if let Some(p) = app.input[..app.cursor].chars().next_back() {
+            if let Some(p) = app.input.split_at(app.cursor).0.chars().next_back() {
                 app.cursor -= p.len_utf8();
             }
         }
         KeyCode::Right => {
             arm_cancel(app);
-            if let Some(n) = app.input[app.cursor..].chars().next() {
+            if let Some(n) = app.input.split_at(app.cursor).1.chars().next() {
                 app.cursor += n.len_utf8();
             }
         }
@@ -390,7 +394,13 @@ fn backspace(app: &mut App) {
     if app.cursor == 0 {
         return;
     }
-    let prev = app.input[..app.cursor].chars().next_back().unwrap();
+    let prev = app
+        .input
+        .split_at(app.cursor)
+        .0
+        .chars()
+        .next_back()
+        .unwrap();
     app.cursor -= prev.len_utf8();
     app.input.remove(app.cursor);
 }
@@ -413,15 +423,14 @@ fn apply_completion(app: &mut App) {
     if let Some(i) = app.completion_idx {
         if let Some(&c) = app.completions.get(i) {
             // Replace the current token (up to cursor) with completion.
-            let before = app.input[..app.cursor]
-                .rfind(' ')
-                .map(|n| n + 1)
-                .unwrap_or(0);
-            let after = app.input[app.cursor..].to_string();
-            let mut new = String::with_capacity(c.len() + after.len() + (app.cursor - before));
-            new.push_str(&app.input[..before]);
+            // Cursor and the space found by rfind are char boundaries.
+            let (upto, after) = app.input.split_at(app.cursor);
+            let before = upto.rfind(' ').map(|n| n + 1).unwrap_or(0);
+            let head = upto.split_at(before).0;
+            let mut new = String::with_capacity(head.len() + c.len() + after.len());
+            new.push_str(head);
             new.push_str(c);
-            new.push_str(&after);
+            new.push_str(after);
             app.input = new;
             app.cursor = before + c.len();
         }
@@ -695,5 +704,4 @@ mod paste_tests {
             _ => panic!("expected Setup view"),
         }
     }
-
 }
