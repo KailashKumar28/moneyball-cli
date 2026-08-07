@@ -196,6 +196,13 @@ impl AppConfig {
         self.workspace.is_some()
     }
 
+    /// Workspace root that owns this config's sessions, or None before
+    /// a workspace is configured (sessions then fall back to the global
+    /// ~/.moneyball/sessions/).
+    pub fn sessions_root(&self) -> Option<&Path> {
+        self.has_workspace().then_some(self.data_root.as_path())
+    }
+
     pub fn snap_dir(&self) -> PathBuf {
         self.mb_dir().join("history").join("snap")
     }
@@ -274,6 +281,14 @@ fn resolve_data_root(cli_arg: Option<&str>) -> Result<PathBuf> {
         return Ok(PathBuf::from(&s)
             .canonicalize()
             .unwrap_or_else(|_| PathBuf::from(s)));
+    }
+    // A configured workspace in the current directory beats global
+    // defaults and the legacy walk-up heuristics below (AGENTS lesson:
+    // defaults adapt to where the user is).
+    if let Ok(cwd) = std::env::current_dir() {
+        if cwd.join(DOT_DIR).join("config.json").is_file() {
+            return Ok(cwd);
+        }
     }
     // ~/.moneyball/config.json data_root
     if let Some(home) = dirs_home() {

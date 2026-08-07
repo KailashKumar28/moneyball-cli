@@ -7,6 +7,7 @@ mod commands;
 mod event;
 pub(crate) mod markdown;
 mod render;
+mod report;
 mod setup;
 pub mod widgets;
 pub(crate) use app::snapshot_load;
@@ -106,7 +107,7 @@ pub fn run_with_cfg(
         // Fresh session: appended items persist from the first turn.
         // A create failure degrades to an unpersisted session with a
         // visible warning, never a dead REPL.
-        None => match SessionLog::create(app.cfg.data_root.clone()) {
+        None => match SessionLog::create(app.cfg.data_root.clone(), app.cfg.sessions_root()) {
             Ok(log) => app.session = Some(log),
             Err(e) => app.status = Some(format!("session log unavailable: {}", e)),
         },

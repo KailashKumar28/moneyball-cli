@@ -13,7 +13,7 @@
 //!   moneyball --list         -> list saved sessions and exit
 
 use std::io::Write;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result};
 use chrono::{DateTime, Utc};
@@ -47,14 +47,15 @@ pub struct SessionLog {
 }
 
 impl SessionLog {
-    /// Start a new session file (writes the header line).
-    pub fn create(data_root: PathBuf) -> Result<Self> {
+    /// Start a new session file (writes the header line). `root` is the
+    /// workspace to store it under - None falls back to the global dir.
+    pub fn create(data_root: PathBuf, root: Option<&Path>) -> Result<Self> {
         let meta = SessionMeta {
             id: make_session_id(),
             started_at: Utc::now(),
             data_root,
         };
-        let path = session_path(&meta.id)?;
+        let path = session_path(&meta.id, root)?;
         let header = serde_json::to_string(&Line::Header {
             session: meta.clone(),
         })?;
@@ -65,8 +66,8 @@ impl SessionLog {
 
     /// Open an existing session for resume: returns the handle
     /// (positioned to append) plus the replayed transcript.
-    pub fn open(id: &str) -> Result<(Self, Vec<Item>)> {
-        let path = session_path(id)?;
+    pub fn open(id: &str, root: Option<&Path>) -> Result<(Self, Vec<Item>)> {
+        let path = session_path(id, root)?;
         let raw = std::fs::read_to_string(&path)
             .with_context(|| format!("no session file {}", path.display()))?;
         let (meta, items) = parse_session(&raw)?;
@@ -85,56 +86,74 @@ impl SessionLog {
     }
 }
 
+/// Parse one line as a session header, if it is one. Public because
+/// `debug` re-parses files line by line to audit what replay would skip.
+pub fn parse_header_line(line: &str) -> Option<SessionMeta> {
+    match serde_json::from_str::<Line>(line) {
+        Ok(Line::Header { session }) => Some(session),
+        _ => None,
+    }
+}
+
 /// Parse a session file body: header line first, then items. Unparseable
 /// lines are skipped (forward compatibility) - never a hard failure.
 fn parse_session(raw: &str) -> Result<(SessionMeta, Vec<Item>)> {
     let mut lines = raw.lines();
     let header = lines.next().context("empty session file")?;
-    let meta = match serde_json::from_str::<Line>(header) {
-        Ok(Line::Header { session }) => session,
-        _ => anyhow::bail!("first line is not a session header"),
-    };
+    let meta = parse_header_line(header).context("first line is not a session header")?;
     let items = lines
         .filter_map(|l| serde_json::from_str::<Item>(l).ok())
         .collect();
     Ok((meta, items))
 }
 
-/// `~/.moneyball/sessions/`, created lazily. `MONEYBALL_SESSIONS_DIR`
-/// overrides it - the seam hermetic tests use so they never touch the
-/// user's real transcripts (same pattern as MONEYBALL_AUTH_PATH).
-pub fn sessions_dir() -> Result<PathBuf> {
+/// Where sessions live, created lazily. Precedence:
+/// `MONEYBALL_SESSIONS_DIR` (hermetic-test seam, same pattern as
+/// MONEYBALL_AUTH_PATH) > `<workspace>/.moneyball/sessions/` when a
+/// workspace root is given (ARCHITECTURE section 2: workspace state
+/// lives in the workspace dot-dir) > `~/.moneyball/sessions/` as the
+/// no-workspace fallback (first run, before /setup).
+pub fn sessions_dir(root: Option<&Path>) -> Result<PathBuf> {
     if let Some(d) = std::env::var_os("MONEYBALL_SESSIONS_DIR") {
         let dir = PathBuf::from(d);
         std::fs::create_dir_all(&dir).with_context(|| format!("mkdir {}", dir.display()))?;
         return Ok(dir);
     }
-    let home = std::env::var_os("HOME")
-        .or_else(|| std::env::var_os("USERPROFILE"))
-        .map(PathBuf::from)
-        .context("no HOME / USERPROFILE - cannot resolve sessions directory")?;
-    let dir = home.join(".moneyball").join("sessions");
+    let dir = match root {
+        Some(ws) => ws.join(crate::config::DOT_DIR).join("sessions"),
+        None => std::env::var_os("HOME")
+            .or_else(|| std::env::var_os("USERPROFILE"))
+            .map(PathBuf::from)
+            .context("no HOME / USERPROFILE - cannot resolve sessions directory")?
+            .join(".moneyball")
+            .join("sessions"),
+    };
     std::fs::create_dir_all(&dir).with_context(|| format!("mkdir {}", dir.display()))?;
     Ok(dir)
 }
 
-fn session_path(id: &str) -> Result<PathBuf> {
-    Ok(sessions_dir()?.join(format!("{}.jsonl", id)))
+fn session_path(id: &str, root: Option<&Path>) -> Result<PathBuf> {
+    Ok(sessions_dir(root)?.join(format!("{}.jsonl", id)))
+}
+
+/// Raw file contents + path for a session id (the `debug` surface -
+/// audits need the bytes replay would skip, not the parsed items).
+pub fn read_raw(id: &str, root: Option<&Path>) -> Result<(PathBuf, String)> {
+    let path = session_path(id, root)?;
+    let raw = std::fs::read_to_string(&path)
+        .with_context(|| format!("no session file {}", path.display()))?;
+    Ok((path, raw))
 }
 
 /// Newest-first session metadata (header lines only - cheap).
-pub fn list() -> Result<Vec<SessionMeta>> {
-    let dir = sessions_dir()?;
+pub fn list(root: Option<&Path>) -> Result<Vec<SessionMeta>> {
+    let dir = sessions_dir(root)?;
     let mut metas: Vec<SessionMeta> = std::fs::read_dir(&dir)?
         .filter_map(|e| e.ok())
         .filter(|e| e.path().extension().and_then(|s| s.to_str()) == Some("jsonl"))
         .filter_map(|e| {
             let raw = std::fs::read_to_string(e.path()).ok()?;
-            let first = raw.lines().next()?;
-            match serde_json::from_str::<Line>(first).ok()? {
-                Line::Header { session } => Some(session),
-                _ => None,
-            }
+            parse_header_line(raw.lines().next()?)
         })
         .collect();
     metas.sort_by_key(|m| std::cmp::Reverse(m.started_at));
@@ -142,8 +161,8 @@ pub fn list() -> Result<Vec<SessionMeta>> {
 }
 
 /// Id of the most recently started session, if any.
-pub fn latest_id() -> Result<Option<String>> {
-    Ok(list()?.into_iter().next().map(|m| m.id))
+pub fn latest_id(root: Option<&Path>) -> Result<Option<String>> {
+    Ok(list(root)?.into_iter().next().map(|m| m.id))
 }
 
 /// UTC timestamp + 4-char random suffix so two sessions in the same
@@ -203,7 +222,7 @@ mod tests {
         std::fs::create_dir_all(&dir).unwrap();
         std::env::set_var("MONEYBALL_SESSIONS_DIR", &dir);
 
-        let log = SessionLog::create(PathBuf::from("/w")).unwrap();
+        let log = SessionLog::create(PathBuf::from("/w"), None).unwrap();
         let id = log.meta.id.clone();
         let items = vec![
             Item::User { text: "hi".into() },
@@ -223,7 +242,7 @@ mod tests {
             log.append(i).unwrap();
         }
 
-        let (reopened, replayed) = SessionLog::open(&id).unwrap();
+        let (reopened, replayed) = SessionLog::open(&id, None).unwrap();
         assert_eq!(reopened.meta.id, id);
         assert_eq!(replayed.len(), items.len());
         assert!(matches!(&replayed[0], Item::User { text } if text == "hi"));
@@ -234,10 +253,10 @@ mod tests {
                 text: "again".into(),
             })
             .unwrap();
-        let (_, replayed2) = SessionLog::open(&id).unwrap();
+        let (_, replayed2) = SessionLog::open(&id, None).unwrap();
         assert_eq!(replayed2.len(), items.len() + 1);
         // latest_id sees this session through the same seam.
-        assert_eq!(latest_id().unwrap().as_deref(), Some(id.as_str()));
+        assert_eq!(latest_id(None).unwrap().as_deref(), Some(id.as_str()));
 
         std::env::remove_var("MONEYBALL_SESSIONS_DIR");
         std::fs::remove_dir_all(&dir).ok();

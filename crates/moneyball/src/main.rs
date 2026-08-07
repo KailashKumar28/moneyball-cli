@@ -1,6 +1,7 @@
 //! moneyball binary - clap dispatch + session handling.
 
 mod connect_flow;
+mod debug_cli;
 
 use anyhow::{Context, Result};
 use clap::{Parser, Subcommand};
@@ -70,6 +71,9 @@ enum Cmd {
         #[command(subcommand)]
         cmd: CrmCmd,
     },
+    /// Dump a saved session transcript with an invariant audit; file,
+    /// review, and archive bug reports (see debug_cli.rs).
+    Debug(debug_cli::DebugArgs),
 }
 
 #[derive(Subcommand, Debug)]
@@ -107,9 +111,16 @@ enum CrmCmd {
 fn main() -> Result<()> {
     let cli = Cli::parse();
 
+    // Workspace first: sessions live in <workspace>/.moneyball/sessions/,
+    // so every session flag needs the resolved config. Owned so the
+    // borrow doesn't pin cfg (the REPL arm moves cfg into the TUI).
+    let cfg = AppConfig::resolve_optional(cli.data_root.as_deref(), cli.date.as_deref());
+    let root_buf = cfg.sessions_root().map(std::path::Path::to_path_buf);
+    let root = root_buf.as_deref();
+
     // --list: print saved sessions and exit.
     if cli.list {
-        let sessions = moneyball_core::session::list()?;
+        let sessions = moneyball_core::session::list(root)?;
         if sessions.is_empty() {
             println!("(no saved sessions)");
             return Ok(());
@@ -123,7 +134,7 @@ fn main() -> Result<()> {
 
     // --resume <id>: reopen that session's log and replay its transcript.
     if let Some(id) = cli.resume.clone() {
-        let (log, items) = moneyball_core::session::SessionLog::open(&id)
+        let (log, items) = moneyball_core::session::SessionLog::open(&id, root)
             .with_context(|| format!("no session found with id '{}'", id))?;
         println!(
             "resuming session {} ({} items, started {})",
@@ -131,13 +142,13 @@ fn main() -> Result<()> {
             items.len(),
             log.meta.started_at
         );
-        return moneyball_tui::run_with(Some((log, items)));
+        return moneyball_tui::run_with_cfg(Some((log, items)), Some(cfg));
     }
 
     // -c / --continue: reopen the latest session if one exists.
     let resume_session = if cli.continue_last {
-        match moneyball_core::session::latest_id()? {
-            Some(id) => Some(moneyball_core::session::SessionLog::open(&id)?),
+        match moneyball_core::session::latest_id(root)? {
+            Some(id) => Some(moneyball_core::session::SessionLog::open(&id, root)?),
             None => {
                 eprintln!("no previous session to continue - starting a fresh one");
                 None
@@ -146,8 +157,6 @@ fn main() -> Result<()> {
     } else {
         None
     };
-
-    let cfg = AppConfig::resolve_optional(cli.data_root.as_deref(), cli.date.as_deref());
 
     match cli.cmd.unwrap_or(Cmd::Repl) {
         Cmd::Repl => {
@@ -179,6 +188,7 @@ fn main() -> Result<()> {
             let strict = AppConfig::resolve(cli.data_root.as_deref(), cli.date.as_deref())?;
             moneyball_core::funnel::run(&strict, &product, &by, window, cli.date.as_deref())?;
         }
+        Cmd::Debug(args) => debug_cli::run(args, root)?,
         Cmd::Crm { cmd } => match cmd {
             CrmCmd::Contract => print!("{}", moneyball_core::crm::CONTRACT_MD),
             CrmCmd::Check { file } => {
@@ -207,7 +217,10 @@ fn main() -> Result<()> {
                     r.tickets,
                     r.pages,
                     if r.dropped_no_ad_id > 0 {
-                        format!(" ({} organic/direct dropped - no ad id)", r.dropped_no_ad_id)
+                        format!(
+                            " ({} organic/direct dropped - no ad id)",
+                            r.dropped_no_ad_id
+                        )
                     } else {
                         String::new()
                     }
@@ -228,7 +241,10 @@ fn main() -> Result<()> {
                     r.tickets,
                     file.display(),
                     if r.dropped_no_ad_id > 0 {
-                        format!(" ({} organic/direct dropped - no ad id)", r.dropped_no_ad_id)
+                        format!(
+                            " ({} organic/direct dropped - no ad id)",
+                            r.dropped_no_ad_id
+                        )
                     } else {
                         String::new()
                     }

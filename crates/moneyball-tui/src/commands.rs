@@ -16,6 +16,10 @@ pub(crate) const COMMANDS: &[(&str, &str)] = &[
     ("/fetch", "pull daily insights from Meta into a snapshot"),
     ("/funnel", "per-entity funnel for a product"),
     ("/ask", "free-form question (LLM picks commands)"),
+    (
+        "/debug",
+        "flag this session as buggy for review (optional comment)",
+    ),
     ("/snapshot", "list or validate snapshots"),
     ("/clear", "start a fresh conversation (new session file)"),
     ("/keychain", "show which providers have API keys configured"),
@@ -153,6 +157,9 @@ your own pipeline at\n\n    {}/<YYYY-MM-DD>/\n\nand /brief reads whatever it wri
         "/funnel" => {
             run_funnel(app, arg);
         }
+        "/debug" => {
+            crate::report::run_debug_report(app, arg);
+        }
         "/ask" => {
             // /ask is now equivalent to free-form chat (the LLM is the
             // default). Strip the prefix and fall through to the free-
@@ -217,7 +224,10 @@ your own pipeline at\n\n    {}/<YYYY-MM-DD>/\n\nand /brief reads whatever it wri
             app.history.clear();
             app.chat.cells.clear();
             app.chat.scroll_to_bottom();
-            match moneyball_core::session::SessionLog::create(app.cfg.data_root.clone()) {
+            match moneyball_core::session::SessionLog::create(
+                app.cfg.data_root.clone(),
+                app.cfg.sessions_root(),
+            ) {
                 Ok(log) => {
                     app.session = Some(log);
                     app.chat.push(Cell::System(cells::System(
@@ -714,7 +724,17 @@ fn run_freeform(app: &mut App, question: &str) {
 /// The LLM sees exactly the numbers that appear in the chat tool cell.
 fn build_brief_prompt(b: &brief::ProductRowsAndFeasibility) -> String {
     let mut s = String::new();
-    s.push_str("Snapshot portfolio (7d window). Goal = qualified leads per day.\n\n");
+    s.push_str(&format!(
+        "Snapshot portfolio dated {} (7d window). Goal = qualified leads per day.\n",
+        b.snapshot_date
+    ));
+    if let Some(warn) = brief::staleness_warning(&b.snapshot_date) {
+        s.push_str(&format!(
+            "{}\nOpen the commentary by telling the user this.\n",
+            warn
+        ));
+    }
+    s.push('\n');
     for r in &b.rows {
         let l_to_q = r
             .l_to_q
@@ -767,8 +787,11 @@ fn build_brief_prompt(b: &brief::ProductRowsAndFeasibility) -> String {
 
 fn format_brief_as_lines(b: &brief::ProductRowsAndFeasibility) -> Vec<String> {
     let mut out = Vec::new();
-    // Header
-    out.push("BRIEF  (7d window)".into());
+    // Header - always dated; stale numbers presented as current mislead.
+    out.push(format!("BRIEF  snapshot {}  (7d window)", b.snapshot_date));
+    if let Some(warn) = brief::staleness_warning(&b.snapshot_date) {
+        out.push(warn);
+    }
     out.push(String::new());
     // Per-product block - multi-line so it fits any chat width.
     for r in &b.rows {
@@ -778,15 +801,17 @@ fn format_brief_as_lines(b: &brief::ProductRowsAndFeasibility) -> Vec<String> {
             .unwrap_or_else(|| "-".into());
         let rs_per_q = r
             .rs_per_q
-            .map(|x| format!("Rs.{}", x))
+            .map(|x| format!("Rs.{}/q", x))
             .unwrap_or_else(|| "-".into());
         out.push(format!("  > {}", r.product));
+        // Labeled, not single-letter columns: this text is read raw in
+        // the chat cell (user feedback: "this is not so readable").
         out.push(format!(
-            "    {:>7}/d  m{:>4}  l{:>4}  q{:>3}  {:.2}/d  {}",
+            "    spend Rs.{}/d  meta {}  crm {}  qual {} ({:.2}/d)  {}",
             r.spend_per_day, r.m7d, r.l7d, r.q7d, r.q_per_day, rs_per_q
         ));
         out.push(format!(
-            "    L\u{2192}Q {:>5}   gap {:>5}",
+            "    L->Q {:>5}   gap {:>5}",
             l_to_q,
             format!("{:.1}", r.gap)
         ));
@@ -794,7 +819,7 @@ fn format_brief_as_lines(b: &brief::ProductRowsAndFeasibility) -> Vec<String> {
     out.push(String::new());
     let f = &b.feasibility;
     out.push(format!(
-        "FEASIBILITY  {:.1} q/day @ Rs.{}/day = Rs.{}/q  \u{00B7}  goal {:.0}/day",
+        "FEASIBILITY  {:.1} q/day @ Rs.{}/day = Rs.{}/q  -  goal {:.0}/day",
         f.tot_q_per_day, f.tot_spend_per_day, f.cur_rpq, f.tot_goal_per_day
     ));
     if let Some(req) = f.required_at_cur {

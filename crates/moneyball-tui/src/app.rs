@@ -200,11 +200,14 @@ impl App {
         for item in &items {
             match item {
                 Item::User { text } => {
-                    // The turn_aborted marker is model-facing, not a real
-                    // user message - show it as a dim system note.
+                    // Markers are model-facing, not real user messages -
+                    // show them as dim system notes.
                     if text.starts_with("<turn_aborted>") {
                         self.chat
                             .push(Cell::System(cells::System("(turn interrupted)".into())));
+                    } else if moneyball_core::debug::is_bug_report_marker(text) {
+                        self.chat
+                            .push(Cell::System(cells::System("(bug report filed)".into())));
                     } else {
                         self.chat.push(Cell::UserPrompt(cells::UserPrompt {
                             text: text.clone(),
