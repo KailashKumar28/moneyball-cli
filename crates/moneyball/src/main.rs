@@ -182,7 +182,10 @@ fn main() -> Result<()> {
                 println!("  {:<40} {:>5} rows", name, n);
             }
             match &report.creatives_error {
-                None => println!("  creatives captured: {}", report.creatives),
+                None => println!(
+                    "  creatives captured: {} ({} images cached, {} downloaded)",
+                    report.creatives, report.assets, report.assets_downloaded
+                ),
                 Some(e) => println!(
                     "  warn: creatives capture failed ({}) - snapshot still ok",
                     e

@@ -72,7 +72,10 @@ pub(crate) fn on_fetch_done(
         .collect();
     out.push(String::new());
     match &report.creatives_error {
-        None => out.push(format!("creatives captured: {}", report.creatives)),
+        None => out.push(format!(
+            "creatives captured: {} ({} images cached, {} downloaded)",
+            report.creatives, report.assets, report.assets_downloaded
+        )),
         Some(e) => out.push(format!(
             "warn: creatives capture failed ({}) - snapshot still ok",
             e

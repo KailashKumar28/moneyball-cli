@@ -7,9 +7,12 @@
 //! fetch (`moneyball fetch` / `/fetch`) that populates the snapshot dir.
 //! It reads from Meta only (GET insights + creative metadata); it never
 //! mutates anything on the ad account. `creatives.rs` owns the per-ad
-//! creative identity pull (slice A1, docs/CLOUD_PLAN.md).
+//! creative identity pull (slice A1, docs/CLOUD_PLAN.md); `assets.rs`
+//! is the pure content-addressed image cache it fills (slice A2).
 
+pub mod assets;
 pub mod creatives;
+pub(crate) mod map;
 
 use std::path::{Path, PathBuf};
 
@@ -34,6 +37,9 @@ pub struct FetchReport {
     pub per_product: Vec<(String, usize)>,
     /// Creative rows captured into creatives.json, if that step ran.
     pub creatives: usize,
+    /// Rows with a cached image / images downloaded this run.
+    pub assets: usize,
+    pub assets_downloaded: usize,
     /// A creatives failure never fails the snapshot - it surfaces here.
     pub creatives_error: Option<String>,
 }
@@ -81,20 +87,35 @@ pub fn fetch_snapshot(cfg: &AppConfig, token: &str, days: u32) -> Result<FetchRe
     let snap_root = cfg.history_dir().join("snap");
     let path = write_snapshot(&snap_root, &date, &all_rows)?;
 
-    // Creative identity capture (slice A1). Best-effort by design: the
-    // insights snapshot is the load-bearing artifact; a creatives
-    // failure becomes a warning in the report, never a lost snapshot.
-    let (creatives, creatives_error) =
-        match creatives::fetch_and_write(&client, token, &all_rows, &path) {
-            Ok(n) => (n, None),
-            Err(e) => (0, Some(e.to_string())),
-        };
+    // Creative identity + image capture (slices A1/A2). Best-effort by
+    // design: the insights snapshot is the load-bearing artifact; a
+    // creatives failure becomes a warning, never a lost snapshot.
+    let assets_root = cfg.history_dir().join("assets").join("creatives");
+    let accounts: std::collections::BTreeMap<String, String> = workspace
+        .products
+        .iter()
+        .map(|p| (p.name.clone(), act_id(&p.ad_account)))
+        .collect();
+    let (cr, creatives_error) = match creatives::fetch_and_write(
+        &client,
+        token,
+        &all_rows,
+        &accounts,
+        &path,
+        &snap_root,
+        &assets_root,
+    ) {
+        Ok(r) => (r, None),
+        Err(e) => (Default::default(), Some(e.to_string())),
+    };
 
     Ok(FetchReport {
         date,
         path,
         per_product,
-        creatives,
+        creatives: cr.rows,
+        assets: cr.assets,
+        assets_downloaded: cr.downloaded,
         creatives_error,
     })
 }
@@ -107,11 +128,7 @@ fn fetch_account_rows(
     since: &str,
     until: &str,
 ) -> Result<Vec<serde_json::Value>> {
-    let act = if account_id.starts_with("act_") {
-        account_id.to_string()
-    } else {
-        format!("act_{}", account_id)
-    };
+    let act = act_id(account_id);
     let time_range = format!("{{\"since\":\"{}\",\"until\":\"{}\"}}", since, until);
     let mut url = format!("{}/{}/insights", META_GRAPH_BASE, act);
     let mut first = true;
@@ -157,6 +174,15 @@ fn fetch_account_rows(
         }
     }
     Ok(out)
+}
+
+/// Graph account node id, `act_` prefix normalized.
+pub(crate) fn act_id(account_id: &str) -> String {
+    if account_id.starts_with("act_") {
+        account_id.to_string()
+    } else {
+        format!("act_{}", account_id)
+    }
 }
 
 /// Write rows to `<snap_root>/<date>/ads_daily.json`. Writes to a temp file

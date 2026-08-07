@@ -18,8 +18,11 @@ bottom after a release-sized batch.)
         video ids; asset refs filled by A2); fetch/ dir module keeps the
         network boundary. Docs updated; ~/.moneyball/reports/ renamed to
         bug-reports/ with migration (2026-08-07).
-  - [ ] A2 - content-addressed asset cache
-        history/assets/creatives/<hh>/<sha256>.<ext> (NOT ad_id.jpg).
+  - [x] A2 - content-addressed asset cache
+        history/assets/creatives/<hh>/<sha256>.<ext>; full-res via
+        adimages hash resolution + nested thumbnail params; refs reused
+        from the prior snapshot, failures degrade to placeholder
+        (2026-08-07).
   - [ ] B1 - report.rs: snapshot -> report.json (grouping precedence,
         7-stage funnel, unattributed bucket, brief.rs Window reuse) +
         CLI text summary; golden-file parity vs the Python generator.

@@ -49,6 +49,9 @@ thiserror = "1"
 # by the schema_contract test)
 schemars = "1"
 
+# Content-addressed creative image cache (fetch/assets.rs)
+sha2 = "0.10"
+
 # Secrets live in ~/.moneyball/auth.json (0600) - codex-style file store.
 # (We moved off `keyring`: macOS ties keychain ACLs to the code signature,
 # so every locally-built binary re-prompted the user for access.)

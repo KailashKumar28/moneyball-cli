@@ -82,6 +82,19 @@ AGENTS Don'ts wording per the data-contracts review.
    points; core stays tokio-free and terminal-free. The server crate must
    contain no copy of the loop (section 6b extended to bind it).
 
+## Local data growth (decided 2026-08-07)
+
+Files stay canonical locally at any size we will realistically see
+(~1.5MB/day of JSON + a few MB of images; every current computation
+reads one snapshot dir). When a feature needs CROSS-DATE queries
+(multi-month trends, per-creative history beyond scoreboard.csv), add
+SQLite as a DERIVED index - `.moneyball/state/index.db`, rebuilt from
+the versioned artifacts at any time, deletable, never canonical. It
+ingests the same keyed artifacts the cloud's Postgres ingests, so the
+ingest logic is written once. No RAG/knowledge-base machinery for the
+agent (section 6b minimalism): cross-date questions become one `trend`
+tool over that index when the need is real, not before.
+
 ## Phase 2 - the service (later; build when a second real tenant asks)
 
 Full details live in the 2026-08-07 planning transcripts; the binding
