@@ -5,8 +5,11 @@
 //! never touches the network - it only sees snapshot files on disk. This
 //! module is the one deliberate network writer: an explicit, user-invoked
 //! fetch (`moneyball fetch` / `/fetch`) that populates the snapshot dir.
-//! It reads from Meta only (GET insights); it never mutates anything on
-//! the ad account.
+//! It reads from Meta only (GET insights + creative metadata); it never
+//! mutates anything on the ad account. `creatives.rs` owns the per-ad
+//! creative identity pull (slice A1, docs/CLOUD_PLAN.md).
+
+pub mod creatives;
 
 use std::path::{Path, PathBuf};
 
@@ -15,7 +18,7 @@ use chrono::{Duration, Local};
 use crate::config::AppConfig;
 use crate::error::{Error, Result};
 
-const META_GRAPH_BASE: &str = "https://graph.facebook.com";
+pub(crate) const META_GRAPH_BASE: &str = "https://graph.facebook.com";
 
 /// Per-ad daily fields we request. Matches `snapshot::AdsDailyRow` so the
 /// reader parses every row without loss.
@@ -29,19 +32,22 @@ pub struct FetchReport {
     pub path: PathBuf,
     /// (product name, row count) per configured product.
     pub per_product: Vec<(String, usize)>,
+    /// Creative rows captured into creatives.json, if that step ran.
+    pub creatives: usize,
+    /// A creatives failure never fails the snapshot - it surfaces here.
+    pub creatives_error: Option<String>,
 }
 
 /// Pull `days` of per-ad daily insights for every configured product and
-/// write `<workspace>/moneyball/history/snap/<today>/ads_daily.json`.
-/// The Meta token comes from the OS keychain (stored by the wizard).
-pub fn fetch_snapshot(cfg: &AppConfig, days: u32) -> Result<FetchReport> {
+/// write `<workspace>/.moneyball/history/snap/<today>/ads_daily.json` +
+/// `creatives.json`. The caller resolves the Meta token (keychain in the
+/// CLI/TUI; per-tenant store in a future server) - core never reads
+/// ambient secrets for it.
+pub fn fetch_snapshot(cfg: &AppConfig, token: &str, days: u32) -> Result<FetchReport> {
     let workspace = cfg
         .workspace
         .as_ref()
         .ok_or_else(|| Error::Config("no workspace configured - run /setup first".into()))?;
-    let token = crate::secrets::load_meta_token().ok_or_else(|| {
-        Error::Secrets("no Meta token in keychain - run /setup to connect Meta".into())
-    })?;
 
     let today = Local::now().date_naive();
     let until = today - Duration::days(1); // snap day itself is excluded from windows
@@ -58,7 +64,7 @@ pub fn fetch_snapshot(cfg: &AppConfig, days: u32) -> Result<FetchReport> {
     for p in &workspace.products {
         let rows = fetch_account_rows(
             &client,
-            &token,
+            token,
             &p.ad_account,
             &since.format("%Y-%m-%d").to_string(),
             &until.format("%Y-%m-%d").to_string(),
@@ -74,10 +80,22 @@ pub fn fetch_snapshot(cfg: &AppConfig, days: u32) -> Result<FetchReport> {
 
     let snap_root = cfg.history_dir().join("snap");
     let path = write_snapshot(&snap_root, &date, &all_rows)?;
+
+    // Creative identity capture (slice A1). Best-effort by design: the
+    // insights snapshot is the load-bearing artifact; a creatives
+    // failure becomes a warning in the report, never a lost snapshot.
+    let (creatives, creatives_error) =
+        match creatives::fetch_and_write(&client, token, &all_rows, &path) {
+            Ok(n) => (n, None),
+            Err(e) => (0, Some(e.to_string())),
+        };
+
     Ok(FetchReport {
         date,
         path,
         per_product,
+        creatives,
+        creatives_error,
     })
 }
 

@@ -14,10 +14,10 @@ bottom after a release-sized batch.)
   - [x] A0 - schema module: serde structs + schemars -> docs/schemas/,
         schema_contract test, fixture snapshot with creatives.json
         (2026-08-07).
-  - [ ] A1 - `/fetch` writes creatives.json (envelope, image_hash /
-        video ids / asset sha256); network stays in fetch.rs. Ship with
-        doc wording updates + rename ~/.moneyball/reports/ ->
-        ~/.moneyball/bug-reports/ (collision with workspace reports/).
+  - [x] A1 - `/fetch` writes creatives.json (envelope, image_hash /
+        video ids; asset refs filled by A2); fetch/ dir module keeps the
+        network boundary. Docs updated; ~/.moneyball/reports/ renamed to
+        bug-reports/ with migration (2026-08-07).
   - [ ] A2 - content-addressed asset cache
         history/assets/creatives/<hh>/<sha256>.<ext> (NOT ad_id.jpg).
   - [ ] B1 - report.rs: snapshot -> report.json (grouping precedence,
@@ -26,9 +26,10 @@ bottom after a release-sized batch.)
   - [ ] B2 - HTML renderer, pure fn over report.json + assets only ->
         .moneyball/reports/<date>/creative-report.{json,html}.
   - [ ] C - TUI `/report`: path + text summary cell.
-  - [ ] Hedges (with A0/A1): fetch_snapshot takes token param;
-        WorkspaceConfig::from_parts; arch_contract denies HOME/cwd
-        reads outside config.rs.
+  - [x] Hedges (2026-08-07): fetch_snapshot takes token param;
+        arch_contract denies HOME/cwd reads outside config.rs
+        (config::home_dir is the seam). WorkspaceConfig::from_parts
+        dropped consciously - all fields are pub, a literal suffices.
 - [ ] **LeadZump date filter**: today the preset pulls the whole ticket
       book (`condition: null`, no date window) and hits MAX_PAGES=500 on
       every connect. Evidence + DSL details in docs/CRM_CONNECTORS.md.

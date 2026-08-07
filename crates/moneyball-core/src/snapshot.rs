@@ -95,11 +95,44 @@ pub struct Snapshot {
     pub date: String,
     pub ads_daily: Vec<AdsDailyRow>,
     pub adsets: serde_json::Value,
-    pub creatives: serde_json::Value,
+    /// Typed creative identity rows (schema.rs), when the snapshot has
+    /// a readable creatives.json. None = predates capture or unknown
+    /// major - the report falls back to one-ad-per-card grouping.
+    pub creatives: Option<crate::schema::CreativesFile>,
     pub crm: serde_json::Value,
     pub regions: serde_json::Value,
     pub changes: serde_json::Value,
     pub campaigns: serde_json::Value,
+}
+
+/// The creatives.json loader rule (ARCHITECTURE section 2): object =>
+/// versioned envelope, accept major 1 only; bare array => grandfathered
+/// v0 rows (external pipelines), wrapped with defaulted metadata. Rows
+/// that fail to parse are skipped, never fatal (same forward-compat
+/// stance as session replay).
+fn parse_creatives(v: serde_json::Value) -> Option<crate::schema::CreativesFile> {
+    use crate::schema::{CreativeRow, CreativesFile, CREATIVES_SCHEMA};
+    match v {
+        serde_json::Value::Object(_) => {
+            let schema_ok = v
+                .get("schema")
+                .and_then(|s| s.as_str())
+                .is_some_and(|s| s == CREATIVES_SCHEMA || s.starts_with("moneyball.creatives/1"));
+            if !schema_ok {
+                return None; // unknown major: absent, not garbage
+            }
+            serde_json::from_value(v).ok()
+        }
+        serde_json::Value::Array(rows) => Some(CreativesFile {
+            schema: "moneyball.creatives/0".into(),
+            fetched_at: String::new(),
+            rows: rows
+                .into_iter()
+                .filter_map(|r| serde_json::from_value::<CreativeRow>(r).ok())
+                .collect(),
+        }),
+        _ => None,
+    }
 }
 
 pub fn load(snap_path: &Path) -> Result<Snapshot> {
@@ -120,7 +153,7 @@ pub fn load(snap_path: &Path) -> Result<Snapshot> {
     }
     let mut ads_daily = Vec::new();
     let mut adsets = serde_json::Value::Array(vec![]);
-    let mut creatives = serde_json::Value::Array(vec![]);
+    let mut creatives = None;
     let mut crm = serde_json::Value::Object(Default::default());
     let mut regions = serde_json::Value::Array(vec![]);
     let mut changes = serde_json::Value::Array(vec![]);
@@ -139,7 +172,7 @@ pub fn load(snap_path: &Path) -> Result<Snapshot> {
         match *name {
             "ads_daily" => ads_daily = serde_json::from_value(v)?,
             "adsets" => adsets = v,
-            "creatives" => creatives = v,
+            "creatives" => creatives = parse_creatives(v),
             "crm" => crm = v,
             "regions" => regions = v,
             "changes" => changes = v,

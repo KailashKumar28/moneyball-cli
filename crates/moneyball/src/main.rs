@@ -172,11 +172,21 @@ fn main() -> Result<()> {
         }
         Cmd::Fetch { days } => {
             let strict = AppConfig::resolve(cli.data_root.as_deref(), cli.date.as_deref())?;
+            let token = moneyball_core::secrets::load_meta_token().ok_or_else(|| {
+                anyhow::anyhow!("no Meta token in keychain - run /setup to connect Meta")
+            })?;
             println!("fetching {} days of insights from Meta...", days);
-            let report = moneyball_core::fetch::fetch_snapshot(&strict, days)
+            let report = moneyball_core::fetch::fetch_snapshot(&strict, &token, days)
                 .with_context(|| "fetch failed")?;
             for (name, n) in &report.per_product {
                 println!("  {:<40} {:>5} rows", name, n);
+            }
+            match &report.creatives_error {
+                None => println!("  creatives captured: {}", report.creatives),
+                Some(e) => println!(
+                    "  warn: creatives capture failed ({}) - snapshot still ok",
+                    e
+                ),
             }
             println!("snapshot written: {}", report.path.display());
         }

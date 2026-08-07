@@ -347,7 +347,7 @@ mod tests {
             date: "2026-07-16".into(),
             ads_daily: serde_json::from_value(ads).unwrap(),
             adsets: json!({ "s1": { "learning_stage_info": { "status": "LEARNING" } } }),
-            creatives: json!([]),
+            creatives: None,
             crm,
             regions: json!([]),
             changes: json!([]),

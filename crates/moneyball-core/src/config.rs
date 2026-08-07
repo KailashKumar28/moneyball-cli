@@ -333,6 +333,16 @@ fn resolve_data_root(cli_arg: Option<&str>) -> Result<PathBuf> {
     Ok(cwd.join("moneyball-data"))
 }
 
+/// The user's home dir. The ONLY sanctioned ambient-state read in core
+/// (enforced by arch_contract): everything global-dotfile-shaped
+/// (secrets, session fallback, bug reports) resolves through here, so a
+/// future multi-tenant server can audit ambient reads in one place.
+pub fn home_dir() -> Option<PathBuf> {
+    std::env::var_os("HOME")
+        .or_else(|| std::env::var_os("USERPROFILE"))
+        .map(PathBuf::from)
+}
+
 fn dirs_home() -> Option<PathBuf> {
-    std::env::var_os("HOME").map(PathBuf::from)
+    home_dir()
 }

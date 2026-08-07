@@ -5,6 +5,7 @@ mod app;
 pub mod chat;
 mod commands;
 mod event;
+mod fetch_flow;
 pub(crate) mod markdown;
 mod render;
 mod report;

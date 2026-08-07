@@ -42,7 +42,8 @@ fn network_boundary() {
     let root = workspace_root();
     let allowed = [
         "crates/moneyball-core/src/meta.rs",
-        "crates/moneyball-core/src/fetch.rs",
+        "crates/moneyball-core/src/fetch/mod.rs",
+        "crates/moneyball-core/src/fetch/creatives.rs",
         "crates/moneyball-core/src/llm.rs",
         "crates/moneyball-core/src/crm/fetch.rs",
     ];
@@ -65,6 +66,38 @@ fn network_boundary() {
     assert!(
         violations.is_empty(),
         "network code outside the four allowed core modules (ARCHITECTURE.md \u{a7}1):\n{}",
+        violations.join("\n")
+    );
+}
+
+/// docs/CLOUD_PLAN.md hedge: no ambient state in core. HOME/USERPROFILE
+/// and current_dir reads live ONLY in config.rs (`config::home_dir` is
+/// the sanctioned seam), so a future multi-tenant server can instantiate
+/// N cores in one process without implicit "there is one user" bugs.
+#[test]
+fn ambient_state_only_in_config() {
+    let root = workspace_root();
+    let needles = ["\"HOME\"", "\"USERPROFILE\"", "current_dir("];
+    let mut violations = Vec::new();
+    for f in rust_sources(&root.join("crates/moneyball-core/src")) {
+        let r = rel(&root, &f);
+        if r == "crates/moneyball-core/src/config.rs" {
+            continue;
+        }
+        let src = fs::read_to_string(&f).unwrap();
+        for (i, line) in src.lines().enumerate() {
+            if line.trim_start().starts_with("//") {
+                continue;
+            }
+            if needles.iter().any(|n| line.contains(n)) {
+                violations.push(format!("{}:{}: {}", r, i + 1, line.trim()));
+            }
+        }
+    }
+    assert!(
+        violations.is_empty(),
+        "ambient-state read outside config.rs (route through config::home_dir; \
+         cwd resolution belongs to the binary edge):\n{}",
         violations.join("\n")
     );
 }
@@ -108,7 +141,7 @@ fn file_size_ratchet() {
         ("crates/moneyball-core/src/funnel.rs", 450),
         ("crates/moneyball-core/src/llm.rs", 850),
         ("crates/moneyball-tui/src/chat.rs", 500),
-        ("crates/moneyball-tui/src/commands.rs", 850),
+        ("crates/moneyball-tui/src/commands.rs", 800),
         ("crates/moneyball-tui/src/event.rs", 750),
         ("crates/moneyball-tui/src/setup/mod.rs", 1000),
         ("crates/moneyball-tui/src/setup/render_steps.rs", 650),

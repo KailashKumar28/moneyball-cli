@@ -37,9 +37,7 @@ pub fn auth_path() -> Result<PathBuf> {
     if let Some(p) = std::env::var_os("MONEYBALL_AUTH_PATH") {
         return Ok(PathBuf::from(p));
     }
-    let home = std::env::var_os("HOME")
-        .map(PathBuf::from)
-        .ok_or_else(|| Error::Secrets("HOME not set".into()))?;
+    let home = crate::config::home_dir().ok_or_else(|| Error::Secrets("HOME not set".into()))?;
     Ok(home.join(".moneyball").join("auth.json"))
 }
 

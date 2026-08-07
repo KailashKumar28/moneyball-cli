@@ -61,19 +61,25 @@ pub fn is_bug_report_marker(text: &str) -> bool {
     text.starts_with(MARKER_PREFIX)
 }
 
-/// `~/.moneyball/reports/`, created lazily. `MONEYBALL_REPORTS_DIR`
+/// `~/.moneyball/bug-reports/`, created lazily. `MONEYBALL_REPORTS_DIR`
 /// overrides it (hermetic-test seam, same pattern as sessions_dir).
+/// Renamed from `reports/` 2026-08-07: workspace creative reports live
+/// in `<workspace>/.moneyball/reports/`, and the two must never collide.
 pub fn reports_dir() -> Result<PathBuf> {
     if let Some(d) = std::env::var_os("MONEYBALL_REPORTS_DIR") {
         let dir = PathBuf::from(d);
         std::fs::create_dir_all(&dir).with_context(|| format!("mkdir {}", dir.display()))?;
         return Ok(dir);
     }
-    let home = std::env::var_os("HOME")
-        .or_else(|| std::env::var_os("USERPROFILE"))
-        .map(PathBuf::from)
+    let home = crate::config::home_dir()
         .context("no HOME / USERPROFILE - cannot resolve reports directory")?;
-    let dir = home.join(".moneyball").join("reports");
+    let dir = home.join(".moneyball").join("bug-reports");
+    // One-time migration from the pre-rename location.
+    let legacy = home.join(".moneyball").join("reports");
+    if legacy.is_dir() && !dir.exists() {
+        std::fs::rename(&legacy, &dir)
+            .with_context(|| format!("migrate {} -> {}", legacy.display(), dir.display()))?;
+    }
     std::fs::create_dir_all(&dir).with_context(|| format!("mkdir {}", dir.display()))?;
     Ok(dir)
 }

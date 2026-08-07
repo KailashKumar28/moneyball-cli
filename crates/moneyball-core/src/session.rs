@@ -121,9 +121,7 @@ pub fn sessions_dir(root: Option<&Path>) -> Result<PathBuf> {
     }
     let dir = match root {
         Some(ws) => ws.join(crate::config::DOT_DIR).join("sessions"),
-        None => std::env::var_os("HOME")
-            .or_else(|| std::env::var_os("USERPROFILE"))
-            .map(PathBuf::from)
+        None => crate::config::home_dir()
             .context("no HOME / USERPROFILE - cannot resolve sessions directory")?
             .join(".moneyball")
             .join("sessions"),

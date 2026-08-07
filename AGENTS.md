@@ -53,7 +53,12 @@ check items off in the same commit that ships them.
 ## Don'ts
 
 - Do NOT import from `pipeline/mb.py` or any third-party pipeline. Reimplement.
-- Do NOT write anywhere except `ledger.jsonl` and `runs/<date>/`.
+- Do NOT write outside `<workspace>/.moneyball/` and `~/.moneyball/`.
+  Fetch writes only `history/snap/<date>/` and `history/assets/`; report
+  generation writes only `reports/<date>/`; never mutate a prior date's
+  snapshot from the report path. (`~/.moneyball/bug-reports/` = user bug
+  reports; `<workspace>/.moneyball/reports/` = creative reports - two
+  different things.)
 - Do NOT fix "Stattic Ad" Meta typo (breaks LeadZump ad-id join). Do NOT bucket
   CRM by `created_at` for short windows - use `delivery_time`.
 - Do NOT use `AppConfig::resolve()` in `main.rs`. Use `resolve_optional()`;

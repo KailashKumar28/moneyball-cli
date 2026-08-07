@@ -436,7 +436,7 @@ mod tests {
             date: "2026-07-16".into(),
             ads_daily: serde_json::from_value(Value::Array(rows)).unwrap(),
             adsets: Value::Array(vec![]),
-            creatives: Value::Array(vec![]),
+            creatives: None,
             crm: Value::Object(Default::default()),
             regions: Value::Array(vec![]),
             changes: Value::Array(vec![]),

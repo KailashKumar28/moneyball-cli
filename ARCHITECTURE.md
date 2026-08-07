@@ -24,23 +24,32 @@ is exercised headless (sub-commands) and through the TUI.
 
 Network boundary: the read/analysis path (brief, funnel, advisor math)
 never touches the network. Network lives in exactly four core modules:
-`meta.rs` (account discovery), `fetch.rs` (explicit snapshot pull),
-`llm.rs` (model calls), `crm/fetch.rs` (explicit CRM pull driven by the
+`meta.rs` (account discovery), `fetch/` (explicit snapshot pull:
+`mod.rs` insights + `creatives.rs` per-ad creative identity), `llm.rs`
+(model calls), `crm/fetch.rs` (explicit CRM pull driven by the
 declarative crm.toml spec). Nothing ever writes to Meta or the CRM.
 Enforced by `tests/arch_contract.rs` (this is the canonical statement;
-AGENTS.md's intro summarizes it).
+AGENTS.md's intro summarizes it). Fetch callers resolve the Meta token
+at the edge and pass it in - core never reads ambient secrets for it,
+and HOME/cwd reads live only in config.rs (also arch-enforced).
 
 ## 2. I/O contract
 
 - Reads: snapshots at `<workspace>/.moneyball/history/snap/<date>/`.
-- Writes: `.moneyball/{config.json,crm.toml,history/,state/,runs/,sessions/}`
+- Writes: `.moneyball/{config.json,crm.toml,history/,state/,runs/,sessions/,reports/}`
   in the workspace (sessions fall back to `~/.moneyball/sessions/` only
   before a workspace is configured); `~/.moneyball/auth.json` (0600) for
-  secrets and `~/.moneyball/reports/` for user-filed bug reports -
+  secrets and `~/.moneyball/bug-reports/` for user-filed bug reports -
   codex-style dotfile, not the OS keychain (keychain ACLs break for
   locally built binaries). Secrets never appear in config.json,
   crm.toml, or logs - crm.toml references them as `secret:<name>` /
   `env:<VAR>`.
+- Within `history/`, `/fetch` writes `snap/<date>/{ads_daily,creatives}.json`
+  (temp-then-rename; a creatives failure warns, never loses the
+  snapshot) and, from slice A2 on, caches creative images
+  content-addressed under `history/assets/creatives/<hh>/<sha256>.<ext>`
+  (never deleted during fetch). `moneyball report` will write only
+  under `reports/<date>/` and never touches the network.
 - CRM data enters only as contract-conformant `crm.json`
   (docs/CRM_CONTRACT.md); `crm::check` gates every write of it.
 - `MB_AGENT=1` -> machine-readable output for sub-commands.
