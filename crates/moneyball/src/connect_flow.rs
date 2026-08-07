@@ -104,7 +104,7 @@ fn custom_flow(cfg: &AppConfig) -> Result<()> {
     eprintln!(
         "sample received ({} bytes): {}...",
         preview.len(),
-        source::truncate_chars(&preview, 300)
+        moneyball_core::text::truncate_chars(&preview, 300)
     );
 
     eprintln!("drafting crm.toml with your configured LLM (a truncated sample is sent to it)...");

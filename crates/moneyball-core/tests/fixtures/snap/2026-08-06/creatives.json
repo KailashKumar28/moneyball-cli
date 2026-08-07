@@ -1,0 +1,74 @@
+{
+  "schema": "moneyball.creatives/1",
+  "fetched_at": "2026-08-06T03:10:22Z",
+  "rows": [
+    {
+      "ad_id": "120211234567890123",
+      "adset_id": "120210000000000001",
+      "campaign_id": "120209999999999999",
+      "ad_name": "NM Clubhouse Static - Copy 2",
+      "_product": "Namma Mane",
+      "image_hash": "a3f9c2d1e0b84756",
+      "video_id": null,
+      "afs_video_ids": [],
+      "image_basename": "487213991_n.jpg",
+      "is_video": false,
+      "status": "ACTIVE",
+      "created_time": "2026-06-14T11:02:00+0530",
+      "title": "3BHK villas near Sarjapur",
+      "body": "Book a site visit this weekend.",
+      "cta": "LEARN_MORE",
+      "permalink": "https://www.instagram.com/p/EXAMPLE1/",
+      "image_url": "https://scontent.example/487213991_n.jpg?sig=expired",
+      "asset": {
+        "sha256": "9f8e7d6c5b4a39281706f5e4d3c2b1a09f8e7d6c5b4a39281706f5e4d3c2b1a0",
+        "content_type": "image/jpeg",
+        "bytes": 184223
+      }
+    },
+    {
+      "ad_id": "120211234567890456",
+      "adset_id": "120210000000000002",
+      "campaign_id": "120209999999999999",
+      "ad_name": "NM Walkthrough Video",
+      "_product": "Namma Mane",
+      "image_hash": null,
+      "video_id": "893471002316584",
+      "afs_video_ids": ["893471002316584"],
+      "image_basename": null,
+      "is_video": true,
+      "status": "ACTIVE",
+      "created_time": "2026-07-01T09:30:00+0530",
+      "title": null,
+      "body": null,
+      "cta": "WHATSAPP_MESSAGE",
+      "permalink": null,
+      "image_url": "https://scontent.example/thumb_893471.jpg?sig=expired",
+      "asset": {
+        "sha256": "1a2b3c4d5e6f708192a3b4c5d6e7f8091a2b3c4d5e6f708192a3b4c5d6e7f809",
+        "content_type": "image/jpeg",
+        "bytes": 45120
+      }
+    },
+    {
+      "ad_id": "120211234567890789",
+      "adset_id": "120210000000000003",
+      "campaign_id": "120208888888888888",
+      "ad_name": "CV Riverside Carousel",
+      "_product": "Valmark CityVille",
+      "image_hash": "b7d0e3f6a9c25814",
+      "video_id": null,
+      "afs_video_ids": [],
+      "image_basename": "512998877_n.jpg",
+      "is_video": false,
+      "status": "PAUSED",
+      "created_time": "2026-05-20T16:45:00+0530",
+      "title": "Riverside living, city prices",
+      "body": null,
+      "cta": "LEARN_MORE",
+      "permalink": null,
+      "image_url": "https://scontent.example/512998877_n.jpg?sig=expired",
+      "asset": null
+    }
+  ]
+}

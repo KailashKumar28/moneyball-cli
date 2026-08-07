@@ -17,10 +17,12 @@ Hard rules that bite most often:
 - E2E first: reproduce bugs by driving the installed binary (tmux for the
   TUI) before fixing; a fix that isn't `cargo install`ed isn't shipped.
 - Never slice strings by byte index (`&s[..n]`) - lead names and error
-  bodies contain multibyte chars; use char-boundary walks.
+  bodies contain multibyte chars. Enforced: clippy denies `string_slice`
+  workspace-wide; truncate via `moneyball_core::text`.
 - Never advertise unimplemented commands in COMMANDS or system prompts -
   the LLM will steer users into dead ends.
 - Tool/LLM failures become messages in the loop, never exceptions or
   dead turns. Secrets never appear in errors, logs, or specs.
 - ASCII only in TUI-facing strings we author (model output is exempt;
-  the markdown renderer handles it).
+  the markdown renderer handles it). Enforced by the arch_contract test,
+  along with the network boundary and file size ratchet.

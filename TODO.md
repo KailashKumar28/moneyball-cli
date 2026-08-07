@@ -8,6 +8,27 @@ bottom after a release-sized batch.)
 
 ## Now (next slices, in order)
 
+- [ ] **Daily creative report** (plan: docs/CLOUD_PLAN.md, agreed
+      2026-08-07 - report.json is the product, HTML is a renderer;
+      reimplements pipeline/creative_report.py, never imports it):
+  - [x] A0 - schema module: serde structs + schemars -> docs/schemas/,
+        schema_contract test, fixture snapshot with creatives.json
+        (2026-08-07).
+  - [ ] A1 - `/fetch` writes creatives.json (envelope, image_hash /
+        video ids / asset sha256); network stays in fetch.rs. Ship with
+        doc wording updates + rename ~/.moneyball/reports/ ->
+        ~/.moneyball/bug-reports/ (collision with workspace reports/).
+  - [ ] A2 - content-addressed asset cache
+        history/assets/creatives/<hh>/<sha256>.<ext> (NOT ad_id.jpg).
+  - [ ] B1 - report.rs: snapshot -> report.json (grouping precedence,
+        7-stage funnel, unattributed bucket, brief.rs Window reuse) +
+        CLI text summary; golden-file parity vs the Python generator.
+  - [ ] B2 - HTML renderer, pure fn over report.json + assets only ->
+        .moneyball/reports/<date>/creative-report.{json,html}.
+  - [ ] C - TUI `/report`: path + text summary cell.
+  - [ ] Hedges (with A0/A1): fetch_snapshot takes token param;
+        WorkspaceConfig::from_parts; arch_contract denies HOME/cwd
+        reads outside config.rs.
 - [ ] **LeadZump date filter**: today the preset pulls the whole ticket
       book (`condition: null`, no date window) and hits MAX_PAGES=500 on
       every connect. Evidence + DSL details in docs/CRM_CONNECTORS.md.

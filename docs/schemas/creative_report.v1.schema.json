@@ -1,0 +1,511 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "CreativeReport",
+  "description": "`reports/<date>/creative-report.json` - THE product artifact. The\nHTML renderer, a bot text-summarizer, and the future service's\nPostgres ingester consume exactly this; the renderer never touches\nsnapshots. Every array element carries its own natural key so rows\nupsert losslessly: (workspace_id, report_date) > product > group_key\n> targeting/date.",
+  "type": "object",
+  "properties": {
+    "generated_at": {
+      "description": "RFC3339 UTC generation timestamp.",
+      "type": "string"
+    },
+    "portfolio": {
+      "description": "Portfolio KPIs - a bot renders exactly this block as the headline.",
+      "$ref": "#/$defs/Kpis"
+    },
+    "products": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/ProductSection"
+      }
+    },
+    "report_date": {
+      "description": "Snapshot date the report was computed FROM (YYYY-MM-DD).",
+      "type": "string"
+    },
+    "schema": {
+      "description": "`moneyball.creative_report/<major>`.",
+      "type": "string"
+    },
+    "source": {
+      "$ref": "#/$defs/ReportSource"
+    },
+    "window": {
+      "$ref": "#/$defs/ReportWindow"
+    },
+    "workspace_id": {
+      "description": "Stable workspace UUID (minted once into config.json). With\nreport_date + schema major: the idempotent-upsert key.",
+      "type": "string"
+    }
+  },
+  "required": [
+    "schema",
+    "workspace_id",
+    "report_date",
+    "window",
+    "generated_at",
+    "source",
+    "portfolio",
+    "products"
+  ],
+  "$defs": {
+    "CardStatus": {
+      "description": "live | learn | stop with a display label (learning-stage detail is\na v2 additive field).",
+      "type": "object",
+      "properties": {
+        "code": {
+          "$ref": "#/$defs/StatusCode"
+        },
+        "label": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "code",
+        "label"
+      ]
+    },
+    "CreativeCard": {
+      "description": "One creative (a group of ads sharing an image/video), the report's\nunit of comparison.",
+      "type": "object",
+      "properties": {
+        "ad_ids": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "campaigns": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "created": {
+          "description": "Earliest creative created date in the group (YYYY-MM-DD).",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "delivery": {
+          "$ref": "#/$defs/Delivery"
+        },
+        "display_name": {
+          "description": "Most-common ad_name in the group.",
+          "type": "string"
+        },
+        "funnel": {
+          "description": "The seven canonical stages, ordered, ALWAYS all present -\nrenderers iterate this array, never reconstruct it.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/FunnelStage"
+          }
+        },
+        "group_key": {
+          "description": "Grouping key with its kind prefixed, e.g. `img:<image_hash>`,\n`vid:<video_id>`, `family:<slug>`, `ad:<ad_id>`. PK within\n(workspace, report_date, product).",
+          "type": "string"
+        },
+        "group_kind": {
+          "$ref": "#/$defs/GroupKind"
+        },
+        "image": {
+          "description": "None => renderers show a placeholder.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ImageRef"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "is_video": {
+          "type": "boolean"
+        },
+        "status": {
+          "$ref": "#/$defs/CardStatus"
+        },
+        "targetings": {
+          "type": "array",
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/TargetingBreakdown"
+          }
+        },
+        "trend": {
+          "description": "Daily buckets across the trailing window, oldest first.",
+          "type": "array",
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/TrendBucket"
+          }
+        }
+      },
+      "required": [
+        "group_key",
+        "group_kind",
+        "display_name",
+        "ad_ids",
+        "campaigns",
+        "is_video",
+        "status",
+        "delivery",
+        "funnel"
+      ]
+    },
+    "Delivery": {
+      "description": "Meta delivery metrics for a card or targeting row.",
+      "type": "object",
+      "properties": {
+        "clicks": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "impressions": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "m_leads": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "reach": {
+          "type": "integer",
+          "format": "uint64",
+          "default": 0,
+          "minimum": 0
+        },
+        "spend": {
+          "type": "number",
+          "format": "double"
+        }
+      },
+      "required": [
+        "spend",
+        "impressions",
+        "clicks",
+        "m_leads"
+      ]
+    },
+    "FunnelCounts": {
+      "description": "CRM-joined funnel counts (Meta m_leads + the four CRM milestones).",
+      "type": "object",
+      "properties": {
+        "booking": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "l_leads": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "m_leads": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "qualified": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "visit": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "m_leads",
+        "l_leads",
+        "qualified",
+        "visit",
+        "booking"
+      ]
+    },
+    "FunnelStage": {
+      "description": "One step of the canonical funnel. Stage names are fixed:\nImpressions, Clicks, M-Leads, L-Leads, Qualified, Visit, Booking.",
+      "type": "object",
+      "properties": {
+        "count": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "stage": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "stage",
+        "count"
+      ]
+    },
+    "GroupKind": {
+      "description": "How the group was identified (precedence: family > video_name >\nvideo_id > image_hash > image_basename > ad_id).",
+      "type": "string",
+      "enum": [
+        "family",
+        "video_name",
+        "video_id",
+        "image_hash",
+        "image_basename",
+        "ad_id"
+      ]
+    },
+    "ImageRef": {
+      "description": "Pointer into the content-addressed asset cache; `path` is relative\nto `<workspace>/.moneyball/history/`.",
+      "type": "object",
+      "properties": {
+        "path": {
+          "type": "string"
+        },
+        "sha256": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "sha256",
+        "path"
+      ]
+    },
+    "Kpis": {
+      "description": "Delivery + funnel roll-up. Numbers are NUMBERS here - Meta's\nstring-typing is a snapshot-layer quirk, the aggregate is typed.",
+      "type": "object",
+      "properties": {
+        "clicks": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "cost_per_qualified": {
+          "description": "None when qualified == 0 - never 0-as-sentinel.",
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "double",
+          "default": null
+        },
+        "funnel": {
+          "$ref": "#/$defs/FunnelCounts"
+        },
+        "impressions": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "l_to_q_pct": {
+          "description": "None when l_leads == 0.",
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "double",
+          "default": null
+        },
+        "spend": {
+          "type": "number",
+          "format": "double"
+        },
+        "unattributed_l_leads": {
+          "description": "CRM tickets with no joinable ad_id (includes the intentional\n\"Stattic Ad\" rows) - counted, never silently dropped.",
+          "type": "integer",
+          "format": "uint64",
+          "default": 0,
+          "minimum": 0
+        }
+      },
+      "required": [
+        "spend",
+        "impressions",
+        "clicks",
+        "funnel"
+      ]
+    },
+    "ProductSection": {
+      "type": "object",
+      "properties": {
+        "creatives": {
+          "description": "Sorted python-style: booking desc, then visit, qualified,\nl_leads, m_leads.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/CreativeCard"
+          }
+        },
+        "kpis": {
+          "$ref": "#/$defs/Kpis"
+        },
+        "product": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "product",
+        "kpis",
+        "creatives"
+      ]
+    },
+    "ReportSource": {
+      "description": "Provenance for audit / re-derivation.",
+      "type": "object",
+      "properties": {
+        "creatives_schema": {
+          "description": "Schema string of the creatives.json consumed; None when the\nsnapshot predates creatives capture (cards fall back to\none-ad-per-card grouping).",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "crm_present": {
+          "type": "boolean"
+        },
+        "snapshot_date": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "snapshot_date",
+        "crm_present"
+      ]
+    },
+    "ReportWindow": {
+      "description": "Days of data the report aggregates (inclusive, YYYY-MM-DD).",
+      "type": "object",
+      "properties": {
+        "since": {
+          "type": "string"
+        },
+        "until": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "since",
+        "until"
+      ]
+    },
+    "StatusCode": {
+      "type": "string",
+      "enum": [
+        "live",
+        "learn",
+        "stop"
+      ]
+    },
+    "TargetingBreakdown": {
+      "description": "Per-targeting (= base adset name, campaign suffix stripped) split.",
+      "type": "object",
+      "properties": {
+        "crm": {
+          "$ref": "#/$defs/TargetingCrm"
+        },
+        "delivery": {
+          "$ref": "#/$defs/Delivery"
+        },
+        "targeting": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "targeting",
+        "delivery",
+        "crm"
+      ]
+    },
+    "TargetingCrm": {
+      "type": "object",
+      "properties": {
+        "booking": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "l_leads": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "qualified": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "visit": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "l_leads",
+        "qualified",
+        "visit",
+        "booking"
+      ]
+    },
+    "TrendBucket": {
+      "description": "One day of a card's trend series.",
+      "type": "object",
+      "properties": {
+        "booking": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "clicks": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "date": {
+          "description": "YYYY-MM-DD.",
+          "type": "string"
+        },
+        "impressions": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "l_leads": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "m_leads": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "qualified": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "visit": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "date",
+        "impressions",
+        "clicks",
+        "m_leads",
+        "l_leads",
+        "qualified",
+        "visit",
+        "booking"
+      ]
+    }
+  }
+}

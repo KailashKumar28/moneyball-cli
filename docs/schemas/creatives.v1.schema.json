@@ -1,0 +1,184 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "CreativesFile",
+  "description": "`snap/<date>/creatives.json` - per-ad creative identity + asset refs.\nEnvelope object (new artifacts always get one); the snapshot loader\nrule is: bare array => v0 rows, object => read `schema` + `rows`.",
+  "type": "object",
+  "properties": {
+    "fetched_at": {
+      "description": "When the fetch ran (RFC3339, UTC). Provenance, not a join key.",
+      "type": "string"
+    },
+    "rows": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/CreativeRow"
+      }
+    },
+    "schema": {
+      "description": "Artifact identity, `moneyball.creatives/<major>`. Readers reject\nmajors they don't know; unknown FIELDS are ignored everywhere.",
+      "type": "string"
+    }
+  },
+  "required": [
+    "schema",
+    "fetched_at",
+    "rows"
+  ],
+  "$defs": {
+    "AssetRef": {
+      "description": "A cached creative image, content-addressed under\n`history/assets/creatives/<hh>/<sha256>.<ext>`.",
+      "type": "object",
+      "properties": {
+        "bytes": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "content_type": {
+          "type": "string"
+        },
+        "sha256": {
+          "description": "Content hash of the cached bytes = cache filename stem.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "sha256",
+        "content_type",
+        "bytes"
+      ]
+    },
+    "CreativeRow": {
+      "description": "One ad's creative facts. Facts only - the creative GROUPING key is\ncomputed at report time (families/name-normalization are editorial\npolicy, not snapshot facts).",
+      "type": "object",
+      "properties": {
+        "_product": {
+          "description": "Workspace product tag - same rule as ads_daily rows.",
+          "type": "string",
+          "default": ""
+        },
+        "ad_id": {
+          "description": "Meta ad id. Primary key within a snapshot.",
+          "type": "string"
+        },
+        "ad_name": {
+          "type": "string",
+          "default": ""
+        },
+        "adset_id": {
+          "type": "string",
+          "default": ""
+        },
+        "afs_video_ids": {
+          "description": "Dynamic (asset_feed_spec) video ids, sorted. Empty if none.",
+          "type": "array",
+          "default": [],
+          "items": {
+            "type": "string"
+          }
+        },
+        "asset": {
+          "description": "None if the download failed (report renders a placeholder).",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/AssetRef"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "body": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "campaign_id": {
+          "type": "string",
+          "default": ""
+        },
+        "created_time": {
+          "description": "Creative created time as Meta returns it (RFC3339 with offset).",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "cta": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "image_basename": {
+          "description": "CDN asset filename from image_url, query stripped. Legacy\nidentity fallback only (python creative_key()).",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "image_hash": {
+          "description": "Meta's content hash for image ads; None for video.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "image_url": {
+          "description": "Full-res URL AT FETCH TIME. Signatures expire within days; the\nread path never dereferences this - the asset cache is truth.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "is_video": {
+          "description": "Derived: video_id or afs_video_ids non-empty.",
+          "type": "boolean",
+          "default": false
+        },
+        "permalink": {
+          "description": "IG/FB permalink when Meta exposes one.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "status": {
+          "description": "Meta effective_status verbatim (ACTIVE, PAUSED, ...).",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "title": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "video_id": {
+          "description": "Top-level or video_data video id; None for image ads.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        }
+      },
+      "required": [
+        "ad_id"
+      ]
+    }
+  }
+}

@@ -27,18 +27,31 @@ never touches the network. Network lives in exactly four core modules:
 `meta.rs` (account discovery), `fetch.rs` (explicit snapshot pull),
 `llm.rs` (model calls), `crm/fetch.rs` (explicit CRM pull driven by the
 declarative crm.toml spec). Nothing ever writes to Meta or the CRM.
+Enforced by `tests/arch_contract.rs` (this is the canonical statement;
+AGENTS.md's intro summarizes it).
 
 ## 2. I/O contract
 
 - Reads: snapshots at `<workspace>/.moneyball/history/snap/<date>/`.
-- Writes: `.moneyball/{config.json,crm.toml,history/,state/,runs/}` in
-  the workspace; `~/.moneyball/auth.json` (0600) for secrets - codex-style
-  dotfile, not the OS keychain (keychain ACLs break for locally built
-  binaries). Secrets never appear in config.json, crm.toml, or logs -
-  crm.toml references them as `secret:<name>` / `env:<VAR>`.
+- Writes: `.moneyball/{config.json,crm.toml,history/,state/,runs/,sessions/}`
+  in the workspace (sessions fall back to `~/.moneyball/sessions/` only
+  before a workspace is configured); `~/.moneyball/auth.json` (0600) for
+  secrets and `~/.moneyball/reports/` for user-filed bug reports -
+  codex-style dotfile, not the OS keychain (keychain ACLs break for
+  locally built binaries). Secrets never appear in config.json,
+  crm.toml, or logs - crm.toml references them as `secret:<name>` /
+  `env:<VAR>`.
 - CRM data enters only as contract-conformant `crm.json`
   (docs/CRM_CONTRACT.md); `crm::check` gates every write of it.
 - `MB_AGENT=1` -> machine-readable output for sub-commands.
+- Every JSON artifact moneyball itself writes going forward (creatives
+  snapshot file, reports) carries a `schema: "moneyball.<artifact>/<major>"`
+  field; additive-only within a major (new optional fields with serde
+  defaults; readers ignore unknown fields; existing fields never change
+  meaning/type). Structs in `moneyball-core/src/schema.rs` are the source
+  of truth; generated JSON Schemas live in `docs/schemas/`, pinned by
+  `tests/schema_contract.rs` (regen: `MB_UPDATE_SCHEMAS=1 cargo test`).
+  ads_daily.json / crm.json are grandfathered bare arrays (v0).
 
 ## 3. Module rules - the anti-verbosity contract
 
@@ -46,8 +59,9 @@ declarative crm.toml spec). Nothing ever writes to Meta or the CRM.
   protocol - each gets its own module (codex-tui's shape). God-files are
   defects.
 - **Soft caps: ~400 lines per file, ~40 per function.** Crossing one is a
-  signal to split, not an excuse for a waiver. `moneyball-tui/src/lib.rs`
-  at 3,200+ lines is the standing counterexample - see §8.
+  signal to split, not an excuse for a waiver. The file cap is ratcheted
+  by `tests/arch_contract.rs`: existing offenders are frozen at a ceiling
+  there - shrink entries out of the list; never raise a ceiling.
 - **lib.rs is a table of contents**: module declarations, re-exports, and
   root-owned types only. No business logic.
 - New TUI surface -> new file (e.g. `setup/`, `palette.rs`, `commands.rs`),
@@ -144,6 +158,12 @@ requires updating this section first.
   never sees wire formats.
 
 ## 7. Enforcement gates (definition of done for any change)
+
+Mechanical rules (run with every `cargo test`): `clippy::string_slice`
+is denied workspace-wide - all truncation goes through
+`moneyball-core::text` - and `moneyball-core/tests/arch_contract.rs`
+enforces the network boundary (§1), the ASCII rule (AGENTS.md), and the
+file size ratchet (§3).
 
 1. `cargo fmt --all` - default rustfmt, no config debates.
 2. `cargo clippy --workspace --all-targets` - zero NEW warnings; drive the
