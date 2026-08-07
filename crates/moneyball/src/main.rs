@@ -71,6 +71,17 @@ enum Cmd {
         #[command(subcommand)]
         cmd: CrmCmd,
     },
+    /// Compute the creative report from a snapshot (no network):
+    /// per-creative delivery + CRM funnel, written as report.json.
+    Report {
+        /// Snapshot date YYYY-MM-DD (default: latest).
+        #[arg(long)]
+        date: Option<String>,
+        /// Trailing complete days the report covers (ending the day
+        /// before the snapshot date).
+        #[arg(long, default_value_t = 1)]
+        window: u32,
+    },
     /// Dump a saved session transcript with an invariant audit; file,
     /// review, and archive bug reports (see debug_cli.rs).
     Debug(debug_cli::DebugArgs),
@@ -200,6 +211,10 @@ fn main() -> Result<()> {
         } => {
             let strict = AppConfig::resolve(cli.data_root.as_deref(), cli.date.as_deref())?;
             moneyball_core::funnel::run(&strict, &product, &by, window, cli.date.as_deref())?;
+        }
+        Cmd::Report { date, window } => {
+            let strict = AppConfig::resolve(cli.data_root.as_deref(), cli.date.as_deref())?;
+            moneyball_core::report::run(&strict, date.as_deref().or(cli.date.as_deref()), window)?;
         }
         Cmd::Debug(args) => debug_cli::run(args, root)?,
         Cmd::Crm { cmd } => match cmd {

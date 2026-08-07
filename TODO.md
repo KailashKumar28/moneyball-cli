@@ -23,9 +23,11 @@ bottom after a release-sized batch.)
         adimages hash resolution + nested thumbnail params; refs reused
         from the prior snapshot, failures degrade to placeholder
         (2026-08-07).
-  - [ ] B1 - report.rs: snapshot -> report.json (grouping precedence,
+  - [x] B1 - report.rs: snapshot -> report.json (grouping precedence,
         7-stage funnel, unattributed bucket, brief.rs Window reuse) +
         CLI text summary; golden-file parity vs the Python generator.
+        Shipped 2026-08-07: per-product parity vs python HTML - M-leads
+        exact, spend/impr within 0.6% (Meta restatement between pulls).
   - [ ] B2 - HTML renderer, pure fn over report.json + assets only ->
         .moneyball/reports/<date>/creative-report.{json,html}.
   - [ ] C - TUI `/report`: path + text summary cell.

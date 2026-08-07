@@ -101,6 +101,7 @@ impl App {
     pub fn force_workspace_for_test(&mut self, products: Vec<(String, String)>) {
         use moneyball_core::config::{Product, WorkspaceConfig};
         let wc = WorkspaceConfig {
+            workspace_id: None,
             products: products
                 .into_iter()
                 .map(|(n, a)| Product {

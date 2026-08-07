@@ -17,6 +17,7 @@ pub mod llm;
 pub mod logo;
 pub mod meta;
 pub mod provider;
+pub mod report;
 pub mod schema;
 pub mod secrets;
 pub mod session;

@@ -66,6 +66,11 @@ fn default_adset_id_path() -> String {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct WorkspaceConfig {
+    /// Stable workspace UUID, minted by the first `moneyball report`
+    /// run. Every pushed/synced artifact carries it - the tenant key
+    /// before accounts exist (docs/CLOUD_PLAN.md).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub workspace_id: Option<String>,
     pub products: Vec<Product>,
     #[serde(default)]
     pub goals: std::collections::HashMap<String, f64>,

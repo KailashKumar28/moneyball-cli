@@ -744,11 +744,15 @@ fn advance_save(app: &mut App, s: &mut SetupState) {
     // target_rs_per_q is intentionally NOT asked during setup - it's a
     // derived/observed metric per product, not a hardcoded universal value.
     // Stored as None; the advisor derives it from observed performance.
+    // Re-running /setup must never wipe state the wizard doesn't ask
+    // about: the minted workspace_id and the CRM config survive.
+    let prev = app.cfg.workspace.as_ref();
     let cfg = WorkspaceConfig {
+        workspace_id: prev.and_then(|w| w.workspace_id.clone()),
         products,
         goals: goals_map,
         target_rs_per_q: None,
-        crm: Default::default(),
+        crm: prev.map(|w| w.crm.clone()).unwrap_or_default(),
         model_provider: s.llm_provider_id.clone().into(),
         model: s.llm_model.clone().into(),
         model_providers: llm_providers_map(s),
