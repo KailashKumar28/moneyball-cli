@@ -17,6 +17,7 @@ csv.workspace = true
 reqwest.workspace = true
 schemars.workspace = true
 sha2.workspace = true
+image.workspace = true
 
 [lints]
 workspace = true

@@ -230,3 +230,35 @@ fn empty_crm_flags_source_and_zero_funnel() {
     let txt = report::text_summary(&r);
     assert!(txt.contains("CREATIVE REPORT"), "{}", txt);
 }
+
+#[test]
+fn html_renders_from_aggregate_and_cache_only() {
+    use moneyball_core::report::html;
+    // Stage one cached asset so exactly one card gets a data URI.
+    let tmp = std::env::temp_dir().join(format!("mb-html-{}", std::process::id()));
+    let history = tmp.join("history");
+    let assets = history.join("assets").join("creatives");
+    let sha = format!("{:0<64}", "h1");
+    let dir = assets.join(sha.get(..2).unwrap());
+    std::fs::create_dir_all(&dir).unwrap();
+    std::fs::write(dir.join(format!("{}.jpg", sha)), b"fake-jpeg-bytes").unwrap();
+
+    let r = report::build(&snapshot(), "ws", "2026-08-07T00:00:00Z", 1).unwrap();
+    let html = html::render(&r, &history);
+
+    // No unexpanded placeholders, all sections + jumpnav present.
+    assert!(!html.contains("{{"), "leftover template placeholder");
+    assert!(html.contains(r##"href="#p-namma-mane""##));
+    assert!(
+        html.contains("data:image/jpeg;base64,"),
+        "cached image inlined"
+    );
+    assert!(
+        html.contains("no preview"),
+        "missing assets degrade to placeholder"
+    );
+    assert!(html.contains("VIDEO"), "video tag rendered");
+    // Escaping: ad names are data, not markup.
+    assert!(!html.contains("<script"));
+    std::fs::remove_dir_all(&tmp).ok();
+}

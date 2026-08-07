@@ -11,6 +11,7 @@
 
 mod card;
 mod group;
+pub mod html;
 
 use std::collections::BTreeMap;
 
@@ -167,11 +168,18 @@ pub fn run(cfg: &AppConfig, date: Option<&str>, window_days: u32) -> Result<()> 
     std::fs::write(&tmp, serde_json::to_string_pretty(&report)?)?;
     std::fs::rename(&tmp, &path)?;
 
+    // HTML rendered strictly from the aggregate + asset cache (B2).
+    let html_path = dir.join("creative-report.html");
+    let html_tmp = dir.join("creative-report.html.tmp");
+    std::fs::write(&html_tmp, html::render(&report, &cfg.history_dir()))?;
+    std::fs::rename(&html_tmp, &html_path)?;
+
     print!("{}", text_summary(&report));
     if !report.source.crm_present {
         println!("note: no CRM data in this snapshot - L/Q/V/B are zeros, not truths.");
     }
     println!("report written: {}", path.display());
+    println!("open in browser: {}", html_path.display());
     Ok(())
 }
 

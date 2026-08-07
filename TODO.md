@@ -28,8 +28,9 @@ bottom after a release-sized batch.)
         CLI text summary; golden-file parity vs the Python generator.
         Shipped 2026-08-07: per-product parity vs python HTML - M-leads
         exact, spend/impr within 0.6% (Meta restatement between pulls).
-  - [ ] B2 - HTML renderer, pure fn over report.json + assets only ->
-        .moneyball/reports/<date>/creative-report.{json,html}.
+  - [x] B2 - HTML renderer, pure fn over report.json + assets only ->
+        .moneyball/reports/<date>/creative-report.{json,html}; board
+        layout, base64 images downscaled to card width (2026-08-07).
   - [ ] C - TUI `/report`: path + text summary cell.
   - [x] Hedges (2026-08-07): fetch_snapshot takes token param;
         arch_contract denies HOME/cwd reads outside config.rs
