@@ -16,6 +16,10 @@ pub(crate) const COMMANDS: &[(&str, &str)] = &[
     ("/brief", "7-day portfolio brief"),
     ("/fetch", "pull daily insights from Meta into a snapshot"),
     ("/funnel", "per-entity funnel for a product"),
+    (
+        "/report",
+        "creative report (per-creative funnel) as HTML + summary",
+    ),
     ("/ask", "free-form question (LLM picks commands)"),
     (
         "/debug",
@@ -160,6 +164,9 @@ your own pipeline at\n\n    {}/<YYYY-MM-DD>/\n\nand /brief reads whatever it wri
         }
         "/debug" => {
             crate::report::run_debug_report(app, arg);
+        }
+        "/report" => {
+            crate::creative_flow::run_report(app, arg);
         }
         "/ask" => {
             // /ask is now equivalent to free-form chat (the LLM is the

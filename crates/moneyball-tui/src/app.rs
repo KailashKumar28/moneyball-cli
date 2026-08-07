@@ -76,6 +76,15 @@ pub enum StreamEvent {
         days: u32,
         ms: u64,
     },
+    /// `/report` worker finished generating the creative report.
+    ReportDone {
+        out: Box<moneyball_core::report::ReportOutput>,
+        ms: u64,
+    },
+    ReportFailed {
+        err: String,
+        ms: u64,
+    },
 }
 
 impl App {

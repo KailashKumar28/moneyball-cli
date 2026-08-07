@@ -153,9 +153,17 @@ pub fn build(
     })
 }
 
-/// Headless runner: load snapshot, build, write
-/// `reports/<date>/creative-report.json`, print the text summary.
-pub fn run(cfg: &AppConfig, date: Option<&str>, window_days: u32) -> Result<()> {
+/// A generated report on disk - what both the CLI and the TUI surface.
+pub struct ReportOutput {
+    pub report: CreativeReport,
+    pub json_path: std::path::PathBuf,
+    pub html_path: std::path::PathBuf,
+}
+
+/// Load the snapshot, build the aggregate, write
+/// `reports/<date>/creative-report.{json,html}`. Shared by the CLI
+/// runner and the TUI /report worker.
+pub fn generate(cfg: &AppConfig, date: Option<&str>, window_days: u32) -> Result<ReportOutput> {
     let snap = crate::snapshot::load(&cfg.snap_for(date)?)?;
     let workspace_id = ensure_workspace_id(cfg)?;
     let generated_at = chrono::Utc::now().format("%Y-%m-%dT%H:%M:%SZ").to_string();
@@ -163,10 +171,10 @@ pub fn run(cfg: &AppConfig, date: Option<&str>, window_days: u32) -> Result<()> 
 
     let dir = cfg.mb_dir().join("reports").join(&report.report_date);
     std::fs::create_dir_all(&dir)?;
-    let path = dir.join("creative-report.json");
+    let json_path = dir.join("creative-report.json");
     let tmp = dir.join("creative-report.json.tmp");
     std::fs::write(&tmp, serde_json::to_string_pretty(&report)?)?;
-    std::fs::rename(&tmp, &path)?;
+    std::fs::rename(&tmp, &json_path)?;
 
     // HTML rendered strictly from the aggregate + asset cache (B2).
     let html_path = dir.join("creative-report.html");
@@ -174,12 +182,22 @@ pub fn run(cfg: &AppConfig, date: Option<&str>, window_days: u32) -> Result<()> 
     std::fs::write(&html_tmp, html::render(&report, &cfg.history_dir()))?;
     std::fs::rename(&html_tmp, &html_path)?;
 
-    print!("{}", text_summary(&report));
-    if !report.source.crm_present {
+    Ok(ReportOutput {
+        report,
+        json_path,
+        html_path,
+    })
+}
+
+/// Headless runner: generate + print the text summary.
+pub fn run(cfg: &AppConfig, date: Option<&str>, window_days: u32) -> Result<()> {
+    let out = generate(cfg, date, window_days)?;
+    print!("{}", text_summary(&out.report));
+    if !out.report.source.crm_present {
         println!("note: no CRM data in this snapshot - L/Q/V/B are zeros, not truths.");
     }
-    println!("report written: {}", path.display());
-    println!("open in browser: {}", html_path.display());
+    println!("report written: {}", out.json_path.display());
+    println!("open in browser: {}", out.html_path.display());
     Ok(())
 }
 

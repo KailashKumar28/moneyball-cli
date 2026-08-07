@@ -154,6 +154,16 @@ fn drain_stream(app: &mut App) {
                 commands::on_fetch_failed(app, err, days, ms);
                 return;
             }
+            Ok(StreamEvent::ReportDone { out, ms }) => {
+                app.stream = None;
+                crate::creative_flow::on_report_done(app, out, ms);
+                return;
+            }
+            Ok(StreamEvent::ReportFailed { err, ms }) => {
+                app.stream = None;
+                crate::creative_flow::on_report_failed(app, err, ms);
+                return;
+            }
             Err(TryRecvError::Empty) => return,
             Err(TryRecvError::Disconnected) => {
                 // The worker died without a final event (panic in a

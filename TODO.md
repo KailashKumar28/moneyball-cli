@@ -31,7 +31,8 @@ bottom after a release-sized batch.)
   - [x] B2 - HTML renderer, pure fn over report.json + assets only ->
         .moneyball/reports/<date>/creative-report.{json,html}; board
         layout, base64 images downscaled to card width (2026-08-07).
-  - [ ] C - TUI `/report`: path + text summary cell.
+  - [x] C - TUI /report: worker-thread generate, summary + browser
+        path as the tool cell (2026-08-07). FEATURE COMPLETE.
   - [x] Hedges (2026-08-07): fetch_snapshot takes token param;
         arch_contract denies HOME/cwd reads outside config.rs
         (config::home_dir is the seam). WorkspaceConfig::from_parts

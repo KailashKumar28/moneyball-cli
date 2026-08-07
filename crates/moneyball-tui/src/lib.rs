@@ -4,6 +4,7 @@
 mod app;
 pub mod chat;
 mod commands;
+mod creative_flow;
 mod event;
 mod fetch_flow;
 pub(crate) mod markdown;
