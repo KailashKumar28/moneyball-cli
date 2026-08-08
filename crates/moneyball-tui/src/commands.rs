@@ -164,7 +164,7 @@ your own pipeline at\n\n    {}/<YYYY-MM-DD>/\n\nand /brief reads whatever it wri
             app.view = View::Setup(state);
         }
         "/funnel" => {
-            run_funnel(app, arg);
+            crate::funnel_flow::run_funnel(app, arg);
         }
         "/debug" => {
             crate::report::run_debug_report(app, arg);
@@ -350,87 +350,7 @@ You have two tools that read the on-disk snapshot: brief (7-day per-product summ
 If a tool reports missing data (no snapshot, no CRM), relay its suggested fix to the user instead of guessing.\n\
 Keep the answer focused and concrete. Cite the numbers you use. 3-6 sentences unless the user explicitly asks for more.";
 
-/// `/funnel <product> [campaign|adset|ad]` - per-entity funnel as a tool
-/// cell, then a streaming LLM read of it (scale/kill/wait per entity).
-/// Compute is instant (snapshot on disk), so no worker thread needed.
-fn run_funnel(app: &mut App, arg: &str) {
-    use crate::chat::cells;
-    use crate::chat::Cell;
-    let started = std::time::Instant::now();
-    let products: Vec<String> = app
-        .cfg
-        .workspace
-        .as_ref()
-        .map(|w| w.products.iter().map(|p| p.name.clone()).collect())
-        .unwrap_or_default();
-
-    // Trailing token may be the level; everything before it is the
-    // product (product names contain spaces).
-    let (product, by) = match arg.rsplit_once(' ') {
-        Some((head, lvl)) if ["campaign", "adset", "ad"].contains(&lvl) => {
-            (head.trim().to_string(), lvl.to_string())
-        }
-        _ => (arg.to_string(), "adset".to_string()),
-    };
-    if product.is_empty() || !products.iter().any(|p| p == &product) {
-        app.chat.push(Cell::AssistantText(cells::AssistantText {
-            text: format!(
-                "usage: /funnel <product> [campaign|adset|ad]\nconfigured products: {}",
-                if products.is_empty() {
-                    "(none - run /setup)".into()
-                } else {
-                    products.join(", ")
-                }
-            ),
-            streaming: false,
-        }));
-        return;
-    }
-
-    let snap = match app
-        .cfg
-        .snap_for(app.cfg.date.as_deref())
-        .and_then(|p| moneyball_core::snapshot::load(&p))
-    {
-        Ok(s) => s,
-        Err(_) => {
-            app.chat.push(Cell::AssistantText(cells::AssistantText {
-                text: "no snapshot yet - run /fetch first (or /brief, which self-heals).".into(),
-                streaming: false,
-            }));
-            return;
-        }
-    };
-    let level = moneyball_core::funnel::By::parse(&by).expect("level pre-validated");
-    let rows = moneyball_core::funnel::compute(&snap, &app.cfg, &product, 7, level);
-    let mut lines = vec![format!(
-        "FUNNEL {} - by {} - 7d - snapshot {}",
-        product, by, snap.date
-    )];
-    lines.extend(
-        moneyball_core::funnel::table(&rows)
-            .lines()
-            .map(String::from),
-    );
-    let table_text = lines.join("\n");
-    app.chat.push_tool(
-        "funnel",
-        arg,
-        lines,
-        true,
-        started.elapsed().as_millis() as u64,
-    );
-
-    let sys = format!("{}\n\n{}", FUNNEL_SYSTEM_PROMPT, app_state_block(app));
-    let user = format!(
-        "Here is the 7-day per-{} funnel for {} (kill = spend passed the kill table \
-         with <=2 qualified; immature = leads still inside the 72h maturation lag):\n\n{}",
-        by, product, table_text
-    );
-    call_agent(app, &sys, &user);
-}
-
-const FUNNEL_SYSTEM_PROMPT: &str = "You are moneyball, a Meta-ads portfolio advisor. \
+pub(crate) const FUNNEL_SYSTEM_PROMPT: &str = "You are moneyball, a Meta-ads portfolio advisor. \
 You are given a per-entity funnel table (spend, Meta leads m, CRM leads l, qualified q, \
 visits v, Rs/qualified, kill flags). Give a per-entity read: SCALE (efficient + sufficient \
 volume), KILL (kill flag true and not immature), or WAIT (immature, learning, or not enough \
@@ -458,6 +378,10 @@ pub(crate) fn app_state_block(app: &App) -> String {
                 prods.len(),
                 prods.join(", ")
             ));
+            s.push_str(
+                "When you name a product or suggest a command, use these product \
+names EXACTLY as listed - suggested commands must run verbatim when typed.\n",
+            );
         }
         None => s.push_str("workspace: NOT configured - /setup is the fix\n"),
     }
@@ -632,11 +556,15 @@ impl moneyball_core::agent::ToolExec for SnapshotTools {
                     7,
                     moneyball_core::funnel::By::Adset,
                 );
+                let rank = moneyball_core::funnel::cpl_ranking(&rows)
+                    .map(|r| format!("\n{}", r))
+                    .unwrap_or_default();
                 Ok(format!(
-                    "FUNNEL {} - by adset - 7d - snapshot {}\n{}",
+                    "FUNNEL {} - by adset - 7d - snapshot {}\n{}{}",
                     product,
                     snap.date,
-                    moneyball_core::funnel::table(&rows)
+                    moneyball_core::funnel::table(&rows),
+                    rank
                 ))
             }
             other => Err(format!(

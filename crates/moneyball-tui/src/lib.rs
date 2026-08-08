@@ -8,6 +8,7 @@ mod creative_flow;
 mod crm_flow;
 mod event;
 mod fetch_flow;
+mod funnel_flow;
 pub(crate) mod markdown;
 mod render;
 mod report;

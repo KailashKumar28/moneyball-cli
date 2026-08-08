@@ -52,25 +52,25 @@ bottom after a release-sized batch.)
         stale-vs-missing call-out, and the one next command. Bonus from
         the live 401: auth failures now say "token expired + the fix"
         instead of "response is not JSON" (status checked before parse).
-- [ ] **Advisor numeric reliability** (live QA 2026-08-08 caught the
-      model calling Rs.721 CPL "mid-pack" vs Rs.1,216 "cheapest" -
-      bug mb-20260808T143646Z-rrrr, resolve it when this ships):
-      funnel/brief tool outputs pre-compute rankings and comparatives
-      ("cpl best->worst: Lookalike 721, NonAdv 1216, Pincode 2381") so
-      the model narrates labels instead of comparing raw numbers; and
-      apply the cloud-plan model policy locally - strong model for
-      analysis turns, cheap only for mechanical jobs.
-- [ ] **Suggested commands always run when typed** (live QA: commentary
-      said "/funnel Namma Mane" - errors; product is "Disha Namma
-      Mane"): pin exact product names in app_state_block wording, and
-      make /funnel + `funnel` match products case-insensitively by
-      unambiguous substring, erroring with the candidate list otherwise.
-- [ ] **Session-id entropy + no-clobber create**: rand_u32 reseeds from
-      the clock per char so suffixes repeat (oooo/3333/rrrr observed);
-      advance one xorshift state across the loop, and use
-      File::create_new in SessionLog::create so a same-second collision
-      errors instead of truncating another session - session files are
-      bug-report evidence now.
+- [ ] **Advisor numeric reliability**:
+  - [x] pre-computed cpl ranking in funnel output (TUI cell, agent
+        tool, headless CLI); bug mb-20260808T143646Z-rrrr resolved -
+        live re-test narrated the order correctly (2026-08-08).
+  - [ ] model policy locally (cloud-plan rule): strong model for
+        analysis turns, cheap only for mechanical jobs. Also observed:
+        same data produced WAIT one run and KILL the next on minimax -
+        recommendation stability is the remaining gap, and it is a
+        model-quality issue, not a math one.
+- [x] **Suggested commands always run when typed** (2026-08-08):
+      product::resolve_product (exact > case-insensitive > unique
+      substring, ambiguous errors with candidates) wired into TUI
+      /funnel + headless funnel; app_state_block pins exact product
+      names for the model. E2E: "Namma Mane" and "cityville" resolve,
+      "Fincity" errors with the candidate list.
+- [x] **Session-id entropy + no-clobber create** (2026-08-08): one
+      xorshift state across the suffix + counter-mixed seed;
+      File::create_new with retries. E2E: three same-second launches
+      -> pj91/g3xq/v5gw.
 - [ ] **Validate LeadSquared for real**: point a `crm.toml` at a live
       LeadSquared account (AccessKey/SecretKey), confirm the preset field
       paths (`mx_*` attribution, ProspectStage) and paging behavior.

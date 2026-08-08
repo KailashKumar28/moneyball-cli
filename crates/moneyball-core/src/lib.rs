@@ -16,6 +16,7 @@ pub mod funnel;
 pub mod llm;
 pub mod logo;
 pub mod meta;
+pub mod product;
 pub mod provider;
 pub mod report;
 pub mod schema;

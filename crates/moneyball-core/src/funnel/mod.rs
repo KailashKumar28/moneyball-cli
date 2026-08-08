@@ -11,6 +11,9 @@ use crate::config::AppConfig;
 use crate::error::{Error, Result};
 use crate::snapshot::Snapshot;
 
+pub mod print;
+pub use print::table;
+
 /// Spend as a multiple of target Rs/qualified at 0/1/2 qualified leads
 /// before an entity becomes a kill candidate (mb.py KILL_TABLE).
 pub const KILL_TABLE: [f64; 3] = [3.0, 4.7, 6.3];
@@ -195,18 +198,13 @@ fn learning_of(snap: &Snapshot, id: &str, by: By) -> String {
 pub fn run(cfg: &AppConfig, product: &str, by: &str, days: u32, date: Option<&str>) -> Result<()> {
     let by = By::parse(by)?;
     let snap = crate::snapshot::load(&cfg.snap_for(date)?)?;
-    let known: Vec<&str> = cfg
-        .workspace
-        .as_ref()
-        .map(|w| w.products.iter().map(|p| p.name.as_str()).collect())
-        .unwrap_or_default();
-    if !known.is_empty() && !known.contains(&product) {
-        return Err(Error::Config(format!(
-            "unknown product \"{}\" - configured: {}",
-            product,
-            known.join(", ")
-        )));
-    }
+    let product: String = match cfg.workspace.as_ref() {
+        Some(w) if !w.products.is_empty() => crate::product::resolve_product(product, &w.products)
+            .map_err(Error::Config)?
+            .to_string(),
+        _ => product.to_string(),
+    };
+    let product = product.as_str();
     let rows = compute(&snap, cfg, product, days, by);
     let by_name = match by {
         By::Campaign => "campaign",
@@ -218,94 +216,14 @@ pub fn run(cfg: &AppConfig, product: &str, by: &str, days: u32, date: Option<&st
         product, by_name, days, snap.date
     );
     print!("{}", table(&rows));
+    if let Some(rank) = cpl_ranking(&rows) {
+        println!("{}", rank);
+    }
     println!(
         "\nkill = spend >= {}x/{}x/{}x target Rs/qualified with 0/1/2 qualified; immature = leads arrived in trailing {}h",
         KILL_TABLE[0], KILL_TABLE[1], KILL_TABLE[2], LAG_HOURS
     );
     Ok(())
-}
-
-const COLS: &[&str] = &[
-    "id",
-    "name",
-    "spend",
-    "m",
-    "cpl",
-    "l",
-    "q",
-    "v",
-    "rs_per_q",
-    "l_to_q",
-    "kill_mult",
-    "kill",
-    "sufficient",
-    "immature",
-    "learning",
-];
-
-fn cell(r: &FunnelRow, col: &str) -> String {
-    fn opt(v: Option<u64>) -> String {
-        v.map(|x| x.to_string()).unwrap_or_else(|| "-".into())
-    }
-    match col {
-        "id" => r.id.clone(),
-        "name" => r.name.chars().take(32).collect(),
-        "spend" => r.spend.to_string(),
-        "m" => r.m.to_string(),
-        "cpl" => opt(r.cpl),
-        "l" => r.l.to_string(),
-        "q" => r.q.to_string(),
-        "v" => r.v.to_string(),
-        "rs_per_q" => opt(r.rs_per_q),
-        "l_to_q" => r
-            .l_to_q
-            .map(|x| x.to_string())
-            .unwrap_or_else(|| "-".into()),
-        "kill_mult" => r.kill_mult.to_string(),
-        "kill" => r.kill.to_string(),
-        "sufficient" => r.sufficient.to_string(),
-        "immature" => r.immature.to_string(),
-        "learning" => r.learning.clone(),
-        _ => unreachable!(),
-    }
-}
-
-/// Fixed-width table, mb.py `_tab` style: header, dashed rule, rows.
-/// ASCII-only so the TUI can render it verbatim.
-pub fn table(rows: &[FunnelRow]) -> String {
-    if rows.is_empty() {
-        return "(no rows)\n".into();
-    }
-    let widths: Vec<usize> = COLS
-        .iter()
-        .map(|c| {
-            rows.iter()
-                .map(|r| cell(r, c).len())
-                .chain(std::iter::once(c.len()))
-                .max()
-                .unwrap_or(0)
-        })
-        .collect();
-    let header: Vec<String> = COLS
-        .iter()
-        .zip(&widths)
-        .map(|(c, w)| format!("{:<width$}", c, width = w))
-        .collect();
-    let mut out = header.join("  ");
-    let rule = "-".repeat(out.len());
-    out.push('\n');
-    out.push_str(&rule);
-    out.push('\n');
-    for r in rows {
-        let line: Vec<String> = COLS
-            .iter()
-            .zip(&widths)
-            .map(|(c, w)| format!("{:<width$}", cell(r, c), width = w))
-            .collect();
-        out.push_str(line.join("  ").trim_end());
-        out.push('\n');
-    }
-    out
 }
 
 #[cfg(test)]
@@ -403,5 +321,57 @@ mod tests {
         assert!(t.starts_with("id"));
         assert!(t.contains("Set One"));
         assert!(!table(&[]).contains("id"));
+    }
+}
+
+/// Pre-computed CPL ordering, cheapest first. Injected into funnel tool
+/// output so the model NARRATES a ranking instead of comparing raw
+/// numbers itself (live QA 2026-08-08: the model called Rs.721 CPL
+/// "mid-pack" against Rs.1,216 "cheapest" - bug mb-20260808T143646Z-rrrr).
+/// None when fewer than two rows have a CPL.
+pub fn cpl_ranking(rows: &[FunnelRow]) -> Option<String> {
+    let mut with_cpl: Vec<(&FunnelRow, u64)> =
+        rows.iter().filter_map(|r| r.cpl.map(|c| (r, c))).collect();
+    if with_cpl.len() < 2 {
+        return None;
+    }
+    with_cpl.sort_by_key(|(_, c)| *c);
+    let parts: Vec<String> = with_cpl
+        .iter()
+        .map(|(r, c)| format!("{} Rs.{}", r.name, c))
+        .collect();
+    Some(format!(
+        "cpl ranking (cheapest Meta lead first, PRE-COMPUTED - trust this order): {}",
+        parts.join(" < ")
+    ))
+}
+
+#[cfg(test)]
+mod ranking_tests {
+    use super::*;
+
+    fn row(name: &str, cpl: Option<u64>) -> FunnelRow {
+        FunnelRow {
+            name: name.into(),
+            cpl,
+            ..Default::default()
+        }
+    }
+
+    #[test]
+    fn ranking_orders_cheapest_first_and_skips_no_cpl() {
+        let rows = vec![
+            row("NonAdv", Some(1216)),
+            row("Pincode", Some(2381)),
+            row("Lookalike", Some(721)),
+            row("Silent", None),
+        ];
+        let r = cpl_ranking(&rows).unwrap();
+        assert!(
+            r.contains("Lookalike Rs.721 < NonAdv Rs.1216 < Pincode Rs.2381"),
+            "{}",
+            r
+        );
+        assert!(cpl_ranking(&[row("only", Some(9))]).is_none());
     }
 }
