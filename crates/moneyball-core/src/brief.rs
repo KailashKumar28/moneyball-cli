@@ -544,3 +544,26 @@ impl PadToWidth for str {
 // Re-export for callers that need config access
 #[allow(unused_imports)]
 use CrmConfig as _;
+
+#[cfg(test)]
+mod staleness_tests {
+    use super::*;
+
+    #[test]
+    fn staleness_warns_at_two_days_never_fresh() {
+        let old = staleness_warning("2020-01-01").expect("ancient snapshot warns");
+        assert!(old.contains("2020-01-01") && old.contains("days old"));
+        let today = chrono::Local::now()
+            .date_naive()
+            .format("%Y-%m-%d")
+            .to_string();
+        assert!(
+            staleness_warning(&today).is_none(),
+            "fresh snapshot is quiet"
+        );
+        assert!(
+            staleness_warning("not-a-date").is_none(),
+            "garbage never panics"
+        );
+    }
+}
