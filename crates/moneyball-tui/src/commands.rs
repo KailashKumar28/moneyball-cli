@@ -25,6 +25,10 @@ pub(crate) const COMMANDS: &[(&str, &str)] = &[
         "/debug",
         "flag this session as buggy for review (optional comment)",
     ),
+    (
+        "/crm",
+        "CRM status: spec, secret, data freshness, next step",
+    ),
     ("/snapshot", "list or validate snapshots"),
     ("/clear", "start a fresh conversation (new session file)"),
     ("/keychain", "show which providers have API keys configured"),
@@ -167,6 +171,9 @@ your own pipeline at\n\n    {}/<YYYY-MM-DD>/\n\nand /brief reads whatever it wri
         }
         "/report" => {
             crate::creative_flow::run_report(app, arg);
+        }
+        "/crm" => {
+            crate::crm_flow::run_crm_status(app);
         }
         "/ask" => {
             // /ask is now equivalent to free-form chat (the LLM is the

@@ -89,6 +89,8 @@ enum Cmd {
 
 #[derive(Subcommand, Debug)]
 enum CrmCmd {
+    /// Where CRM data stands: spec, secret, newest crm.json, next step.
+    Status,
     /// Print the crm.json contract (paste into your CRM's coding agent).
     Contract,
     /// Validate a crm.json export against the contract. Exit 0 = PASS.
@@ -218,6 +220,11 @@ fn main() -> Result<()> {
         }
         Cmd::Debug(args) => debug_cli::run(args, root)?,
         Cmd::Crm { cmd } => match cmd {
+            CrmCmd::Status => {
+                for line in moneyball_core::crm::status::status_lines(&cfg)? {
+                    println!("{}", line);
+                }
+            }
             CrmCmd::Contract => print!("{}", moneyball_core::crm::CONTRACT_MD),
             CrmCmd::Check { file } => {
                 if !run_crm_check(&cfg, &file)? {

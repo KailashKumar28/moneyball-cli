@@ -135,8 +135,7 @@ fn file_size_ratchet() {
     let root = workspace_root();
     let frozen: &[(&str, usize)] = &[
         ("crates/moneyball-core/src/agent.rs", 600),
-        ("crates/moneyball-core/src/brief.rs", 550),
-        ("crates/moneyball-core/src/crm/fetch.rs", 600),
+        ("crates/moneyball-core/src/crm/fetch.rs", 500),
         ("crates/moneyball-core/src/crm/mod.rs", 550),
         ("crates/moneyball-core/src/funnel.rs", 450),
         ("crates/moneyball-core/src/llm.rs", 850),

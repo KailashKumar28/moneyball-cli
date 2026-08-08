@@ -40,15 +40,18 @@ bottom after a release-sized batch.)
 - [ ] **CRM lights up** (top UX debt, agreed 2026-08-08: every surface
       has honestly warned "no CRM data" for three weeks - the funnel
       columns are the product's point):
-  - [ ] LeadZump date filter: today the preset pulls the whole ticket
-        book (`condition: null`, no date window) and hits MAX_PAGES=500
-        on every connect. Evidence + DSL in docs/CRM_CONNECTORS.md.
-        Verify the date `operator` live, update the preset body; teach
-        `crm/fetch.rs` to honor `totalElements` so the loop terminates
-        without the backstop.
-  - [ ] `/crm` status in the TUI: spec present? last crm.json date?
-        join rate? stale-vs-missing distinction (brief says "no CRM"
-        even when crm.json exists but is old) + the exact next command.
+  - [ ] LeadZump date filter - BLOCKED on a fresh token (stored one
+        expired; probe 401'd on every shape 2026-08-08, see the
+        verification log in docs/CRM_CONNECTORS.md). Already shipped
+        earlier: totalElements termination + client-side date cutover.
+        Remaining once the token lands: verify the date operator, add
+        the server-side condition if one exists, run crm fetch to light
+        up the funnel for real.
+  - [x] `/crm` status (TUI) + `moneyball crm status` (2026-08-08):
+        spec/secret/newest-crm.json with delivery range, the
+        stale-vs-missing call-out, and the one next command. Bonus from
+        the live 401: auth failures now say "token expired + the fix"
+        instead of "response is not JSON" (status checked before parse).
 - [ ] **Advisor numeric reliability** (live QA 2026-08-08 caught the
       model calling Rs.721 CPL "mid-pack" vs Rs.1,216 "cheapest" -
       bug mb-20260808T143646Z-rrrr, resolve it when this ships):

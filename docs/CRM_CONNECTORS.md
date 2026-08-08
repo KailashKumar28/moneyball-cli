@@ -99,6 +99,18 @@ campaign`:
 AGENTS.md forbids editing the "Stattic Ad" Meta typo (it changes the join
 key for LeadZump ad ids). Don't touch that.
 
+### Verification log
+
+- 2026-08-08: attempted the date-operator probe (gap 2). The stored token
+  returned HTTP 401 on EVERY body shape including the known-good null
+  condition - the token itself has expired, so the operator vocabulary
+  remains UNVERIFIED. Re-run the probe after storing a fresh token
+  (`moneyball crm secret leadzump_token`). Gap 3 (totalElements) is
+  CLOSED - crm/fetch.rs consults it and the client-side date cutover
+  ships; MAX_PAGES is a 10k backstop, not the terminator. A 401/403 now
+  surfaces as an actionable "token expired" error instead of
+  "response is not JSON" (status checked before parse).
+
 ### Known gaps
 
 1. **Date filter not applied.** The preset's body has `"condition": null`

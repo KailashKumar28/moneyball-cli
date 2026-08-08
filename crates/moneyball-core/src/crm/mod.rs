@@ -8,8 +8,10 @@
 
 pub mod connect;
 pub mod fetch;
+pub mod paging;
 pub mod presets;
 pub mod source;
+pub mod status;
 
 use std::collections::{HashMap, HashSet};
 
