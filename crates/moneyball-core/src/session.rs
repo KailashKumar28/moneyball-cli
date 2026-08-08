@@ -49,19 +49,29 @@ pub struct SessionLog {
 impl SessionLog {
     /// Start a new session file (writes the header line). `root` is the
     /// workspace to store it under - None falls back to the global dir.
+    /// create_new: an id collision must ERROR, never truncate another
+    /// session mid-flight - session files are bug-report evidence.
     pub fn create(data_root: PathBuf, root: Option<&Path>) -> Result<Self> {
-        let meta = SessionMeta {
-            id: make_session_id(),
-            started_at: Utc::now(),
-            data_root,
-        };
-        let path = session_path(&meta.id, root)?;
-        let header = serde_json::to_string(&Line::Header {
-            session: meta.clone(),
-        })?;
-        std::fs::write(&path, format!("{}\n", header))
-            .with_context(|| format!("write {}", path.display()))?;
-        Ok(Self { meta, path })
+        use std::io::Write as _;
+        for _ in 0..3 {
+            let meta = SessionMeta {
+                id: make_session_id(),
+                started_at: Utc::now(),
+                data_root: data_root.clone(),
+            };
+            let path = session_path(&meta.id, root)?;
+            let mut f = match std::fs::File::create_new(&path) {
+                Ok(f) => f,
+                Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => continue,
+                Err(e) => return Err(e).with_context(|| format!("create {}", path.display())),
+            };
+            let header = serde_json::to_string(&Line::Header {
+                session: meta.clone(),
+            })?;
+            writeln!(f, "{}", header).with_context(|| format!("write {}", path.display()))?;
+            return Ok(Self { meta, path });
+        }
+        anyhow::bail!("could not mint a unique session id after 3 tries")
     }
 
     /// Open an existing session for resume: returns the handle
@@ -167,26 +177,42 @@ pub fn latest_id(root: Option<&Path>) -> Result<Option<String>> {
 /// second don't collide.
 pub fn make_session_id() -> String {
     let stamp = Utc::now().format("%Y%m%dT%H%M%SZ");
+    // ONE xorshift state advanced across all four chars. The old code
+    // reseeded from the clock per char, so within a microsecond every
+    // char was identical (observed live: oooo/3333/rrrr suffixes) -
+    // 36 effective ids per second instead of 36^4.
+    let mut x = seed();
     let suffix: String = (0..4)
-        .map(|_| ALPHA[(rand_u32() as usize) % ALPHA.len()] as char)
+        .map(|_| {
+            x ^= x << 13;
+            x ^= x >> 17;
+            x ^= x << 5;
+            ALPHA[(x as usize) % ALPHA.len()] as char
+        })
         .collect();
     format!("mb-{}-{}", stamp, suffix)
 }
 
 // Tiny stand-alone PRNG (no rand crate dep). Good enough for suffix.
 const ALPHA: &[u8] = b"abcdefghijklmnopqrstuvwxyz0123456789";
-fn rand_u32() -> u32 {
+fn seed() -> u32 {
+    use std::sync::atomic::{AtomicU32, Ordering};
     use std::time::SystemTime;
+    // Per-process counter: two ids minted in the same nanosecond tick
+    // (or a coarse clock) still get distinct seeds.
+    static COUNTER: AtomicU32 = AtomicU32::new(0);
     let nanos = SystemTime::now()
         .duration_since(SystemTime::UNIX_EPOCH)
         .map(|d| d.subsec_nanos())
         .unwrap_or(0);
-    let pid = std::process::id();
-    let mut x = nanos ^ (pid.rotate_left(13));
-    x ^= x << 13;
-    x ^= x >> 17;
-    x ^= x << 5;
-    x
+    let n = COUNTER.fetch_add(1, Ordering::Relaxed);
+    let x = nanos ^ std::process::id().rotate_left(13) ^ n.rotate_left(24);
+    // xorshift needs a non-zero state.
+    if x == 0 {
+        0x9E37_79B9
+    } else {
+        x
+    }
 }
 
 /// One-line display for the session picker ("5m ago" style age).
@@ -211,11 +237,16 @@ pub fn fmt_meta_line(m: &SessionMeta) -> String {
 mod tests {
     use super::*;
 
+    /// Serializes MONEYBALL_SESSIONS_DIR mutation across tests - env
+    /// vars are process-global and cargo runs tests in parallel.
+    static ENV_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
     /// Full file round trip through the MONEYBALL_SESSIONS_DIR seam:
     /// create -> append -> open replays the same items, and the file
     /// is append-only JSONL (header first, one item per line).
     #[test]
     fn create_append_open_round_trip_on_disk() {
+        let _guard = ENV_LOCK.lock().unwrap();
         let dir = std::env::temp_dir().join(format!("mb-sessions-test-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
         std::env::set_var("MONEYBALL_SESSIONS_DIR", &dir);
@@ -309,5 +340,49 @@ mod tests {
         let a = make_session_id();
         let b = make_session_id();
         assert_ne!(a, b);
+    }
+
+    /// The observed live bug: per-char clock reseeding made suffixes
+    /// like "oooo"/"3333". With one advancing state, a run of ids must
+    /// show non-repeated suffixes and no duplicates.
+    #[test]
+    fn suffixes_are_not_single_char_runs() {
+        let ids: Vec<String> = (0..50).map(|_| make_session_id()).collect();
+        let repeated = ids
+            .iter()
+            .filter(|id| {
+                let sfx: Vec<char> = id.chars().rev().take(4).collect();
+                sfx.iter().all(|c| *c == sfx[0])
+            })
+            .count();
+        // One aaaa-style suffix in 50 is possible (36^-3 per id ~ 0.1%);
+        // more than two means the state is not advancing.
+        assert!(repeated <= 2, "degenerate suffixes: {:?}", ids);
+        let mut uniq = ids.clone();
+        uniq.sort();
+        uniq.dedup();
+        assert_eq!(uniq.len(), ids.len(), "duplicate ids in-process");
+    }
+
+    /// create_new contract: a second create landing on an existing path
+    /// must not truncate it - the file keeps its content.
+    #[test]
+    fn existing_session_file_is_never_truncated() {
+        let _guard = ENV_LOCK.lock().unwrap();
+        let dir = std::env::temp_dir().join(format!("mb-noclobber-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        std::env::set_var("MONEYBALL_SESSIONS_DIR", &dir);
+        let log = SessionLog::create(PathBuf::from("/w"), None).unwrap();
+        log.append(&Item::User {
+            text: "precious evidence".into(),
+        })
+        .unwrap();
+        let path = dir.join(format!("{}.jsonl", log.meta.id));
+        let before = std::fs::read_to_string(&path).unwrap();
+        // Direct create_new on the same path errors instead of truncating.
+        assert!(std::fs::File::create_new(&path).is_err());
+        assert_eq!(std::fs::read_to_string(&path).unwrap(), before);
+        std::env::remove_var("MONEYBALL_SESSIONS_DIR");
+        std::fs::remove_dir_all(&dir).ok();
     }
 }
