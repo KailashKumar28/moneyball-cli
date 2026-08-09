@@ -40,13 +40,12 @@ bottom after a release-sized batch.)
 - [ ] **CRM lights up** (top UX debt, agreed 2026-08-08: every surface
       has honestly warned "no CRM data" for three weeks - the funnel
       columns are the product's point):
-  - [ ] LeadZump date filter - BLOCKED on a fresh token (stored one
-        expired; probe 401'd on every shape 2026-08-08, see the
-        verification log in docs/CRM_CONNECTORS.md). Already shipped
-        earlier: totalElements termination + client-side date cutover.
-        Remaining once the token lands: verify the date operator, add
-        the server-side condition if one exists, run crm fetch to light
-        up the funnel for real.
+  - [x] LeadZump date filter - CLOSED as verified-impossible
+        (2026-08-09, fresh token): GREATER_THAN_EQUAL exists in the DSL
+        but createdAt is not comparable (HTTP 500 on every value
+        shape). Client-side cutover + totalElements termination is the
+        final design. Live: 523 ad-attributed tickets over 12 pages of
+        a 154,927-ticket book; crm.json PASS.
   - [x] `/crm` status (TUI) + `moneyball crm status` (2026-08-08):
         spec/secret/newest-crm.json with delivery range, the
         stale-vs-missing call-out, and the one next command. Bonus from

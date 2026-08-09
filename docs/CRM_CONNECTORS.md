@@ -101,6 +101,18 @@ key for LeadZump ad ids). Don't touch that.
 
 ### Verification log
 
+- 2026-08-09 (fresh token): date-operator question CLOSED. The DSL
+  vocabulary includes GREATER_THAN_EQUAL / GREATER_THAN (verified:
+  `{field: id, operator: GREATER_THAN_EQUAL, value: 1}` returns the
+  full book count; unknown operators like GTE return HTTP 400). But
+  `createdAt` is NOT comparable: every value shape (ISO string, epoch
+  millis number, epoch millis string, date-only) returns HTTP 500 with
+  a server exceptionId. Conclusion: server-side date filtering is
+  impossible on this endpoint; the client-side delivery cutover +
+  totalElements termination in crm/fetch.rs is the FINAL design, not a
+  stopgap. Live cost today: 12 pages of a 154,927-ticket book for a
+  28-day window.
+
 - 2026-08-08: attempted the date-operator probe (gap 2). The stored token
   returned HTTP 401 on EVERY body shape including the known-good null
   condition - the token itself has expired, so the operator vocabulary
