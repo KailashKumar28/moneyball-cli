@@ -124,6 +124,17 @@
         "is_video": {
           "type": "boolean"
         },
+        "segmentation": {
+          "description": "The M-Leads -> L-Leads gap explained (None when leads.json is\nabsent from the snapshot). Additive v1 field.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Segmentation"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
         "status": {
           "$ref": "#/$defs/CardStatus"
         },
@@ -391,6 +402,55 @@
       "required": [
         "since",
         "until"
+      ]
+    },
+    "Segmentation": {
+      "description": "Window Meta leads split by fate (python SEG_KEYS):\ncaptured + reinquiry + duplicate + invalid + uncaptured == total.",
+      "type": "object",
+      "properties": {
+        "captured": {
+          "description": "Became an L-Lead (lead_id present in CRM tickets).",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "duplicate": {
+          "description": "Same contact submitted again (CRM folds it).",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "invalid": {
+          "description": "Phone not a valid mobile - CRM rejects.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "reinquiry": {
+          "description": "Contact already exists in the CRM under another campaign.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "total": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "uncaptured": {
+          "description": "Valid, unique, new - but not in the CRM: a genuine sync gap.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "total",
+        "captured",
+        "reinquiry",
+        "duplicate",
+        "invalid",
+        "uncaptured"
       ]
     },
     "StatusCode": {

@@ -46,6 +46,11 @@ h2{font-family:var(--serif);font-weight:600;font-size:27px;margin:4px 0 13px;let
 .ttable tbody tr:hover{background:#f3efe3}
 .ttable tbody tr:last-child td{border-bottom:none}
 .ttable .dim{color:var(--faint)}
+.ttable .seg{display:none;background:#f7f3e9}
+.segx{display:none}
+.segx:checked + table .seg{display:table-cell}
+.segl{cursor:pointer;color:var(--brass);border:1px solid var(--rule);border-radius:4px;padding:0 5px;margin-left:5px;font-weight:700}
+.segx:checked + table .segl{color:var(--paper);background:var(--ink)}
 .cboard{display:grid;grid-template-columns:repeat(auto-fill,minmax(288px,1fr));gap:18px;align-items:start}
 .ccard{background:var(--card);border:1px solid var(--rule);border-radius:15px;overflow:hidden;display:flex;flex-direction:column;box-shadow:var(--sh-sm);transition:transform .22s,box-shadow .22s}
 .ccard:hover{transform:translateY(-3px);box-shadow:var(--sh-md)}

@@ -1,113 +1,8 @@
-//! Persisted-artifact contracts (docs/CLOUD_PLAN.md phase 1, slice A0).
-//!
-//! Every JSON artifact moneyball itself writes carries a
-//! `schema: "moneyball.<artifact>/<major>"` field. These serde structs
-//! are the source of truth; `tests/schema_contract.rs` generates JSON
-//! Schemas from them into `docs/schemas/` and fails when the wire shape
-//! changes without a conscious re-commit.
-//!
-//! Compatibility policy (binding): within a major, changes are
-//! additive-only - new optional fields with serde defaults; readers
-//! ignore unknown fields; meaning/type/requiredness of existing fields
-//! never changes. Breaking change = new major in the `schema` string,
-//! and loaders keep reading every prior major ever shipped.
-//!
-//! Legacy snapshot files (ads_daily.json, crm.json) are grandfathered
-//! bare arrays ("v0") - documented, never retrofitted with envelopes.
+//! The report.json (CreativeReport) contract. See mod.rs for the
+//! versioning policy.
 
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
-
-pub const CREATIVES_SCHEMA: &str = "moneyball.creatives/1";
-pub const CREATIVE_REPORT_SCHEMA: &str = "moneyball.creative_report/1";
-
-// ---------- creatives.json (snapshot artifact, written by /fetch) ----------
-
-/// `snap/<date>/creatives.json` - per-ad creative identity + asset refs.
-/// Envelope object (new artifacts always get one); the snapshot loader
-/// rule is: bare array => v0 rows, object => read `schema` + `rows`.
-#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
-pub struct CreativesFile {
-    /// Artifact identity, `moneyball.creatives/<major>`. Readers reject
-    /// majors they don't know; unknown FIELDS are ignored everywhere.
-    pub schema: String,
-    /// When the fetch ran (RFC3339, UTC). Provenance, not a join key.
-    pub fetched_at: String,
-    pub rows: Vec<CreativeRow>,
-}
-
-/// One ad's creative facts. Facts only - the creative GROUPING key is
-/// computed at report time (families/name-normalization are editorial
-/// policy, not snapshot facts).
-#[derive(Debug, Clone, Default, Serialize, Deserialize, JsonSchema)]
-pub struct CreativeRow {
-    // ---- identity (join keys) ----
-    /// Meta ad id. Primary key within a snapshot.
-    pub ad_id: String,
-    #[serde(default)]
-    pub adset_id: String,
-    #[serde(default)]
-    pub campaign_id: String,
-    #[serde(default)]
-    pub ad_name: String,
-    /// Workspace product tag - same rule as ads_daily rows.
-    #[serde(rename = "_product", default)]
-    pub product: String,
-
-    // ---- creative identity facts (grouping inputs) ----
-    /// Meta's content hash for image ads; None for video.
-    #[serde(default)]
-    pub image_hash: Option<String>,
-    /// Top-level or video_data video id; None for image ads.
-    #[serde(default)]
-    pub video_id: Option<String>,
-    /// Dynamic (asset_feed_spec) video ids, sorted. Empty if none.
-    #[serde(default)]
-    pub afs_video_ids: Vec<String>,
-    /// CDN asset filename from image_url, query stripped. Legacy
-    /// identity fallback only (python creative_key()).
-    #[serde(default)]
-    pub image_basename: Option<String>,
-    /// Derived: video_id or afs_video_ids non-empty.
-    #[serde(default)]
-    pub is_video: bool,
-
-    // ---- display / status ----
-    /// Meta effective_status verbatim (ACTIVE, PAUSED, ...).
-    #[serde(default)]
-    pub status: Option<String>,
-    /// Creative created time as Meta returns it (RFC3339 with offset).
-    #[serde(default)]
-    pub created_time: Option<String>,
-    #[serde(default)]
-    pub title: Option<String>,
-    #[serde(default)]
-    pub body: Option<String>,
-    #[serde(default)]
-    pub cta: Option<String>,
-    /// IG/FB permalink when Meta exposes one.
-    #[serde(default)]
-    pub permalink: Option<String>,
-
-    // ---- asset refs ----
-    /// Full-res URL AT FETCH TIME. Signatures expire within days; the
-    /// read path never dereferences this - the asset cache is truth.
-    #[serde(default)]
-    pub image_url: Option<String>,
-    /// None if the download failed (report renders a placeholder).
-    #[serde(default)]
-    pub asset: Option<AssetRef>,
-}
-
-/// A cached creative image, content-addressed under
-/// `history/assets/creatives/<hh>/<sha256>.<ext>`.
-#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
-pub struct AssetRef {
-    /// Content hash of the cached bytes = cache filename stem.
-    pub sha256: String,
-    pub content_type: String,
-    pub bytes: u64,
-}
 
 // ---------- report.json (moneyball report output) ----------
 
@@ -223,6 +118,27 @@ pub struct CreativeCard {
     /// Daily buckets across the trailing window, oldest first.
     #[serde(default)]
     pub trend: Vec<TrendBucket>,
+    /// The M-Leads -> L-Leads gap explained (None when leads.json is
+    /// absent from the snapshot). Additive v1 field.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub segmentation: Option<Segmentation>,
+}
+
+/// Window Meta leads split by fate (python SEG_KEYS):
+/// captured + reinquiry + duplicate + invalid + uncaptured == total.
+#[derive(Debug, Clone, Default, Serialize, Deserialize, JsonSchema)]
+pub struct Segmentation {
+    pub total: u64,
+    /// Became an L-Lead (lead_id present in CRM tickets).
+    pub captured: u64,
+    /// Contact already exists in the CRM under another campaign.
+    pub reinquiry: u64,
+    /// Same contact submitted again (CRM folds it).
+    pub duplicate: u64,
+    /// Phone not a valid mobile - CRM rejects.
+    pub invalid: u64,
+    /// Valid, unique, new - but not in the CRM: a genuine sync gap.
+    pub uncaptured: u64,
 }
 
 /// How the group was identified (precedence: family > video_name >
@@ -322,36 +238,3 @@ pub const FUNNEL_STAGES: [&str; 7] = [
     "Visit",
     "Booking",
 ];
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn creative_row_defaults_tolerate_minimal_input() {
-        // Forward-compat floor: an object with only ad_id parses, and
-        // unknown fields are ignored.
-        let r: CreativeRow = serde_json::from_str(r#"{"ad_id":"1","future_field":42}"#).unwrap();
-        assert_eq!(r.ad_id, "1");
-        assert!(!r.is_video && r.asset.is_none() && r.afs_video_ids.is_empty());
-    }
-
-    #[test]
-    fn product_tag_round_trips_as_underscore_name() {
-        let r = CreativeRow {
-            ad_id: "1".into(),
-            product: "NammaMane".into(),
-            ..Default::default()
-        };
-        let v = serde_json::to_value(&r).unwrap();
-        assert_eq!(v["_product"], "NammaMane");
-    }
-
-    #[test]
-    fn kpis_none_never_serializes_as_zero() {
-        let k = Kpis::default();
-        let v = serde_json::to_value(&k).unwrap();
-        assert!(v["cost_per_qualified"].is_null());
-        assert!(v["l_to_q_pct"].is_null());
-    }
-}

@@ -12,6 +12,7 @@ pub mod paging;
 pub mod presets;
 pub mod source;
 pub mod status;
+pub mod transform;
 
 use std::collections::{HashMap, HashSet};
 
@@ -439,6 +440,8 @@ mod tests {
             ads_daily: serde_json::from_value(Value::Array(rows)).unwrap(),
             adsets: Value::Array(vec![]),
             creatives: None,
+            leads: None,
+            crm_contacts: None,
             crm: Value::Object(Default::default()),
             regions: Value::Array(vec![]),
             changes: Value::Array(vec![]),

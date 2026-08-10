@@ -12,6 +12,7 @@
 
 pub mod assets;
 pub mod creatives;
+pub mod leads;
 pub(crate) mod map;
 
 use std::path::{Path, PathBuf};
@@ -42,6 +43,9 @@ pub struct FetchReport {
     pub assets_downloaded: usize,
     /// A creatives failure never fails the snapshot - it surfaces here.
     pub creatives_error: Option<String>,
+    /// Per-lead records captured into leads.json (Diff breakdown).
+    pub leads: usize,
+    pub leads_error: Option<String>,
 }
 
 /// Pull `days` of per-ad daily insights for every configured product and
@@ -109,6 +113,13 @@ pub fn fetch_snapshot(cfg: &AppConfig, token: &str, days: u32) -> Result<FetchRe
         Err(e) => (Default::default(), Some(e.to_string())),
     };
 
+    // Per-lead capture (Diff breakdown). Same best-effort contract: a
+    // token without leads_retrieval warns, never loses the snapshot.
+    let (leads, leads_error) = match leads::fetch_and_write(&client, token, &all_rows, &path) {
+        Ok(n) => (n, None),
+        Err(e) => (0, Some(e.to_string())),
+    };
+
     Ok(FetchReport {
         date,
         path,
@@ -117,6 +128,8 @@ pub fn fetch_snapshot(cfg: &AppConfig, token: &str, days: u32) -> Result<FetchRe
         assets: cr.assets,
         assets_downloaded: cr.downloaded,
         creatives_error,
+        leads,
+        leads_error,
     })
 }
 

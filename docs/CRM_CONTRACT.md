@@ -36,6 +36,12 @@ lead:
 | `funnel`     | no       | string                        | Set to `"WON"` when the lead converted (booking/purchase), regardless of stage. Anything else (or absent) means still open/lost. |
 | `created_at` | no       | string                        | When the CRM record was created. Informational only. |
 
+Optional fields `lead_id` (the Meta leadgen id), `phone`, and `email`
+power the report's Diff breakdown (captured / re-inquiry / duplicate /
+invalid / uncaptured) when present - emit them if your CRM has them.
+Contact fields are raw PII: moneyball keeps them in 0600 files that
+never leave the machine.
+
 Extra fields are allowed and ignored. Do not omit a ticket because a field
 is unknown - emit the ticket with the fields you have; only the three
 required fields must be present and non-empty.

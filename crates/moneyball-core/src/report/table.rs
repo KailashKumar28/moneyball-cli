@@ -11,8 +11,16 @@ use crate::schema::*;
 /// CPL, M->L, and the CRM funnel counts. The Diff breakdown column
 /// needs lead segmentation - a documented v1 exclusion.
 pub(super) fn comparison_table(p: &ProductSection, report_date: &str) -> String {
-    let mut out = String::from(
-        r#"<div class="ttable"><table><thead><tr><th>creative (ranked)</th><th>live since</th><th>status</th><th>spend</th><th>impr</th><th>ctr</th><th>m-leads</th><th>cpl</th><th>m&gt;l</th><th>l-leads</th><th title="M-Leads minus L-Leads. The re-inquiry/duplicate/invalid breakdown needs lead segmentation (not yet captured).">diff</th><th>qual</th><th>visits</th><th>book</th></tr></thead><tbody>"#,
+    let has_seg = p.creatives.iter().any(|c| c.segmentation.is_some());
+    let seg_id = format!("segx-{}", slug(&p.product));
+    let mut out = format!(
+        r##"<div class="ttable"><input type="checkbox" id="{}" class="segx"><table><thead><tr><th>creative (ranked)</th><th>live since</th><th>status</th><th>spend</th><th>impr</th><th>ctr</th><th>m-leads</th><th>cpl</th><th>m&gt;l</th><th>l-leads</th><th title="Meta leads that never became CRM leads. Expand for the split.">diff{}</th><th class="seg" title="contact already in the CRM under another campaign or as an organic lead - a returning person">re-inq</th><th class="seg" title="same contact submitted again in the window or campaign">dup</th><th class="seg" title="invalid phone (CRM rejects) or a genuine sync gap to recover">other</th><th>qual</th><th>visits</th><th>book</th></tr></thead><tbody>"##,
+        seg_id,
+        if has_seg {
+            format!(r##" <label for="{}" class="segl">+</label>"##, seg_id)
+        } else {
+            String::new()
+        }
     );
     for (i, c) in p.creatives.iter().enumerate() {
         let f = |n: usize| c.funnel[n].count;
@@ -45,7 +53,7 @@ pub(super) fn comparison_table(p: &ProductSection, report_date: &str) -> String 
         let dim = |v: u64| if v == 0 { r#" class="dim""# } else { "" };
         let _ = write!(
             out,
-            r##"<tr><td class="nm">{:02} &middot; <a href="#c-{}-{}">{}</a></td><td>{}</td><td><span class="stx {}">{}</span></td><td>{}{}</td><td>{}</td><td>{}</td><td{}>{}</td><td>{}</td><td>{}</td><td{}>{}</td>{}<td{}>{}</td><td{}>{}</td><td{}>{}</td></tr>"##,
+            r##"<tr><td class="nm">{:02} &middot; <a href="#c-{}-{}">{}</a></td><td>{}</td><td><span class="stx {}">{}</span></td><td>{}{}</td><td>{}</td><td>{}</td><td{}>{}</td><td>{}</td><td>{}</td><td{}>{}</td>{}{}<td{}>{}</td><td{}>{}</td><td{}>{}</td></tr>"##,
             i + 1,
             slug(&p.product),
             i + 1,
@@ -63,7 +71,8 @@ pub(super) fn comparison_table(p: &ProductSection, report_date: &str) -> String 
             m_to_l,
             dim(f(3)),
             f(3),
-            diff_cell(f(2), f(3)),
+            diff_cell(c, f(2), f(3)),
+            seg_cells(c),
             dim(f(4)),
             f(4),
             dim(f(5)),
@@ -91,17 +100,40 @@ fn live_since(created: Option<&str>, report_date: &str) -> String {
     }
 }
 
-/// Diff = M-Leads - L-Leads for the window: Meta's claim vs CRM truth.
-/// Positive = leads Meta counted that the CRM never registered (the
-/// python report breaks these into re-inquiry/duplicate/invalid via
-/// lead segmentation - a later slice); negative happens legitimately
-/// when a lead's CRM delivery lands in-window but its Meta action
-/// count fell on the day before. Zero is dimmed like the other columns.
-fn diff_cell(m: u64, l: u64) -> String {
-    let d = m as i64 - l as i64;
+/// Diff: with segmentation = window Meta submissions that did NOT
+/// become CRM leads (total - captured, the sum the expander splits);
+/// without it, the M-L fallback (negative possible when CRM delivery
+/// lands in-window but the Meta count fell the day before).
+fn diff_cell(c: &CreativeCard, m: u64, l: u64) -> String {
+    let d = match &c.segmentation {
+        Some(s) => (s.total - s.captured) as i64,
+        None => m as i64 - l as i64,
+    };
     if d == 0 {
         r#"<td class="dim">0</td>"#.into()
     } else {
         format!("<td>{:+}</td>", d)
     }
+}
+
+/// The hidden-until-expanded split: re-inquiry, duplicate, and
+/// other = invalid + uncaptured (the actionable drops).
+fn seg_cells(c: &CreativeCard) -> String {
+    let Some(s) = &c.segmentation else {
+        return r#"<td class="seg dim">-</td><td class="seg dim">-</td><td class="seg dim">-</td>"#
+            .into();
+    };
+    let cell = |v: u64| {
+        if v == 0 {
+            r#"<td class="seg dim">0</td>"#.to_string()
+        } else {
+            format!(r#"<td class="seg">{}</td>"#, v)
+        }
+    };
+    format!(
+        "{}{}{}",
+        cell(s.reinquiry),
+        cell(s.duplicate),
+        cell(s.invalid + s.uncaptured)
+    )
 }

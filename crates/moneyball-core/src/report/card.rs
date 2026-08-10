@@ -116,6 +116,7 @@ impl GroupAgg {
             funnel,
             targetings,
             trend,
+            segmentation: None, // attached by the segmentation pass
         }
     }
 }

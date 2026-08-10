@@ -93,6 +93,9 @@ mod tests {
             stage: "stage.name".into(),
             delivery: delivery.into(),
             funnel: String::new(),
+            lead_id: String::new(),
+            phone: String::new(),
+            email: String::new(),
             stage_map: Default::default(),
         }
     }

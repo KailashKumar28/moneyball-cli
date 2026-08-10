@@ -1,0 +1,71 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "LeadsFile",
+  "description": "`snap/<date>/leads.json` - per-lead Meta records for the fetched\nwindow. RAW PII (names/phones/emails) by explicit user decision\n2026-08-10 (\"local raw is okay; revisit at Postgres time\"): file is\nwritten 0600 and NEVER syncs (docs/CLOUD_PLAN.md sync matrix).",
+  "type": "object",
+  "properties": {
+    "fetched_at": {
+      "type": "string"
+    },
+    "rows": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/LeadRow"
+      }
+    },
+    "schema": {
+      "description": "`moneyball.leads/<major>`.",
+      "type": "string"
+    }
+  },
+  "required": [
+    "schema",
+    "fetched_at",
+    "rows"
+  ],
+  "$defs": {
+    "LeadRow": {
+      "description": "One Meta lead submission, as the lead-gen form captured it.",
+      "type": "object",
+      "properties": {
+        "ad_id": {
+          "type": "string"
+        },
+        "created_time": {
+          "description": "RFC3339 with offset, as Meta returns it.",
+          "type": "string",
+          "default": ""
+        },
+        "email": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "lead_id": {
+          "description": "Meta leadgen id - joins to CRM tickets that carry it.",
+          "type": "string"
+        },
+        "name": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "phone": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        }
+      },
+      "required": [
+        "lead_id",
+        "ad_id"
+      ]
+    }
+  }
+}

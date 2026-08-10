@@ -12,6 +12,7 @@
 mod card;
 mod group;
 pub mod html;
+mod segmentation;
 mod table;
 
 use std::collections::BTreeMap;
@@ -115,8 +116,27 @@ pub fn build(
             .or_default()
             .push(g.into_card(key, d0, d1, snap));
     }
+    // Lead segmentation (Diff breakdown): per-ad splits summed onto
+    // each card's ad set. None when leads.json is absent.
+    let seg_by_ad = segmentation::per_ad(snap, &d0s, &d1s);
     let mut sections: Vec<ProductSection> = Vec::new();
     for (product, mut cards) in products {
+        if !seg_by_ad.is_empty() {
+            for c in &mut cards {
+                let mut seg = Segmentation::default();
+                for aid in &c.ad_ids {
+                    if let Some(s) = seg_by_ad.get(aid) {
+                        seg.total += s.total;
+                        seg.captured += s.captured;
+                        seg.reinquiry += s.reinquiry;
+                        seg.duplicate += s.duplicate;
+                        seg.invalid += s.invalid;
+                        seg.uncaptured += s.uncaptured;
+                    }
+                }
+                c.segmentation = (seg.total > 0).then_some(seg);
+            }
+        }
         // python sort: booking, visit, qualified, l_leads, m_leads desc.
         cards.sort_by(|a, b| {
             let k = |c: &CreativeCard| {

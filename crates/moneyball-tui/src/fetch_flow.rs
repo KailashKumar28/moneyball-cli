@@ -81,6 +81,10 @@ pub(crate) fn on_fetch_done(
             e
         )),
     }
+    match &report.leads_error {
+        None => out.push(format!("leads captured: {}", report.leads)),
+        Some(e) => out.push(format!("warn: leads capture failed ({})", e)),
+    }
     out.push(format!("snapshot written: {}", report.path.display()));
     app.chat
         .push_tool("fetch", &format!("{} days", days), out, true, ms);

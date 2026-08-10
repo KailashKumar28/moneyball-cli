@@ -11,6 +11,8 @@ pub const SNAPSHOT_FILES: &[&str] = &[
     "adsets",
     "creatives",
     "crm",
+    "leads",
+    "crm_contacts",
     "regions",
     "changes",
     "campaigns",
@@ -100,6 +102,12 @@ pub struct Snapshot {
     /// major - the report falls back to one-ad-per-card grouping.
     pub creatives: Option<crate::schema::CreativesFile>,
     pub crm: serde_json::Value,
+    /// Per-lead Meta records (leads.json), when captured. Raw PII -
+    /// read for segmentation, never rendered into shareable artifacts
+    /// beyond aggregate counts.
+    pub leads: Option<crate::schema::LeadsFile>,
+    /// Organic-ticket contacts (crm_contacts.json), when captured.
+    pub crm_contacts: Option<crate::schema::CrmContactsFile>,
     pub regions: serde_json::Value,
     pub changes: serde_json::Value,
     pub campaigns: serde_json::Value,
@@ -155,6 +163,8 @@ pub fn load(snap_path: &Path) -> Result<Snapshot> {
     let mut adsets = serde_json::Value::Array(vec![]);
     let mut creatives = None;
     let mut crm = serde_json::Value::Object(Default::default());
+    let mut leads = None;
+    let mut crm_contacts = None;
     let mut regions = serde_json::Value::Array(vec![]);
     let mut changes = serde_json::Value::Array(vec![]);
     let mut campaigns = serde_json::Value::Array(vec![]);
@@ -174,6 +184,8 @@ pub fn load(snap_path: &Path) -> Result<Snapshot> {
             "adsets" => adsets = v,
             "creatives" => creatives = parse_creatives(v),
             "crm" => crm = v,
+            "leads" => leads = serde_json::from_value(v).ok(),
+            "crm_contacts" => crm_contacts = serde_json::from_value(v).ok(),
             "regions" => regions = v,
             "changes" => changes = v,
             "campaigns" => campaigns = v,
@@ -187,6 +199,8 @@ pub fn load(snap_path: &Path) -> Result<Snapshot> {
         adsets,
         creatives,
         crm,
+        leads,
+        crm_contacts,
         regions,
         changes,
         campaigns,

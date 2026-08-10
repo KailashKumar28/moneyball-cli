@@ -204,6 +204,13 @@ fn main() -> Result<()> {
                     e
                 ),
             }
+            match &report.leads_error {
+                None => println!("  leads captured: {} (leads.json, 0600)", report.leads),
+                Some(e) => println!(
+                    "  warn: leads capture failed ({}) - Diff breakdown unavailable",
+                    e
+                ),
+            }
             println!("snapshot written: {}", report.path.display());
         }
         Cmd::Funnel {

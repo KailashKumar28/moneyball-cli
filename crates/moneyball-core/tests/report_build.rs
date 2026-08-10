@@ -119,6 +119,8 @@ fn snapshot() -> Snapshot {
             ],
         }),
         crm,
+        leads: None,
+        crm_contacts: None,
         regions: json!([]),
         changes: json!([]),
         campaigns: json!([]),

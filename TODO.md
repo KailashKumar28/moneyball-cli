@@ -77,15 +77,15 @@ bottom after a release-sized batch.)
       fin_campaign_analysis pipeline's JSON endpoint; keep the
       "Stattic Ad" typo untouched (join rule - see AGENTS.md Don'ts).
       (Superseded by the LeadZump date-filter item above once that lands.)
-- [ ] **Lead segmentation (the Diff breakdown)**: the report's diff
-      column shows M-Leads minus L-Leads as a number (2026-08-10); the
-      python report additionally classifies the gap into re-inquiry /
-      duplicate / invalid / not-captured via per-lead Meta records
-      cross-matched with the CRM book (weekly_funnel_report.
-      lead_segmentation). Needs: Meta per-lead retrieval (PII scope on
-      the token), a matching engine, and the re-inquiry scan across
-      lifetime tickets. Design before building - PII handling policy
-      (phone numbers) must be settled first.
+- [x] **Lead segmentation (the Diff breakdown)** shipped 2026-08-10:
+      /fetch captures per-lead Meta records (leads.json, 0600 raw PII -
+      user decision: raw ok locally, revisit at Postgres); crm map
+      gains optional lead_id/phone/email + organic contacts file; the
+      report classifies captured/re-inquiry/duplicate/invalid/
+      uncaptured per card (python precedence, phone rules ported) and
+      the table diff column expands (+) into re-inq/dup/other. Live:
+      57 submissions -> 52 captured, 2 re-inq, 3 uncaptured. Known
+      limit: CRM index = pulled window book, not lifetime.
 - [ ] **/diagnose <product>**: the 5 diagnostic checks over a snapshot,
       one summary cell + per-check detail. Headless first.
 

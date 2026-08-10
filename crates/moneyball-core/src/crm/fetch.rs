@@ -283,7 +283,14 @@ fn validate_and_write(
                     )
                 })?
         };
-        Some(write_crm_json(cfg, &date, &crm)?)
+        let written = write_crm_json(cfg, &date, &crm)?;
+        // Organic contacts ride along for the re-inquiry check (lead
+        // segmentation) - only when the spec maps contact fields.
+        let contacts = source::organic_contacts(records, map);
+        if !contacts.is_empty() {
+            write_contacts(cfg, &date, contacts)?;
+        }
+        Some(written)
     } else {
         None
     };
@@ -436,6 +443,26 @@ fn write_crm_json(cfg: &AppConfig, date: &str, crm: &Value) -> Result<PathBuf> {
     std::fs::write(&tmp, serde_json::to_string_pretty(crm)?)?;
     std::fs::rename(&tmp, &final_path)?;
     Ok(final_path)
+}
+
+/// `crm_contacts.json` (0600 - raw PII) next to crm.json.
+fn write_contacts(cfg: &AppConfig, date: &str, rows: Vec<crate::schema::ContactRow>) -> Result<()> {
+    let file = crate::schema::CrmContactsFile {
+        schema: crate::schema::CRM_CONTACTS_SCHEMA.into(),
+        fetched_at: chrono::Utc::now().format("%Y-%m-%dT%H:%M:%SZ").to_string(),
+        rows,
+    };
+    let dir = cfg.history_dir().join("snap").join(date);
+    let path = dir.join("crm_contacts.json");
+    let tmp = dir.join("crm_contacts.json.tmp");
+    std::fs::write(&tmp, serde_json::to_string_pretty(&file)?)?;
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::set_permissions(&tmp, std::fs::Permissions::from_mode(0o600))?;
+    }
+    std::fs::rename(&tmp, &path)?;
+    Ok(())
 }
 
 #[cfg(test)]

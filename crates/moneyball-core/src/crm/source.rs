@@ -95,6 +95,13 @@ pub struct MapSpec {
     pub delivery: String,
     #[serde(default)]
     pub funnel: String,
+    /// Optional contact paths (lead segmentation). Empty = not mapped.
+    #[serde(default)]
+    pub lead_id: String,
+    #[serde(default)]
+    pub phone: String,
+    #[serde(default)]
+    pub email: String,
     /// Source stage name -> canonical stage name. Unmapped stages pass
     /// through as-is (the validator warns on unrecognized ones).
     #[serde(default)]
@@ -145,62 +152,7 @@ pub fn resolve_ref(value: &str) -> Result<String> {
 }
 
 /// Pull the record array out of a response via the spec's `root` path.
-pub fn records<'a>(resp: &'a Value, root: &str) -> Result<&'a Vec<Value>> {
-    let node = if root.is_empty() {
-        resp
-    } else {
-        get_path(resp, root).ok_or_else(|| {
-            Error::Config(format!("response has nothing at map.root \"{}\"", root))
-        })?
-    };
-    node.as_array().ok_or_else(|| {
-        Error::Config(format!(
-            "map.root \"{}\" is not a JSON array (got {})",
-            root,
-            type_name(node)
-        ))
-    })
-}
-
-/// Transform raw CRM records into contract tickets. Records with NO ad
-/// id are dropped and counted (second return): every real CRM holds
-/// organic/direct leads, the contract requires ad_id, and the
-/// production LeadZump pipeline keys its export by ad id so such leads
-/// never reach moneyball there either (mb.py parity). Placeholder ids
-/// like "Stattic Ad" are non-empty and kept untouched (AGENTS.md join
-/// rule). Other missing fields become missing keys - the validator
-/// reports them per-row afterwards.
-pub fn transform(records: &[Value], map: &MapSpec) -> (Vec<Value>, usize) {
-    let mut dropped = 0usize;
-    let tickets = records
-        .iter()
-        .filter_map(|rec| {
-            let ad_id = get_path(rec, &map.ad_id)
-                .map(scalar_string)
-                .unwrap_or_default();
-            if ad_id.trim().is_empty() {
-                dropped += 1;
-                return None;
-            }
-            let mut t = serde_json::Map::new();
-            t.insert("ad_id".into(), Value::String(ad_id));
-            if let Some(v) = get_path(rec, &map.stage).map(scalar_string) {
-                let stage = map.stage_map.get(&v).cloned().unwrap_or(v);
-                t.insert("stage".into(), Value::String(stage));
-            }
-            if let Some(v) = get_path(rec, &map.delivery) {
-                t.insert("delivery".into(), v.clone());
-            }
-            if !map.funnel.is_empty() {
-                if let Some(v) = get_path(rec, &map.funnel) {
-                    t.insert("funnel".into(), Value::String(scalar_string(v)));
-                }
-            }
-            Some(Value::Object(t))
-        })
-        .collect();
-    (tickets, dropped)
-}
+pub use super::transform::{organic_contacts, transform};
 
 /// CSV rows as records: header row names the fields, every value is a
 /// string (parse_epoch and the validator handle coercion downstream).
@@ -260,7 +212,7 @@ pub fn get_path<'a>(v: &'a Value, path: &str) -> Option<&'a Value> {
 }
 
 /// Ids and stages must end up as strings whatever JSON type the CRM used.
-fn scalar_string(v: &Value) -> String {
+pub(crate) fn scalar_string(v: &Value) -> String {
     match v {
         Value::String(s) => s.clone(),
         other => other.to_string(),
@@ -276,6 +228,23 @@ fn type_name(v: &Value) -> &'static str {
         Value::Array(_) => "array",
         Value::Object(_) => "object",
     }
+}
+
+pub fn records<'a>(resp: &'a Value, root: &str) -> Result<&'a Vec<Value>> {
+    let node = if root.is_empty() {
+        resp
+    } else {
+        get_path(resp, root).ok_or_else(|| {
+            Error::Config(format!("response has nothing at map.root \"{}\"", root))
+        })?
+    };
+    node.as_array().ok_or_else(|| {
+        Error::Config(format!(
+            "map.root \"{}\" is not a JSON array (got {})",
+            root,
+            type_name(node)
+        ))
+    })
 }
 
 #[cfg(test)]

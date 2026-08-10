@@ -77,6 +77,9 @@ ad_id = "adId.adId"
 stage = "stage.name"
 delivery = "createdAt"
 funnel = "status.funnelStage"
+lead_id = "adData.lead_id"
+phone = "phoneNumber"
+email = "email"
 
 [map.stage_map]
 "Non Contactable" = "NonContactable"

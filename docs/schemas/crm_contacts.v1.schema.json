@@ -1,0 +1,47 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "CrmContactsFile",
+  "description": "Contacts of the ORGANIC/direct records the crm.json transform drops\n(no ad id) - the re-inquiry check needs them. Same raw-PII policy\nas leads.json.",
+  "type": "object",
+  "properties": {
+    "fetched_at": {
+      "type": "string"
+    },
+    "rows": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/ContactRow"
+      }
+    },
+    "schema": {
+      "description": "`moneyball.crm_contacts/<major>`.",
+      "type": "string"
+    }
+  },
+  "required": [
+    "schema",
+    "fetched_at",
+    "rows"
+  ],
+  "$defs": {
+    "ContactRow": {
+      "type": "object",
+      "properties": {
+        "email": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "phone": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        }
+      }
+    }
+  }
+}

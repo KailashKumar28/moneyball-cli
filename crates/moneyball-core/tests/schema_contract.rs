@@ -10,7 +10,7 @@
 
 use std::path::{Path, PathBuf};
 
-use moneyball_core::schema::{CreativeReport, CreativesFile};
+use moneyball_core::schema::{CreativeReport, CreativesFile, CrmContactsFile, LeadsFile};
 
 fn schemas_dir() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("../../docs/schemas")
@@ -20,6 +20,8 @@ fn generated(name: &str) -> (PathBuf, String) {
     let schema = match name {
         "creatives.v1" => schemars::schema_for!(CreativesFile),
         "creative_report.v1" => schemars::schema_for!(CreativeReport),
+        "leads.v1" => schemars::schema_for!(LeadsFile),
+        "crm_contacts.v1" => schemars::schema_for!(CrmContactsFile),
         _ => unreachable!(),
     };
     let json = serde_json::to_string_pretty(&schema).expect("schema serializes");
@@ -30,7 +32,12 @@ fn generated(name: &str) -> (PathBuf, String) {
 fn committed_schemas_match_the_structs() {
     let update = std::env::var_os("MB_UPDATE_SCHEMAS").is_some();
     let mut stale = Vec::new();
-    for name in ["creatives.v1", "creative_report.v1"] {
+    for name in [
+        "creatives.v1",
+        "creative_report.v1",
+        "leads.v1",
+        "crm_contacts.v1",
+    ] {
         let (path, json) = generated(name);
         if update {
             std::fs::create_dir_all(path.parent().unwrap()).unwrap();
