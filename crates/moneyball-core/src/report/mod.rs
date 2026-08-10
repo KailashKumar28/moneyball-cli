@@ -12,6 +12,7 @@
 mod card;
 mod group;
 pub mod html;
+mod table;
 
 use std::collections::BTreeMap;
 

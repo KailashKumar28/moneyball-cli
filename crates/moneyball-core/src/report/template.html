@@ -35,12 +35,27 @@ h2{font-family:var(--serif);font-weight:600;font-size:27px;margin:4px 0 13px;let
 .kdot.m{background:var(--meta)}.kdot.c{background:var(--crm)}
 .note{font-size:12px;color:var(--soft);margin:8px 0 0}
 .warnbox{background:#fbf3e8;border:1px solid #ecd9bf;border-left:4px solid var(--warn);border-radius:8px;padding:8px 12px;font-size:12px;color:#5d4326;margin:10px 0}
+.ttable{overflow-x:auto;border:1px solid var(--rule);border-radius:12px;background:var(--card);box-shadow:var(--sh-sm);margin:0 0 18px}
+.ttable table{width:100%;border-collapse:collapse;font-size:12.5px}
+.ttable th,.ttable td{padding:9px 12px;text-align:right;border-bottom:1px solid var(--hair);font-variant-numeric:tabular-nums;font-family:var(--mono);white-space:nowrap}
+.ttable th{font-size:9px;text-transform:uppercase;letter-spacing:.11em;color:var(--faint);font-weight:600;border-bottom:1.5px solid var(--ink);background:var(--paper)}
+.ttable th:first-child,.ttable td:first-child{text-align:left}
+.ttable td.nm{text-align:left;font-family:var(--sans);font-weight:600;max-width:260px;overflow:hidden;text-overflow:ellipsis}
+.ttable td.nm a{color:var(--ink);text-decoration:none;border-bottom:1px dotted var(--rule)}
+.ttable td.nm a:hover{border-bottom-color:var(--ink)}
+.ttable tbody tr:hover{background:#f3efe3}
+.ttable tbody tr:last-child td{border-bottom:none}
+.ttable .dim{color:var(--faint)}
 .cboard{display:grid;grid-template-columns:repeat(auto-fill,minmax(288px,1fr));gap:18px;align-items:start}
 .ccard{background:var(--card);border:1px solid var(--rule);border-radius:15px;overflow:hidden;display:flex;flex-direction:column;box-shadow:var(--sh-sm);transition:transform .22s,box-shadow .22s}
 .ccard:hover{transform:translateY(-3px);box-shadow:var(--sh-md)}
-.cc-fig{display:block;position:relative;background:var(--placeholder)}
-.cc-fig img{width:100%;height:auto;object-fit:contain;display:block}
-.noimg{aspect-ratio:4/5;display:flex;align-items:center;justify-content:center;color:var(--faint);font-size:12px}
+/* Fixed 4:5 image box on every card - creatives ship in mixed ratios
+   (1:1, 4:5, 9:16, landscape video thumbs) and natural heights made the
+   board ragged. cover-crop keeps rows aligned; the full creative lives
+   in the asset cache. */
+.cc-fig{display:block;position:relative;background:var(--placeholder);aspect-ratio:4/5;overflow:hidden}
+.cc-fig img{width:100%;height:100%;object-fit:cover;display:block}
+.noimg{height:100%;display:flex;align-items:center;justify-content:center;color:var(--faint);font-size:12px}
 .crank{position:absolute;top:9px;left:9px;background:var(--ink);color:var(--paper);font-family:var(--mono);font-size:11px;font-weight:700;width:23px;height:23px;border-radius:50%;display:flex;align-items:center;justify-content:center;z-index:1;box-shadow:0 2px 6px rgba(0,0,0,.3)}
 .vtag{position:absolute;top:9px;right:9px;background:rgba(20,16,10,.82);color:#fff;font-family:var(--mono);font-size:9.5px;font-weight:700;padding:2px 8px;border-radius:6px;z-index:1;letter-spacing:.03em}
 .cc-body{padding:13px 14px 14px;display:flex;flex-direction:column;gap:10px;min-width:0}

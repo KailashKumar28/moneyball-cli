@@ -36,7 +36,7 @@ pub fn render(r: &CreativeReport, history_dir: &Path) -> String {
 
     let mut sections = String::new();
     for p in &r.products {
-        render_section(&mut sections, p, history_dir);
+        render_section(&mut sections, p, &r.report_date, history_dir);
     }
 
     let note = if r.source.crm_present {
@@ -56,22 +56,23 @@ pub fn render(r: &CreativeReport, history_dir: &Path) -> String {
         .replace("{{GENERATED}}", &esc(&r.generated_at))
 }
 
-fn render_section(out: &mut String, p: &ProductSection, history_dir: &Path) {
+fn render_section(out: &mut String, p: &ProductSection, report_date: &str, history_dir: &Path) {
     let _ = write!(
         out,
-        r#"<div class="pblock" id="p-{}"><section><div class="seckick">{}</div><h2>{}</h2><div class="okpis">{}</div><div class="cboard">"#,
+        r#"<div class="pblock" id="p-{}"><section><div class="seckick">{}</div><h2>{}</h2><div class="okpis">{}</div>{}<div class="cboard">"#,
         slug(&p.product),
         esc(&p.product),
         esc(&p.product),
-        kpi_cells(&p.kpis)
+        kpi_cells(&p.kpis),
+        super::table::comparison_table(p, report_date)
     );
     for (i, c) in p.creatives.iter().enumerate() {
-        render_card(out, i + 1, c, history_dir);
+        render_card(out, i + 1, &slug(&p.product), c, history_dir);
     }
     let _ = write!(out, "</div></section></div>");
 }
 
-fn render_card(out: &mut String, rank: usize, c: &CreativeCard, history_dir: &Path) {
+fn render_card(out: &mut String, rank: usize, pslug: &str, c: &CreativeCard, history_dir: &Path) {
     let img = c
         .image
         .as_ref()
@@ -113,7 +114,9 @@ fn render_card(out: &mut String, rank: usize, c: &CreativeCard, history_dir: &Pa
     };
     let _ = write!(
         out,
-        r#"<div class="ccard"><div class="cc-fig"><span class="crank">{}</span>{}{}</div><div class="cc-body"><div class="cc-name" title="{}">{}</div><div class="cc-camp">{}</div><div class="cc-kpis">{}{}{}{}</div>{}<div class="cc-meta"><span class="stx {}">{}</span><span>{} ad(s){}</span></div>{}</div></div>"#,
+        r#"<div class="ccard" id="c-{}-{}"><div class="cc-fig"><span class="crank">{}</span>{}{}</div><div class="cc-body"><div class="cc-name" title="{}">{}</div><div class="cc-camp">{}</div><div class="cc-kpis">{}{}{}{}</div>{}<div class="cc-meta"><span class="stx {}">{}</span><span>{} ad(s){}</span></div>{}</div></div>"#,
+        pslug,
+        rank,
         rank,
         vtag,
         img,
@@ -274,7 +277,7 @@ fn kpi(v: &str, l: &str) -> String {
 }
 
 /// Minimal HTML escape for authored-data text nodes and attributes.
-fn esc(s: &str) -> String {
+pub(super) fn esc(s: &str) -> String {
     s.replace('&', "&amp;")
         .replace('<', "&lt;")
         .replace('>', "&gt;")
@@ -282,7 +285,7 @@ fn esc(s: &str) -> String {
 }
 
 /// Anchor-safe slug (ASCII lowercase + dashes), python _slug parity.
-fn slug(s: &str) -> String {
+pub(super) fn slug(s: &str) -> String {
     let mut out = String::new();
     for c in s.chars() {
         if c.is_ascii_alphanumeric() {
@@ -295,7 +298,7 @@ fn slug(s: &str) -> String {
 }
 
 /// Western 3-digit grouping (matches the python report's number style).
-fn commas(n: u64) -> String {
+pub(super) fn commas(n: u64) -> String {
     let s = n.to_string();
     let mut out = String::new();
     for (i, c) in s.chars().enumerate() {
