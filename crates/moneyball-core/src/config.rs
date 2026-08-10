@@ -71,6 +71,9 @@ pub struct WorkspaceConfig {
     /// before accounts exist (docs/CLOUD_PLAN.md).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub workspace_id: Option<String>,
+    /// Client-facing brand for report mastheads/filenames ("Fincity").
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub brand: Option<String>,
     pub products: Vec<Product>,
     #[serde(default)]
     pub goals: std::collections::HashMap<String, f64>,

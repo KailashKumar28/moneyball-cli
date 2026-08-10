@@ -111,6 +111,7 @@ impl App {
         use moneyball_core::config::{Product, WorkspaceConfig};
         let wc = WorkspaceConfig {
             workspace_id: None,
+            brand: None,
             products: products
                 .into_iter()
                 .map(|(n, a)| Product {

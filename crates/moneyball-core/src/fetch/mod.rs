@@ -10,6 +10,7 @@
 //! creative identity pull (slice A1, docs/CLOUD_PLAN.md); `assets.rs`
 //! is the pure content-addressed image cache it fills (slice A2).
 
+pub mod adsets;
 pub mod assets;
 pub mod creatives;
 pub mod leads;
@@ -46,6 +47,9 @@ pub struct FetchReport {
     /// Per-lead records captured into leads.json (Diff breakdown).
     pub leads: usize,
     pub leads_error: Option<String>,
+    /// Adsets captured into adsets.json (learning stage + targeting).
+    pub adsets: usize,
+    pub adsets_error: Option<String>,
 }
 
 /// Pull `days` of per-ad daily insights for every configured product and
@@ -120,10 +124,18 @@ pub fn fetch_snapshot(cfg: &AppConfig, token: &str, days: u32) -> Result<FetchRe
         Err(e) => (0, Some(e.to_string())),
     };
 
+    // Adset facts: learning stage + targeting specs. Best-effort.
+    let (adsets_n, adsets_error) = match adsets::fetch_and_write(&client, token, &all_rows, &path) {
+        Ok(n) => (n, None),
+        Err(e) => (0, Some(e.to_string())),
+    };
+
     Ok(FetchReport {
         date,
         path,
         per_product,
+        adsets: adsets_n,
+        adsets_error,
         creatives: cr.rows,
         assets: cr.assets,
         assets_downloaded: cr.downloaded,

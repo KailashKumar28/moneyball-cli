@@ -28,6 +28,21 @@ pub struct CreativeReport {
     /// Portfolio KPIs - a bot renders exactly this block as the headline.
     pub portfolio: Kpis,
     pub products: Vec<ProductSection>,
+    /// "Yesterday in brief" - 3-5 deterministic one-liners (client
+    /// spec G1-G6). Additive v1 field.
+    #[serde(default)]
+    pub exec_brief: Vec<ExecLine>,
+    /// The prior comparable report's date when deltas were computable.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub prior_date: Option<String>,
+}
+
+/// One executive-brief line. `tone` drives the marker color only.
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+pub struct ExecLine {
+    /// win | watch | info
+    pub tone: String,
+    pub text: String,
 }
 
 /// Days of data the report aggregates (inclusive, YYYY-MM-DD).
@@ -86,6 +101,81 @@ pub struct ProductSection {
     /// Sorted python-style: booking desc, then visit, qualified,
     /// l_leads, m_leads.
     pub creatives: Vec<CreativeCard>,
+    /// Per-targeting roll-up across the product's creatives, spend
+    /// desc. Additive v1 field (empty for pre-v2 consumers).
+    #[serde(default)]
+    pub targetings: Vec<TargetingReport>,
+    /// Deterministic cross-creative/targeting reads; empty when no
+    /// read passes its minimum-data gates (never filler).
+    #[serde(default)]
+    pub cross_reads: Vec<String>,
+}
+
+/// One targeting (base adset name) aggregated across creatives.
+/// The window columns show the report day; VERDICTS are computed on
+/// the trailing-7d aggregate - one day of lead-gen is 0-3 qualified
+/// and statistically dishonest to verdict on (marketing spec
+/// 2026-08-10).
+#[derive(Debug, Clone, Default, Serialize, Deserialize, JsonSchema)]
+pub struct TargetingReport {
+    pub targeting: String,
+    /// Pincode / Lookalike / Detailed / Broad-Income / Other
+    /// (python _archetype).
+    #[serde(default)]
+    pub archetype: String,
+    /// From the adset spec, when adsets.json was captured.
+    #[serde(default)]
+    pub specs: Option<TargetingSpecs>,
+    /// Report-window delivery + CRM counts.
+    pub window: Delivery,
+    #[serde(default)]
+    pub window_crm: TargetingCrm,
+    /// Trailing 7 complete days (verdict basis).
+    #[serde(default)]
+    pub window_7d: SevenDay,
+    /// L-leads delivered in the trailing 72h - the maturation guard:
+    /// never verdict kill while leads are still being worked.
+    #[serde(default)]
+    pub recent_l_72h: u64,
+    /// Deterministic verdict chips, at most 2, precedence-ordered.
+    #[serde(default)]
+    pub verdicts: Vec<Verdict>,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize, JsonSchema)]
+pub struct TargetingSpecs {
+    /// Short geo summary, e.g. "Bengaluru +2 more" or "IN".
+    #[serde(default)]
+    pub geo: Option<String>,
+    #[serde(default)]
+    pub age: Option<String>,
+    #[serde(default)]
+    pub genders: Option<String>,
+    /// LEARNING / SUCCESS / FAIL, verbatim from Meta.
+    #[serde(default)]
+    pub learning: Option<String>,
+    #[serde(default)]
+    pub optimization_goal: Option<String>,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize, JsonSchema)]
+pub struct SevenDay {
+    pub spend: f64,
+    pub impressions: u64,
+    pub clicks: u64,
+    pub m_leads: u64,
+    pub l_leads: u64,
+    pub qualified: u64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+pub struct Verdict {
+    /// scale | kill | zero_crm | learning | quality_leak | wait
+    pub code: String,
+    /// Chip label, e.g. "Kill".
+    pub label: String,
+    /// One-line justification with the numbers.
+    pub detail: String,
 }
 
 /// One creative (a group of ads sharing an image/video), the report's

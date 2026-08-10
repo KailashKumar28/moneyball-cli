@@ -81,6 +81,10 @@ pub(crate) fn on_fetch_done(
             e
         )),
     }
+    match &report.adsets_error {
+        None => out.push(format!("adsets captured: {}", report.adsets)),
+        Some(e) => out.push(format!("warn: adsets capture failed ({})", e)),
+    }
     match &report.leads_error {
         None => out.push(format!("leads captured: {}", report.leads)),
         Some(e) => out.push(format!("warn: leads capture failed ({})", e)),

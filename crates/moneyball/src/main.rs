@@ -204,6 +204,13 @@ fn main() -> Result<()> {
                     e
                 ),
             }
+            match &report.adsets_error {
+                None => println!(
+                    "  adsets captured: {} (learning + targeting)",
+                    report.adsets
+                ),
+                Some(e) => println!("  warn: adsets capture failed ({})", e),
+            }
             match &report.leads_error {
                 None => println!("  leads captured: {} (leads.json, 0600)", report.leads),
                 Some(e) => println!(

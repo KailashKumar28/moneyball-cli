@@ -86,6 +86,20 @@ bottom after a release-sized batch.)
       the table diff column expands (+) into re-inq/dup/other. Live:
       57 submissions -> 52 captured, 2 re-inq, 3 uncaptured. Known
       limit: CRM index = pulled window book, not lifetime.
+- [x] **Report v2 - "Fincity Portfolio / Daily Performance"**
+      (2026-08-10, designed by 3 specialist agents - marketing
+      strategist, client-reporting, UI): targeting section per product
+      (window table + 7d-basis verdict chips: kill/0-CRM/learning/
+      weak-L>Q/scale, exact rules in report/targeting.rs), adset specs
+      captured by /fetch (geo/age/learning - also lights the dormant
+      Live-learning card status), exec brief (deterministic G1-G6),
+      missing-leads banner, scorecard deltas vs prior report,
+      reconciliation line that must sum, products-at-a-glance,
+      client-facing labels (Meta leads/CRM leads/gap/missing),
+      dead-tail collapse, mobile sticky columns, brand config +
+      WhatsApp-forwardable filename (Fincity-Daily-09-Aug-2026.html).
+      Deferred to weekly: fatigue + overlap verdicts (need reach /
+      geo-circle math), budget reallocation modeling, cross-read B.
 - [ ] **/diagnose <product>**: the 5 diagnostic checks over a snapshot,
       one summary cell + per-check detail. Headless first.
 

@@ -10,10 +10,15 @@
 //! covers through D-1; `window_days` trailing complete days end at D-1.
 
 mod card;
+mod exec;
 mod group;
 pub mod html;
+mod img;
+mod sections;
 mod segmentation;
+mod specs;
 mod table;
+mod targeting;
 
 use std::collections::BTreeMap;
 
@@ -33,6 +38,8 @@ pub fn build(
     workspace_id: &str,
     generated_at: &str,
     window_days: u32,
+    target_rpq: Option<f64>,
+    prior: Option<&CreativeReport>,
 ) -> Result<CreativeReport> {
     let snap_date = NaiveDate::parse_from_str(&snap.date, "%Y-%m-%d")
         .map_err(|_| Error::Config(format!("bad snapshot date {}", snap.date)))?;
@@ -146,11 +153,20 @@ pub fn build(
             k(b).cmp(&k(a))
         });
         let kpis = card::section_kpis(&cards);
+        let cross_reads = targeting::cross_reads(&cards);
         sections.push(ProductSection {
             product,
             kpis,
             creatives: cards,
+            targetings: Vec::new(), // filled below
+            cross_reads,
         });
+    }
+    let mut tg = targeting::build(snap, target_rpq, d0, d1);
+    for sec in &mut sections {
+        if let Some(t) = tg.remove(&sec.product) {
+            sec.targetings = t;
+        }
     }
     let mut portfolio = card::portfolio_kpis(&sections);
     portfolio.unattributed_l_leads = unattributed;
@@ -171,6 +187,12 @@ pub fn build(
         },
         portfolio,
         products: sections,
+        exec_brief: Vec::new(),
+        prior_date: prior.map(|p| p.report_date.clone()),
+    })
+    .map(|mut r: CreativeReport| {
+        r.exec_brief = exec::brief(&r, prior);
+        r
     })
 }
 
@@ -188,19 +210,42 @@ pub fn generate(cfg: &AppConfig, date: Option<&str>, window_days: u32) -> Result
     let snap = crate::snapshot::load(&cfg.snap_for(date)?)?;
     let workspace_id = ensure_workspace_id(cfg)?;
     let generated_at = chrono::Utc::now().format("%Y-%m-%dT%H:%M:%SZ").to_string();
-    let report = build(&snap, &workspace_id, &generated_at, window_days)?;
+    let reports_root = cfg.mb_dir().join("reports");
+    let prior = exec::load_prior(&reports_root, &snap.date, window_days.max(1) as i64);
+    let target_rpq = cfg.workspace.as_ref().and_then(|w| w.target_rs_per_q);
+    let report = build(
+        &snap,
+        &workspace_id,
+        &generated_at,
+        window_days,
+        target_rpq,
+        prior.as_ref(),
+    )?;
 
-    let dir = cfg.mb_dir().join("reports").join(&report.report_date);
+    let dir = reports_root.join(&report.report_date);
     std::fs::create_dir_all(&dir)?;
     let json_path = dir.join("creative-report.json");
     let tmp = dir.join("creative-report.json.tmp");
     std::fs::write(&tmp, serde_json::to_string_pretty(&report)?)?;
     std::fs::rename(&tmp, &json_path)?;
 
-    // HTML rendered strictly from the aggregate + asset cache (B2).
-    let html_path = dir.join("creative-report.html");
-    let html_tmp = dir.join("creative-report.html.tmp");
-    std::fs::write(&html_tmp, html::render(&report, &cfg.history_dir()))?;
+    // HTML rendered strictly from the aggregate + asset cache. Client
+    // file name: Brand-Daily-DD-Mon-YYYY.html (WhatsApp-forwardable,
+    // data date not generation date).
+    let brand = cfg
+        .workspace
+        .as_ref()
+        .and_then(|w| w.brand.clone())
+        .unwrap_or_else(|| "Portfolio".into());
+    let day = chrono::NaiveDate::parse_from_str(&report.window.until, "%Y-%m-%d")
+        .map(|d| d.format("%d-%b-%Y").to_string())
+        .unwrap_or_else(|_| report.window.until.clone());
+    let html_path = dir.join(format!("{}-Daily-{}.html", brand, day));
+    let html_tmp = dir.join("report.html.tmp");
+    std::fs::write(
+        &html_tmp,
+        html::render(&report, prior.as_ref(), &brand, &cfg.history_dir()),
+    )?;
     std::fs::rename(&html_tmp, &html_path)?;
 
     Ok(ReportOutput {

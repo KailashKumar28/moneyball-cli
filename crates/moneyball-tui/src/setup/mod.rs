@@ -749,6 +749,7 @@ fn advance_save(app: &mut App, s: &mut SetupState) {
     let prev = app.cfg.workspace.as_ref();
     let cfg = WorkspaceConfig {
         workspace_id: prev.and_then(|w| w.workspace_id.clone()),
+        brand: prev.and_then(|w| w.brand.clone()),
         products,
         goals: goals_map,
         target_rs_per_q: None,

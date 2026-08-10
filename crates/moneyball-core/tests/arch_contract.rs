@@ -43,6 +43,7 @@ fn network_boundary() {
     let allowed = [
         "crates/moneyball-core/src/meta.rs",
         "crates/moneyball-core/src/fetch/mod.rs",
+        "crates/moneyball-core/src/fetch/adsets.rs",
         "crates/moneyball-core/src/fetch/creatives.rs",
         "crates/moneyball-core/src/fetch/leads.rs",
         "crates/moneyball-core/src/llm.rs",

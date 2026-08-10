@@ -4,6 +4,14 @@
   "description": "`reports/<date>/creative-report.json` - THE product artifact. The\nHTML renderer, a bot text-summarizer, and the future service's\nPostgres ingester consume exactly this; the renderer never touches\nsnapshots. Every array element carries its own natural key so rows\nupsert losslessly: (workspace_id, report_date) > product > group_key\n> targeting/date.",
   "type": "object",
   "properties": {
+    "exec_brief": {
+      "description": "\"Yesterday in brief\" - 3-5 deterministic one-liners (client\nspec G1-G6). Additive v1 field.",
+      "type": "array",
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/ExecLine"
+      }
+    },
     "generated_at": {
       "description": "RFC3339 UTC generation timestamp.",
       "type": "string"
@@ -11,6 +19,13 @@
     "portfolio": {
       "description": "Portfolio KPIs - a bot renders exactly this block as the headline.",
       "$ref": "#/$defs/Kpis"
+    },
+    "prior_date": {
+      "description": "The prior comparable report's date when deltas were computable.",
+      "type": [
+        "string",
+        "null"
+      ]
     },
     "products": {
       "type": "array",
@@ -203,6 +218,23 @@
         "m_leads"
       ]
     },
+    "ExecLine": {
+      "description": "One executive-brief line. `tone` drives the marker color only.",
+      "type": "object",
+      "properties": {
+        "text": {
+          "type": "string"
+        },
+        "tone": {
+          "description": "win | watch | info",
+          "type": "string"
+        }
+      },
+      "required": [
+        "tone",
+        "text"
+      ]
+    },
     "FunnelCounts": {
       "description": "CRM-joined funnel counts (Meta m_leads + the four CRM milestones).",
       "type": "object",
@@ -351,11 +383,27 @@
             "$ref": "#/$defs/CreativeCard"
           }
         },
+        "cross_reads": {
+          "description": "Deterministic cross-creative/targeting reads; empty when no\nread passes its minimum-data gates (never filler).",
+          "type": "array",
+          "default": [],
+          "items": {
+            "type": "string"
+          }
+        },
         "kpis": {
           "$ref": "#/$defs/Kpis"
         },
         "product": {
           "type": "string"
+        },
+        "targetings": {
+          "description": "Per-targeting roll-up across the product's creatives, spend\ndesc. Additive v1 field (empty for pre-v2 consumers).",
+          "type": "array",
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/TargetingReport"
+          }
         }
       },
       "required": [
@@ -453,6 +501,48 @@
         "uncaptured"
       ]
     },
+    "SevenDay": {
+      "type": "object",
+      "properties": {
+        "clicks": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "impressions": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "l_leads": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "m_leads": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "qualified": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "spend": {
+          "type": "number",
+          "format": "double"
+        }
+      },
+      "required": [
+        "spend",
+        "impressions",
+        "clicks",
+        "m_leads",
+        "l_leads",
+        "qualified"
+      ]
+    },
     "StatusCode": {
       "type": "string",
       "enum": [
@@ -512,6 +602,118 @@
         "booking"
       ]
     },
+    "TargetingReport": {
+      "description": "One targeting (base adset name) aggregated across creatives.\nThe window columns show the report day; VERDICTS are computed on\nthe trailing-7d aggregate - one day of lead-gen is 0-3 qualified\nand statistically dishonest to verdict on (marketing spec\n2026-08-10).",
+      "type": "object",
+      "properties": {
+        "archetype": {
+          "description": "Pincode / Lookalike / Detailed / Broad-Income / Other\n(python _archetype).",
+          "type": "string",
+          "default": ""
+        },
+        "recent_l_72h": {
+          "description": "L-leads delivered in the trailing 72h - the maturation guard:\nnever verdict kill while leads are still being worked.",
+          "type": "integer",
+          "format": "uint64",
+          "default": 0,
+          "minimum": 0
+        },
+        "specs": {
+          "description": "From the adset spec, when adsets.json was captured.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/TargetingSpecs"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "targeting": {
+          "type": "string"
+        },
+        "verdicts": {
+          "description": "Deterministic verdict chips, at most 2, precedence-ordered.",
+          "type": "array",
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/Verdict"
+          }
+        },
+        "window": {
+          "description": "Report-window delivery + CRM counts.",
+          "$ref": "#/$defs/Delivery"
+        },
+        "window_7d": {
+          "description": "Trailing 7 complete days (verdict basis).",
+          "$ref": "#/$defs/SevenDay",
+          "default": {
+            "clicks": 0,
+            "impressions": 0,
+            "l_leads": 0,
+            "m_leads": 0,
+            "qualified": 0,
+            "spend": 0.0
+          }
+        },
+        "window_crm": {
+          "$ref": "#/$defs/TargetingCrm",
+          "default": {
+            "booking": 0,
+            "l_leads": 0,
+            "qualified": 0,
+            "visit": 0
+          }
+        }
+      },
+      "required": [
+        "targeting",
+        "window"
+      ]
+    },
+    "TargetingSpecs": {
+      "type": "object",
+      "properties": {
+        "age": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "genders": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "geo": {
+          "description": "Short geo summary, e.g. \"Bengaluru +2 more\" or \"IN\".",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "learning": {
+          "description": "LEARNING / SUCCESS / FAIL, verbatim from Meta.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "optimization_goal": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        }
+      }
+    },
     "TrendBucket": {
       "description": "One day of a card's trend series.",
       "type": "object",
@@ -565,6 +767,28 @@
         "qualified",
         "visit",
         "booking"
+      ]
+    },
+    "Verdict": {
+      "type": "object",
+      "properties": {
+        "code": {
+          "description": "scale | kill | zero_crm | learning | quality_leak | wait",
+          "type": "string"
+        },
+        "detail": {
+          "description": "One-line justification with the numbers.",
+          "type": "string"
+        },
+        "label": {
+          "description": "Chip label, e.g. \"Kill\".",
+          "type": "string"
+        }
+      },
+      "required": [
+        "code",
+        "label",
+        "detail"
       ]
     }
   }

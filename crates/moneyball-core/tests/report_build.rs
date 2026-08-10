@@ -129,7 +129,15 @@ fn snapshot() -> Snapshot {
 
 #[test]
 fn build_groups_joins_and_orders_correctly() {
-    let r = report::build(&snapshot(), "ws-test", "2026-08-07T00:00:00Z", 1).unwrap();
+    let r = report::build(
+        &snapshot(),
+        "ws-test",
+        "2026-08-07T00:00:00Z",
+        1,
+        None,
+        None,
+    )
+    .unwrap();
 
     assert_eq!(r.schema, CREATIVE_REPORT_SCHEMA);
     assert_eq!(r.window.since, "2026-08-06");
@@ -209,7 +217,7 @@ fn build_groups_joins_and_orders_correctly() {
 fn no_creatives_file_falls_back_to_per_ad_cards() {
     let mut s = snapshot();
     s.creatives = None;
-    let r = report::build(&s, "ws", "t", 1).unwrap();
+    let r = report::build(&s, "ws", "t", 1, None, None).unwrap();
     let p = &r.products[0];
     // Every ad its own card; delivery never dropped.
     assert_eq!(p.creatives.len(), 4);
@@ -224,7 +232,7 @@ fn no_creatives_file_falls_back_to_per_ad_cards() {
 fn empty_crm_flags_source_and_zero_funnel() {
     let mut s = snapshot();
     s.crm = json!({});
-    let r = report::build(&s, "ws", "t", 1).unwrap();
+    let r = report::build(&s, "ws", "t", 1, None, None).unwrap();
     assert!(!r.source.crm_present);
     assert_eq!(r.portfolio.funnel.l_leads, 0);
     assert!(r.portfolio.l_to_q_pct.is_none());
@@ -245,8 +253,8 @@ fn html_renders_from_aggregate_and_cache_only() {
     std::fs::create_dir_all(&dir).unwrap();
     std::fs::write(dir.join(format!("{}.jpg", sha)), b"fake-jpeg-bytes").unwrap();
 
-    let r = report::build(&snapshot(), "ws", "2026-08-07T00:00:00Z", 1).unwrap();
-    let html = html::render(&r, &history);
+    let r = report::build(&snapshot(), "ws", "2026-08-07T00:00:00Z", 1, None, None).unwrap();
+    let html = html::render(&r, None, "TestBrand", &history);
 
     // No unexpanded placeholders, all sections + jumpnav present.
     assert!(!html.contains("{{"), "leftover template placeholder");

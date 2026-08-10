@@ -1,34 +1,40 @@
-//! The per-product comparison table (one dense row per creative).
-//! Split from html.rs (size cap); pure over the report aggregate.
+//! The per-product comparison table: one dense row per creative,
+//! client-facing labels (2026-08-10 spec), the gap expander
+//! (already-in-CRM / repeat form-fill / invalid / missing), and the
+//! dead-tail collapse (zero-lead micro-spend creatives fold into one
+//! honest line instead of six rows of dashes).
 
 use std::fmt::Write as _;
 
-use super::html::{commas, esc, slug};
+use super::html::{commas, esc, is_dead_tail, rupees, slug};
 use crate::schema::*;
 
-/// The dense one-row-per-creative compare (python comparison_table):
-/// rank + name (anchors to its card), live-since, status, delivery,
-/// CPL, M->L, and the CRM funnel counts. The Diff breakdown column
-/// needs lead segmentation - a documented v1 exclusion.
 pub(super) fn comparison_table(p: &ProductSection, report_date: &str) -> String {
     let has_seg = p.creatives.iter().any(|c| c.segmentation.is_some());
     let seg_id = format!("segx-{}", slug(&p.product));
+    let tail_id = format!("tailx-{}", slug(&p.product));
     let mut out = format!(
-        r##"<div class="ttable"><input type="checkbox" id="{}" class="segx"><table><thead><tr><th>creative (ranked)</th><th>live since</th><th>status</th><th>spend</th><th>impr</th><th>ctr</th><th>m-leads</th><th>cpl</th><th>m&gt;l</th><th>l-leads</th><th title="Meta leads that never became CRM leads. Expand for the split.">diff{}</th><th class="seg" title="contact already in the CRM under another campaign or as an organic lead - a returning person">re-inq</th><th class="seg" title="same contact submitted again in the window or campaign">dup</th><th class="seg" title="invalid phone (CRM rejects) or a genuine sync gap to recover">other</th><th>qual</th><th>visits</th><th>book</th></tr></thead><tbody>"##,
+        r##"<div class="ttable"><input type="checkbox" id="{}" class="segx"><input type="checkbox" id="{}" class="tailx"><table><thead><tr><th>creative (ranked)</th><th>live since</th><th>status</th><th>spend</th><th>impressions</th><th>ctr</th><th title="People who submitted the instant form on Facebook/Instagram.">meta leads</th><th title="Spend divided by Meta leads.">cost/lead</th><th title="Share of Meta leads that arrived in your CRM.">reached crm</th><th title="Leads that arrived in your CRM.">crm leads</th><th title="Meta leads that did not become new CRM leads. Expand for why.">gap{}</th><th class="seg" title="This person was in your CRM before this ad - counted once, not lost.">already in crm</th><th class="seg" title="Same person submitted the form more than once.">repeat</th><th class="seg" title="Phone number your CRM rejected.">invalid</th><th class="seg" title="Submitted the form but never arrived in the CRM - recoverable.">missing</th><th title="Marked genuine by your sales team in the CRM.">qualified</th><th>visits</th><th>bookings</th></tr></thead><tbody>"##,
         seg_id,
+        tail_id,
         if has_seg {
             format!(r##" <label for="{}" class="segl">+</label>"##, seg_id)
         } else {
             String::new()
         }
     );
+    let mut tail: Vec<usize> = Vec::new();
     for (i, c) in p.creatives.iter().enumerate() {
+        if is_dead_tail(c, p.kpis.spend) {
+            tail.push(i);
+        }
+    }
+    let tail_spend: f64 = tail.iter().map(|&i| p.creatives[i].delivery.spend).sum();
+    for (i, c) in p.creatives.iter().enumerate() {
+        let is_tail = tail.contains(&i);
         let f = |n: usize| c.funnel[n].count;
         let cpl = if c.delivery.m_leads > 0 {
-            format!(
-                "\u{20B9}{}",
-                commas((c.delivery.spend / c.delivery.m_leads as f64).round() as u64)
-            )
+            rupees(c.delivery.spend / c.delivery.m_leads as f64)
         } else {
             "-".into()
         };
@@ -50,10 +56,17 @@ pub(super) fn comparison_table(p: &ProductSection, report_date: &str) -> String 
             StatusCode::Learn => "st-learn",
             StatusCode::Stop => "st-stop",
         };
-        let dim = |v: u64| if v == 0 { r#" class="dim""# } else { "" };
+        let dim = |v: u64| {
+            if v == 0 {
+                r#" class="dim""#
+            } else {
+                ""
+            }
+        };
         let _ = write!(
             out,
-            r##"<tr><td class="nm">{:02} &middot; <a href="#c-{}-{}">{}</a></td><td>{}</td><td><span class="stx {}">{}</span></td><td>{}{}</td><td>{}</td><td>{}</td><td{}>{}</td><td>{}</td><td>{}</td><td{}>{}</td>{}{}<td{}>{}</td><td{}>{}</td><td{}>{}</td></tr>"##,
+            r##"<tr{}><td class="nm">{:02} &middot; <a href="#c-{}-{}">{}</a></td><td>{}</td><td><span class="stx {}">{}</span></td><td>{}</td><td>{}</td><td>{}</td><td{}>{}</td><td>{}</td><td>{}</td><td{}>{}</td>{}{}<td{}>{}</td><td{}>{}</td><td{}>{}</td></tr>"##,
+            if is_tail { r#" class="tail""# } else { "" },
             i + 1,
             slug(&p.product),
             i + 1,
@@ -61,8 +74,7 @@ pub(super) fn comparison_table(p: &ProductSection, report_date: &str) -> String 
             live_since(c.created.as_deref(), report_date),
             st_class,
             esc(&c.status.label),
-            "\u{20B9}",
-            commas(c.delivery.spend.round() as u64),
+            rupees(c.delivery.spend),
             commas(c.delivery.impressions),
             ctr,
             dim(f(2)),
@@ -71,7 +83,7 @@ pub(super) fn comparison_table(p: &ProductSection, report_date: &str) -> String 
             m_to_l,
             dim(f(3)),
             f(3),
-            diff_cell(c, f(2), f(3)),
+            gap_cell(c, f(2), f(3)),
             seg_cells(c),
             dim(f(4)),
             f(4),
@@ -81,8 +93,56 @@ pub(super) fn comparison_table(p: &ProductSection, report_date: &str) -> String 
             f(6),
         );
     }
+    if !tail.is_empty() {
+        let _ = write!(
+            out,
+            r##"<tr><td class="nm" colspan="18"><label for="{}" class="taill">+ {} more creative(s) in early delivery &middot; {} total &middot; no leads yet</label></td></tr>"##,
+            tail_id,
+            tail.len(),
+            rupees(tail_spend)
+        );
+    }
     out.push_str("</tbody></table></div>");
     out
+}
+
+/// Gap: with segmentation = Meta submissions that did NOT become new
+/// CRM leads (total - captured); else the M-L fallback.
+fn gap_cell(c: &CreativeCard, m: u64, l: u64) -> String {
+    let d = match &c.segmentation {
+        Some(s) => (s.total - s.captured) as i64,
+        None => m as i64 - l as i64,
+    };
+    if d == 0 {
+        r#"<td class="dim">0</td>"#.into()
+    } else {
+        format!("<td>{:+}</td>", d)
+    }
+}
+
+/// The expanded split: already-in-CRM / repeat / invalid / missing.
+/// Missing is the report's red - recoverable people.
+fn seg_cells(c: &CreativeCard) -> String {
+    let Some(s) = &c.segmentation else {
+        return r#"<td class="seg dim">-</td><td class="seg dim">-</td><td class="seg dim">-</td><td class="seg dim">-</td>"#
+            .into();
+    };
+    let cell = |v: u64, red: bool| {
+        if v == 0 {
+            r#"<td class="seg dim">0</td>"#.to_string()
+        } else if red {
+            format!(r#"<td class="seg red">{}</td>"#, v)
+        } else {
+            format!(r#"<td class="seg">{}</td>"#, v)
+        }
+    };
+    format!(
+        "{}{}{}{}",
+        cell(s.reinquiry, false),
+        cell(s.duplicate, false),
+        cell(s.invalid, false),
+        cell(s.uncaptured, true)
+    )
 }
 
 /// "17 Jul + age in days" from the creative's earliest created date.
@@ -98,42 +158,4 @@ fn live_since(created: Option<&str>, report_date: &str) -> String {
         }
         _ => esc(c),
     }
-}
-
-/// Diff: with segmentation = window Meta submissions that did NOT
-/// become CRM leads (total - captured, the sum the expander splits);
-/// without it, the M-L fallback (negative possible when CRM delivery
-/// lands in-window but the Meta count fell the day before).
-fn diff_cell(c: &CreativeCard, m: u64, l: u64) -> String {
-    let d = match &c.segmentation {
-        Some(s) => (s.total - s.captured) as i64,
-        None => m as i64 - l as i64,
-    };
-    if d == 0 {
-        r#"<td class="dim">0</td>"#.into()
-    } else {
-        format!("<td>{:+}</td>", d)
-    }
-}
-
-/// The hidden-until-expanded split: re-inquiry, duplicate, and
-/// other = invalid + uncaptured (the actionable drops).
-fn seg_cells(c: &CreativeCard) -> String {
-    let Some(s) = &c.segmentation else {
-        return r#"<td class="seg dim">-</td><td class="seg dim">-</td><td class="seg dim">-</td>"#
-            .into();
-    };
-    let cell = |v: u64| {
-        if v == 0 {
-            r#"<td class="seg dim">0</td>"#.to_string()
-        } else {
-            format!(r#"<td class="seg">{}</td>"#, v)
-        }
-    };
-    format!(
-        "{}{}{}",
-        cell(s.reinquiry),
-        cell(s.duplicate),
-        cell(s.invalid + s.uncaptured)
-    )
 }
