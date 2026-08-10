@@ -77,6 +77,15 @@ bottom after a release-sized batch.)
       fin_campaign_analysis pipeline's JSON endpoint; keep the
       "Stattic Ad" typo untouched (join rule - see AGENTS.md Don'ts).
       (Superseded by the LeadZump date-filter item above once that lands.)
+- [ ] **Lead segmentation (the Diff breakdown)**: the report's diff
+      column shows M-Leads minus L-Leads as a number (2026-08-10); the
+      python report additionally classifies the gap into re-inquiry /
+      duplicate / invalid / not-captured via per-lead Meta records
+      cross-matched with the CRM book (weekly_funnel_report.
+      lead_segmentation). Needs: Meta per-lead retrieval (PII scope on
+      the token), a matching engine, and the re-inquiry scan across
+      lifetime tickets. Design before building - PII handling policy
+      (phone numbers) must be settled first.
 - [ ] **/diagnose <product>**: the 5 diagnostic checks over a snapshot,
       one summary cell + per-check detail. Headless first.
 

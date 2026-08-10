@@ -12,7 +12,7 @@ use crate::schema::*;
 /// needs lead segmentation - a documented v1 exclusion.
 pub(super) fn comparison_table(p: &ProductSection, report_date: &str) -> String {
     let mut out = String::from(
-        r#"<div class="ttable"><table><thead><tr><th>creative (ranked)</th><th>live since</th><th>status</th><th>spend</th><th>impr</th><th>ctr</th><th>m-leads</th><th>cpl</th><th>m&gt;l</th><th>l-leads</th><th>qual</th><th>visits</th><th>book</th></tr></thead><tbody>"#,
+        r#"<div class="ttable"><table><thead><tr><th>creative (ranked)</th><th>live since</th><th>status</th><th>spend</th><th>impr</th><th>ctr</th><th>m-leads</th><th>cpl</th><th>m&gt;l</th><th>l-leads</th><th title="M-Leads minus L-Leads. The re-inquiry/duplicate/invalid breakdown needs lead segmentation (not yet captured).">diff</th><th>qual</th><th>visits</th><th>book</th></tr></thead><tbody>"#,
     );
     for (i, c) in p.creatives.iter().enumerate() {
         let f = |n: usize| c.funnel[n].count;
@@ -45,7 +45,7 @@ pub(super) fn comparison_table(p: &ProductSection, report_date: &str) -> String 
         let dim = |v: u64| if v == 0 { r#" class="dim""# } else { "" };
         let _ = write!(
             out,
-            r##"<tr><td class="nm">{:02} &middot; <a href="#c-{}-{}">{}</a></td><td>{}</td><td><span class="stx {}">{}</span></td><td>{}{}</td><td>{}</td><td>{}</td><td{}>{}</td><td>{}</td><td>{}</td><td{}>{}</td><td{}>{}</td><td{}>{}</td><td{}>{}</td></tr>"##,
+            r##"<tr><td class="nm">{:02} &middot; <a href="#c-{}-{}">{}</a></td><td>{}</td><td><span class="stx {}">{}</span></td><td>{}{}</td><td>{}</td><td>{}</td><td{}>{}</td><td>{}</td><td>{}</td><td{}>{}</td>{}<td{}>{}</td><td{}>{}</td><td{}>{}</td></tr>"##,
             i + 1,
             slug(&p.product),
             i + 1,
@@ -63,6 +63,7 @@ pub(super) fn comparison_table(p: &ProductSection, report_date: &str) -> String 
             m_to_l,
             dim(f(3)),
             f(3),
+            diff_cell(f(2), f(3)),
             dim(f(4)),
             f(4),
             dim(f(5)),
@@ -87,5 +88,20 @@ fn live_since(created: Option<&str>, report_date: &str) -> String {
             format!("{} &middot; {}d", cd.format("%d %b"), days)
         }
         _ => esc(c),
+    }
+}
+
+/// Diff = M-Leads - L-Leads for the window: Meta's claim vs CRM truth.
+/// Positive = leads Meta counted that the CRM never registered (the
+/// python report breaks these into re-inquiry/duplicate/invalid via
+/// lead segmentation - a later slice); negative happens legitimately
+/// when a lead's CRM delivery lands in-window but its Meta action
+/// count fell on the day before. Zero is dimmed like the other columns.
+fn diff_cell(m: u64, l: u64) -> String {
+    let d = m as i64 - l as i64;
+    if d == 0 {
+        r#"<td class="dim">0</td>"#.into()
+    } else {
+        format!("<td>{:+}</td>", d)
     }
 }
