@@ -155,6 +155,7 @@ pub(super) struct GroupAgg {
     pub(super) statuses: BTreeMap<String, u64>,
     pub(super) live_adsets: Vec<String>,
     pub(super) created: Option<String>,
+    pub(super) permalink: Option<String>,
     pub(super) image: Option<ImageRef>,
     pub(super) delivery: Delivery,
     pub(super) crm: TargetingCrm,
@@ -173,6 +174,7 @@ impl GroupAgg {
             statuses: BTreeMap::new(),
             live_adsets: Vec::new(),
             created: None,
+            permalink: None,
             image: None,
             delivery: Delivery::default(),
             crm: TargetingCrm::default(),
@@ -223,6 +225,9 @@ impl GroupAgg {
                     Some(prev) if prev <= ct => Some(prev),
                     _ => Some(ct),
                 };
+            }
+            if self.permalink.is_none() {
+                self.permalink = c.permalink.clone().filter(|p| !p.is_empty());
             }
             if self.image.is_none() {
                 if let Some(a) = &c.asset {

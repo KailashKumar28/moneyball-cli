@@ -111,6 +111,7 @@ impl GroupAgg {
             is_video: self.is_video,
             status,
             created: self.created,
+            permalink: self.permalink,
             image: self.image,
             delivery: self.delivery,
             funnel,

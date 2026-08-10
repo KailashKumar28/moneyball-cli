@@ -139,6 +139,13 @@
         "is_video": {
           "type": "boolean"
         },
+        "permalink": {
+          "description": "Instagram/FB permalink of the post behind the creative - the\ncard image links here. First non-empty across the group's ads.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
         "segmentation": {
           "description": "The M-Leads -> L-Leads gap explained (None when leads.json is\nabsent from the snapshot). Additive v1 field.",
           "anyOf": [

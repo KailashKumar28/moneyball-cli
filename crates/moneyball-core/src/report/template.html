@@ -74,14 +74,14 @@ h2{font-family:var(--serif);font-weight:600;font-size:27px;margin:4px 0 13px;let
 .ttable .red{color:var(--warn);font-weight:700}
 .ttable .seg{display:none;background:#f7f3e9}
 .segx{display:none}
-.segx:checked + table .seg{display:table-cell}
+.segx:checked ~ table .seg{display:table-cell}
 .segl{cursor:pointer;color:var(--brass);border:1px solid var(--rule);border-radius:4px;padding:0 5px;margin-left:5px;font-weight:700}
-.segx:checked + table .segl{color:var(--paper);background:var(--ink)}
+.segx:checked ~ table .segl{color:var(--paper);background:var(--ink)}
 /* collapsed dead-tail row */
 .tailx{display:none}
 .taill{cursor:pointer;color:var(--brass);border-bottom:1px dotted var(--rule)}
 .ttable tr.tail{display:none}
-.tailx:checked + table tr.tail{display:table-row}
+.tailx:checked ~ table tr.tail{display:table-row}
 /* subhead: chapter marker inside a product section */
 .subhead{display:flex;align-items:center;gap:12px;margin:26px 0 10px;scroll-margin-top:54px}
 .subhead span{font-family:var(--mono);font-size:10px;letter-spacing:.22em;text-transform:uppercase;color:var(--soft);white-space:nowrap}
@@ -113,6 +113,10 @@ h2{font-family:var(--serif);font-weight:600;font-size:27px;margin:4px 0 13px;let
 .cc-fig{display:block;position:relative;background:var(--placeholder);aspect-ratio:4/5;overflow:hidden}
 .cc-fig img{width:100%;height:100%;object-fit:cover;display:block}
 .noimg{height:100%;display:flex;align-items:center;justify-content:center;color:var(--faint);font-size:12px}
+.cc-link{display:block;height:100%;position:relative}
+.golive{position:absolute;bottom:8px;right:8px;background:rgba(20,16,10,.72);color:#fff;font-family:var(--mono);font-size:9.5px;letter-spacing:.04em;padding:3px 9px;border-radius:6px;opacity:0;transition:opacity .18s;z-index:1}
+.cc-fig:hover .golive{opacity:1}
+@media(hover:none){.golive{opacity:.85}}
 .crank{position:absolute;top:9px;left:9px;background:var(--ink);color:var(--paper);font-family:var(--mono);font-size:11px;font-weight:700;width:23px;height:23px;border-radius:50%;display:flex;align-items:center;justify-content:center;z-index:1;box-shadow:0 2px 6px rgba(0,0,0,.3)}
 .vtag{position:absolute;top:9px;right:9px;background:rgba(20,16,10,.82);color:#fff;font-family:var(--mono);font-size:9.5px;font-weight:700;padding:2px 8px;border-radius:6px;z-index:1;letter-spacing:.03em}
 .cc-body{padding:13px 14px 14px;display:flex;flex-direction:column;gap:10px;min-width:0}

@@ -157,6 +157,15 @@ fn render_card(out: &mut String, rank: usize, pslug: &str, c: &CreativeCard, his
             )
         })
         .unwrap_or_else(|| r#"<div class="noimg">no preview</div>"#.into());
+    // Click the creative -> open the live Instagram/FB post.
+    let img = match c.permalink.as_deref() {
+        Some(url) => format!(
+            r#"<a class="cc-link" href="{}" target="_blank" rel="noopener" title="Open the live post">{}<span class="golive">view post</span></a>"#,
+            esc(url),
+            img
+        ),
+        None => img,
+    };
     let vtag = if c.is_video {
         r#"<span class="vtag">VIDEO</span>"#
     } else {

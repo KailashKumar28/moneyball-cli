@@ -199,6 +199,10 @@ pub struct CreativeCard {
     /// None => renderers show a placeholder.
     #[serde(default)]
     pub image: Option<ImageRef>,
+    /// Instagram/FB permalink of the post behind the creative - the
+    /// card image links here. First non-empty across the group's ads.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub permalink: Option<String>,
     pub delivery: Delivery,
     /// The seven canonical stages, ordered, ALWAYS all present -
     /// renderers iterate this array, never reconstruct it.
