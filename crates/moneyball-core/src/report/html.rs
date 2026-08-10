@@ -36,9 +36,13 @@ pub fn render(
     history_dir: &Path,
 ) -> String {
     let day = chrono::NaiveDate::parse_from_str(&r.window.until, "%Y-%m-%d").ok();
-    let dayline = day
-        .map(|d| d.format("%a %d %b %Y").to_string().to_uppercase())
-        .unwrap_or_else(|| r.window.until.clone());
+    let multi = r.window.since != r.window.until;
+    let dayline = if multi {
+        format!("{} - {}", esc(&r.window.since), esc(&r.window.until)).to_uppercase()
+    } else {
+        day.map(|d| d.format("%a %d %b %Y").to_string().to_uppercase())
+            .unwrap_or_else(|| r.window.until.clone())
+    };
     let window = if r.window.since == r.window.until {
         day.map(|d| d.format("%d %b %Y").to_string())
             .unwrap_or_else(|| r.window.until.clone())

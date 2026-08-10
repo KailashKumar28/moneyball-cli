@@ -224,8 +224,16 @@ pub fn generate(cfg: &AppConfig, date: Option<&str>, window_days: u32) -> Result
 
     let dir = reports_root.join(&report.report_date);
     std::fs::create_dir_all(&dir)?;
-    let json_path = dir.join("creative-report.json");
-    let tmp = dir.join("creative-report.json.tmp");
+    // Multi-day windows get range-suffixed names so a month-to-date run
+    // never overwrites the daily artifacts (and the prior-report loader,
+    // which matches on window length, keeps finding the daily json).
+    let range_suffix = if window_days.max(1) > 1 {
+        format!("-{}-to-{}", report.window.since, report.window.until)
+    } else {
+        String::new()
+    };
+    let json_path = dir.join(format!("creative-report{}.json", range_suffix));
+    let tmp = dir.join(format!("creative-report{}.json.tmp", range_suffix));
     std::fs::write(&tmp, serde_json::to_string_pretty(&report)?)?;
     std::fs::rename(&tmp, &json_path)?;
 
@@ -237,10 +245,26 @@ pub fn generate(cfg: &AppConfig, date: Option<&str>, window_days: u32) -> Result
         .as_ref()
         .and_then(|w| w.brand.clone())
         .unwrap_or_else(|| "Portfolio".into());
-    let day = chrono::NaiveDate::parse_from_str(&report.window.until, "%Y-%m-%d")
-        .map(|d| d.format("%d-%b-%Y").to_string())
-        .unwrap_or_else(|_| report.window.until.clone());
-    let html_path = dir.join(format!("{}-Daily-{}.html", brand, day));
+    let fmt_day = |s: &str, f: &str| {
+        chrono::NaiveDate::parse_from_str(s, "%Y-%m-%d")
+            .map(|d| d.format(f).to_string())
+            .unwrap_or_else(|_| s.to_string())
+    };
+    let html_name = if window_days.max(1) > 1 {
+        format!(
+            "{}-{}-to-{}.html",
+            brand,
+            fmt_day(&report.window.since, "%d-%b"),
+            fmt_day(&report.window.until, "%d-%b-%Y")
+        )
+    } else {
+        format!(
+            "{}-Daily-{}.html",
+            brand,
+            fmt_day(&report.window.until, "%d-%b-%Y")
+        )
+    };
+    let html_path = dir.join(html_name);
     let html_tmp = dir.join("report.html.tmp");
     std::fs::write(
         &html_tmp,
