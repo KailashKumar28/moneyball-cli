@@ -41,18 +41,23 @@ pub(super) fn build(
     }
     let mut aggs: BTreeMap<(String, String), Agg> = BTreeMap::new();
     let mut ad_key: BTreeMap<&str, (String, String)> = BTreeMap::new();
+    // Ingest the union of the report window and the 7d basis - a >7d
+    // window starts before d7_0 and must not truncate to it.
+    let ingest_lo = if d0s < d7_0s { &d0s } else { &d7_0s };
     for r in &snap.ads_daily {
-        if r.date_start < d7_0s || r.date_start > d1s {
+        if r.date_start < *ingest_lo || r.date_start > d1s {
             continue;
         }
         let targeting = super::group::base_targeting(&r.adset_name);
         let key = (r._product.clone(), targeting);
         let a = aggs.entry(key.clone()).or_default();
         let m = crate::brief::count_m_leads(&r.actions);
-        a.seven.spend += r.spend_num();
-        a.seven.impressions += r.impressions_num();
-        a.seven.clicks += r.clicks_num();
-        a.seven.m_leads += m;
+        if r.date_start >= d7_0s {
+            a.seven.spend += r.spend_num();
+            a.seven.impressions += r.impressions_num();
+            a.seven.clicks += r.clicks_num();
+            a.seven.m_leads += m;
+        }
         if r.date_start >= d0s {
             a.win.spend += r.spend_num();
             a.win.impressions += r.impressions_num();
@@ -74,8 +79,9 @@ pub(super) fn build(
     let lag_ist = d1_ist - 72 * 3600;
     type Hit = ((String, String), bool, bool, bool, i64);
     let mut hits: Vec<Hit> = Vec::new();
+    let ingest_lo_ist = d7_ist.min(d0_ist);
     crate::crm::for_each_ticket(&snap.crm, |t, ep| {
-        if ep < d7_ist || ep >= d1_ist {
+        if ep < ingest_lo_ist || ep >= d1_ist {
             return;
         }
         let aid = crate::crm::ticket_ad_id(t).unwrap_or_default();
@@ -88,8 +94,10 @@ pub(super) fn build(
     });
     for (key, q, v, b, ep) in hits {
         if let Some(a) = aggs.get_mut(&key) {
-            a.seven.l_leads += 1;
-            a.seven.qualified += q as u64;
+            if ep >= d7_ist {
+                a.seven.l_leads += 1;
+                a.seven.qualified += q as u64;
+            }
             if ep >= d0_ist {
                 a.win_crm.l_leads += 1;
                 a.win_crm.qualified += q as u64;

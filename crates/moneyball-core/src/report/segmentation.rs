@@ -86,6 +86,8 @@ pub(super) fn per_ad(snap: &Snapshot, d0s: &str, d1s: &str) -> BTreeMap<String, 
         .rows
         .iter()
         .filter(|l| {
+            // Date prefix is account-local; assumes ad-account tz == IST
+            // (matches the CRM/ads IST windows for our accounts).
             let d = l.created_time.get(..10).unwrap_or("");
             d >= d0s && d <= d1s
         })

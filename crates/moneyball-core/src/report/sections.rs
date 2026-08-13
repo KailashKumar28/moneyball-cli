@@ -53,7 +53,13 @@ pub(super) fn missing_banner(r: &CreativeReport) -> String {
             }
         }
         if n > 0 {
-            per.push(format!("{}: {} ({})", p.product, n, names.join(", ")));
+            // Escape here so the &middot; joiner below survives as-is.
+            per.push(format!(
+                "{}: {} ({})",
+                esc(&p.product),
+                n,
+                esc(&names.join(", "))
+            ));
             total += n;
         }
     }
@@ -64,7 +70,7 @@ pub(super) fn missing_banner(r: &CreativeReport) -> String {
         r#"<div class="missing"><b>{} lead(s) are missing from your CRM</b><p>They submitted your ad form on {} but never arrived in the CRM. They are paid for and still warm - a same-day call recovers them.</p><div class="mwhere">{}</div></div>"#,
         total,
         esc(&r.window.until),
-        esc(&per.join(" &middot; "))
+        per.join(" &middot; ")
     )
 }
 
@@ -73,15 +79,16 @@ fn delta_cell(cur: f64, prior: Option<f64>, money: bool, up_is_good: bool) -> St
         return String::new();
     };
     let d = cur - p;
-    if d == 0.0 {
+    let mag = d.abs().round() as u64;
+    if mag == 0 {
         return r#"<div class="okd">unchanged</div>"#.into();
     }
     let good = (d > 0.0) == up_is_good;
     let class = if good { "up" } else { "down" };
     let val = if money {
-        format!("Rs {}", commas(d.abs().round() as u64))
+        format!("Rs {}", commas(mag))
     } else {
-        commas(d.abs().round() as u64)
+        commas(mag)
     };
     format!(
         r#"<div class="okd {}">{}{} vs last</div>"#,
@@ -146,17 +153,12 @@ pub(super) fn scorecard(r: &CreativeReport, prior: Option<&CreativeReport>) -> (
         .cost_per_qualified
         .map(rupees)
         .unwrap_or_else(|| "-".into());
-    top += &tile(
-        cpq,
-        "Cost / qualified",
-        "c",
-        delta_cell(
-            p.cost_per_qualified.unwrap_or(0.0),
-            q.and_then(|x| x.cost_per_qualified),
-            true,
-            false,
-        ),
-    );
+    // No delta when today has no CPQ - a zero would paint a phantom win.
+    let cpq_delta = match p.cost_per_qualified {
+        Some(c) => delta_cell(c, q.and_then(|x| x.cost_per_qualified), true, false),
+        None => String::new(),
+    };
+    top += &tile(cpq, "Cost / qualified", "c", cpq_delta);
 
     let ctr = if p.impressions > 0 {
         format!("{:.1}%", p.clicks as f64 / p.impressions as f64 * 100.0)
@@ -229,11 +231,19 @@ pub(super) fn reconciliation(r: &CreativeReport) -> String {
             parts.push(format!("{} never arrived (see banner)", seg.uncaptured));
         }
         let _ = write!(s, " Of the gap of {}: {}.", gap, parts.join(", "));
-        if explained != gap {
+        if explained < gap {
             let _ = write!(
                 s,
                 " {} lead(s) are still syncing and not yet classified.",
-                (gap - explained).abs()
+                gap - explained
+            );
+        } else if explained > gap {
+            // Buckets over-explain: Meta's two reporting systems
+            // (insights actions vs lead forms) disagree - say so.
+            let _ = write!(
+                s,
+                " Counts from Meta's two reporting systems differ by {} - the breakdown above is from the lead forms.",
+                explained - gap
             );
         }
     }

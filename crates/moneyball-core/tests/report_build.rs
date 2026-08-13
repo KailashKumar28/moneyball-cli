@@ -214,6 +214,49 @@ fn build_groups_joins_and_orders_correctly() {
 }
 
 #[test]
+fn windows_beyond_7d_do_not_truncate_targeting_numbers() {
+    // Window 10 covers 07-28..08-06; the 7d basis is 07-31..08-06.
+    // A row on 07-29 belongs to the window but not the 7d basis.
+    let mut s = snapshot();
+    s.ads_daily.push(ad_row(
+        "a1",
+        "Income",
+        "NM Static",
+        "2026-07-29",
+        "400",
+        "4000",
+        5,
+    ));
+    let d1_ist = chrono::NaiveDate::from_ymd_opt(2026, 8, 6)
+        .unwrap()
+        .and_hms_opt(18, 30, 0)
+        .unwrap()
+        .and_utc()
+        .timestamp();
+    let early_ep = d1_ist - 86400 * 8 - 43200; // midday 07-29 IST
+    if let serde_json::Value::Array(tickets) = &mut s.crm {
+        tickets.push(json!({"ad_id": "a1", "stage": "Contactable", "delivery": early_ep}));
+    }
+
+    let r = report::build(&s, "ws", "2026-08-07T00:00:00Z", 10, None, None).unwrap();
+    let income = r.products[0]
+        .targetings
+        .iter()
+        .find(|t| t.targeting == "Income")
+        .unwrap();
+    // Window totals include the early row; the 7d basis excludes it.
+    assert!(
+        (income.window.spend - income.window_7d.spend - 400.0).abs() < 0.01,
+        "window {:?} vs 7d {:?}",
+        income.window,
+        income.window_7d
+    );
+    assert_eq!(income.window.m_leads, income.window_7d.m_leads + 5);
+    // Early CRM ticket counts in the window, not the 7d basis.
+    assert_eq!(income.window_crm.l_leads, income.window_7d.l_leads + 1);
+}
+
+#[test]
 fn no_creatives_file_falls_back_to_per_ad_cards() {
     let mut s = snapshot();
     s.creatives = None;

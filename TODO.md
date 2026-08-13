@@ -105,6 +105,18 @@ bottom after a release-sized batch.)
 
 ## Next
 
+- [ ] **Multi-day prior comparison**: `report::exec::load_prior` only
+      reads `creative-report.json`, but multi-day reports write
+      range-suffixed filenames - a weekly report can never find a prior
+      weekly, so G2 and scorecard deltas never fire for windows > 1.
+      Glob `creative-report*.json` and keep the window-length filter.
+- [ ] **Segmentation parity check: invalid leads seeding seen-sets**:
+      a lead classified `invalid` still seeds `seen_em`, so a later
+      valid-phone lead from the same person classifies `duplicate`
+      instead of staying recoverable. Verify against
+      `pipeline/weekly_funnel_report.lead_segmentation`; gate the
+      seen-set insert on classification if python does.
+
 - [ ] **Audit package G remainder** (structure P1/P2s from the 2026-07
       architecture audit): move `connect_flow.rs` orchestration into
       core behind an ask() seam; dedupe the three brief formatters;
