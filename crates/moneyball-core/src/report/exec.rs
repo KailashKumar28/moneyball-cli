@@ -153,8 +153,10 @@ fn line(tone: &str, text: String) -> ExecLine {
     }
 }
 
-/// The prior comparable report: latest reports/<d>/creative-report.json
-/// with d < report_date and the same window length.
+/// The prior comparable report: latest reports/<d>/creative-report*.json
+/// with d < report_date and the same window length. Multi-day reports
+/// carry a range suffix in the file name, so every json in the day's
+/// dir is a candidate; the window-length check picks the comparable one.
 pub(super) fn load_prior(
     reports_dir: &std::path::Path,
     report_date: &str,
@@ -168,22 +170,88 @@ pub(super) fn load_prior(
         .collect();
     dates.sort();
     for d in dates.iter().rev() {
-        let p = reports_dir.join(d).join("creative-report.json");
-        let Ok(raw) = std::fs::read_to_string(&p) else {
+        let Ok(entries) = std::fs::read_dir(reports_dir.join(d)) else {
             continue;
         };
-        let Ok(r) = serde_json::from_str::<CreativeReport>(&raw) else {
-            continue;
-        };
-        let len = chrono::NaiveDate::parse_from_str(&r.window.until, "%Y-%m-%d")
-            .and_then(|u| {
-                chrono::NaiveDate::parse_from_str(&r.window.since, "%Y-%m-%d")
-                    .map(|s| (u - s).num_days() + 1)
-            })
-            .unwrap_or(-1);
-        if len == window_days {
-            return Some(r);
+        for e in entries.filter_map(|e| e.ok()) {
+            let name = e.file_name();
+            let Some(name) = name.to_str() else { continue };
+            if !name.starts_with("creative-report") || !name.ends_with(".json") {
+                continue;
+            }
+            let Ok(raw) = std::fs::read_to_string(e.path()) else {
+                continue;
+            };
+            let Ok(r) = serde_json::from_str::<CreativeReport>(&raw) else {
+                continue;
+            };
+            let len = chrono::NaiveDate::parse_from_str(&r.window.until, "%Y-%m-%d")
+                .and_then(|u| {
+                    chrono::NaiveDate::parse_from_str(&r.window.since, "%Y-%m-%d")
+                        .map(|s| (u - s).num_days() + 1)
+                })
+                .unwrap_or(-1);
+            if len == window_days {
+                return Some(r);
+            }
         }
     }
     None
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// An empty-but-valid report for a given window; enough for the
+    /// loader's window-length matching.
+    fn report(since: &str, until: &str, report_date: &str) -> CreativeReport {
+        let snap = crate::snapshot::Snapshot {
+            path: std::path::PathBuf::from("/t"),
+            date: report_date.into(),
+            ads_daily: vec![],
+            adsets: serde_json::json!({}),
+            creatives: None,
+            crm: serde_json::json!({}),
+            leads: None,
+            crm_contacts: None,
+            regions: serde_json::json!([]),
+            changes: serde_json::json!([]),
+            campaigns: serde_json::json!([]),
+        };
+        let days = (chrono::NaiveDate::parse_from_str(until, "%Y-%m-%d").unwrap()
+            - chrono::NaiveDate::parse_from_str(since, "%Y-%m-%d").unwrap())
+        .num_days()
+            + 1;
+        crate::report::build(&snap, "ws", "t", days as u32, None, None).unwrap()
+    }
+
+    #[test]
+    fn prior_matches_window_length_across_suffixed_files() {
+        let tmp = std::env::temp_dir().join(format!("mb-exec-prior-{}", std::process::id()));
+        let day_dir = tmp.join("2026-08-01");
+        std::fs::create_dir_all(&day_dir).unwrap();
+        let daily = report("2026-07-31", "2026-07-31", "2026-08-01");
+        let weekly = report("2026-07-25", "2026-07-31", "2026-08-01");
+        std::fs::write(
+            day_dir.join("creative-report.json"),
+            serde_json::to_string(&daily).unwrap(),
+        )
+        .unwrap();
+        std::fs::write(
+            day_dir.join("creative-report-2026-07-25-to-2026-07-31.json"),
+            serde_json::to_string(&weekly).unwrap(),
+        )
+        .unwrap();
+
+        // A weekly run finds the range-suffixed weekly, not the daily.
+        let p = load_prior(&tmp, "2026-08-02", 7).expect("weekly prior");
+        assert_eq!(p.window.since, "2026-07-25");
+        // A daily run still finds the daily.
+        let p = load_prior(&tmp, "2026-08-02", 1).expect("daily prior");
+        assert_eq!(p.window.since, "2026-07-31");
+        // No comparable window length: none.
+        assert!(load_prior(&tmp, "2026-08-02", 30).is_none());
+        std::fs::remove_dir_all(&tmp).ok();
+    }
 }

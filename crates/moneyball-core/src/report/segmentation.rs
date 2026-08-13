@@ -82,14 +82,15 @@ pub(super) fn per_ad(snap: &Snapshot, d0s: &str, d1s: &str) -> BTreeMap<String, 
     }
 
     // Window leads in submission order (python sorts by created_time).
+    // Meta returns created_time in UTC (+0000); the window is IST
+    // calendar days, so convert before taking the date - ~10% of leads
+    // land on a different IST day than their UTC date (18:30-24:00 UTC).
     let mut window: Vec<&crate::schema::LeadRow> = leads
         .rows
         .iter()
         .filter(|l| {
-            // Date prefix is account-local; assumes ad-account tz == IST
-            // (matches the CRM/ads IST windows for our accounts).
-            let d = l.created_time.get(..10).unwrap_or("");
-            d >= d0s && d <= d1s
+            let d = ist_date(&l.created_time);
+            d.as_str() >= d0s && d.as_str() <= d1s
         })
         .collect();
     window.sort_by(|a, b| a.created_time.cmp(&b.created_time));
@@ -131,6 +132,18 @@ pub(super) fn per_ad(snap: &Snapshot, d0s: &str, d1s: &str) -> BTreeMap<String, 
     out
 }
 
+/// IST calendar date of a Meta lead timestamp (any UTC offset; Meta
+/// emits "+0000"). Unparseable input degrades to the raw date prefix.
+fn ist_date(created_time: &str) -> String {
+    match chrono::DateTime::parse_from_str(created_time, "%Y-%m-%dT%H:%M:%S%z") {
+        Ok(dt) => dt
+            .with_timezone(&chrono::FixedOffset::east_opt(5 * 3600 + 1800).expect("ist"))
+            .format("%Y-%m-%d")
+            .to_string(),
+        Err(_) => created_time.get(..10).unwrap_or("").to_string(),
+    }
+}
+
 /// python _norm_phone: digits only; strip a 91 country code or a
 /// leading 0 (Indian numbers).
 pub(super) fn norm_phone(p: &str) -> String {
@@ -152,6 +165,17 @@ pub(super) fn valid_phone(d: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn lead_dates_convert_utc_to_ist() {
+        // 19:30 UTC = 01:00 IST next day - the drift that misbucketed
+        // ~10% of real leads when we trusted the raw date prefix.
+        assert_eq!(ist_date("2026-08-11T19:30:00+0000"), "2026-08-12");
+        assert_eq!(ist_date("2026-08-11T06:30:00+0000"), "2026-08-11");
+        // Already-IST input is a no-op; garbage degrades to the prefix.
+        assert_eq!(ist_date("2026-08-11T23:00:00+0530"), "2026-08-11");
+        assert_eq!(ist_date("2026-08-11Tgarbage"), "2026-08-11");
+    }
 
     #[test]
     fn phone_normalization_matches_python() {

@@ -105,17 +105,16 @@ bottom after a release-sized batch.)
 
 ## Next
 
-- [ ] **Multi-day prior comparison**: `report::exec::load_prior` only
-      reads `creative-report.json`, but multi-day reports write
-      range-suffixed filenames - a weekly report can never find a prior
-      weekly, so G2 and scorecard deltas never fire for windows > 1.
-      Glob `creative-report*.json` and keep the window-length filter.
-- [ ] **Segmentation parity check: invalid leads seeding seen-sets**:
-      a lead classified `invalid` still seeds `seen_em`, so a later
-      valid-phone lead from the same person classifies `duplicate`
-      instead of staying recoverable. Verify against
-      `pipeline/weekly_funnel_report.lead_segmentation`; gate the
-      seen-set insert on classification if python does.
+- [x] **Multi-day prior comparison** (2026-08-13): load_prior scans
+      every `creative-report*.json` per day dir; the window-length
+      check picks the comparable one - weekly/month runs now get G2
+      and scorecard deltas.
+- [x] **Segmentation parity check** (2026-08-13): python seeds the
+      seen-sets unconditionally too (invalid leads included) - Rust
+      already matched, no change. Real find instead: Meta lead
+      created_time is UTC (+0000) while the window is IST days; ~10%
+      of live leads (18:30-24:00 UTC) bucketed to the wrong day.
+      Segmentation now converts to IST before dating, like python.
 
 - [ ] **Audit package G remainder** (structure P1/P2s from the 2026-07
       architecture audit): move `connect_flow.rs` orchestration into

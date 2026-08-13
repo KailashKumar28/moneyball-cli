@@ -206,7 +206,13 @@ fn seed() -> u32 {
         .map(|d| d.subsec_nanos())
         .unwrap_or(0);
     let n = COUNTER.fetch_add(1, Ordering::Relaxed);
-    let x = nanos ^ std::process::id().rotate_left(13) ^ n.rotate_left(24);
+    // Multiplicative mix (splitmix-style) so counter and clock disperse
+    // across all 32 bits - a plain xor left the counter in the high
+    // byte only, where a ~16.8ms clock delta could cancel it exactly.
+    let mut x = nanos ^ std::process::id().rotate_left(13) ^ n.wrapping_mul(0x9E37_79B9);
+    x ^= x >> 16;
+    x = x.wrapping_mul(0x85EB_CA6B);
+    x ^= x >> 13;
     // xorshift needs a non-zero state.
     if x == 0 {
         0x9E37_79B9
