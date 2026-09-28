@@ -2,7 +2,8 @@
 //! client-facing labels (2026-08-10 spec), the gap expander
 //! (already-in-CRM / repeat form-fill / invalid / missing), and the
 //! dead-tail collapse (zero-lead micro-spend creatives fold into one
-//! honest line instead of six rows of dashes).
+//! honest line instead of six rows of dashes). Also the per-product
+//! targeting ledger + cross-read panel.
 
 use std::fmt::Write as _;
 
@@ -158,4 +159,96 @@ fn live_since(created: Option<&str>, report_date: &str) -> String {
         }
         _ => esc(c),
     }
+}
+
+/// The per-product targeting block: subhead + open ledger + insight.
+pub(super) fn targeting_block(p: &ProductSection) -> String {
+    if p.targetings.is_empty() {
+        return String::new();
+    }
+    let mut out = format!(
+        r#"<div class="subhead" id="t-{}"><span>Targeting</span></div><div class="tgwrap"><table class="tgtable"><thead><tr><th>targeting (by spend)</th><th>spend</th><th>cost / meta lead</th><th>meta leads</th><th>crm leads</th><th>qualified</th><th>cost / qualified</th><th>7d: spend &middot; q &middot; cost/q</th><th>verdict</th></tr></thead><tbody>"#,
+        slug(&p.product)
+    );
+    for t in &p.targetings {
+        let w = &t.window;
+        let c = &t.window_crm;
+        let s7 = &t.window_7d;
+        let cpl = if w.m_leads > 0 {
+            rupees(w.spend / w.m_leads as f64)
+        } else {
+            "-".into()
+        };
+        let cpq = if c.qualified > 0 {
+            rupees(w.spend / c.qualified as f64)
+        } else {
+            "-".into()
+        };
+        let s7q = if s7.qualified > 0 {
+            format!(
+                "{} &middot; {} &middot; {}",
+                rupees(s7.spend),
+                s7.qualified,
+                rupees(s7.spend / s7.qualified as f64)
+            )
+        } else {
+            format!("{} &middot; 0 &middot; -", rupees(s7.spend))
+        };
+        let mut facts = String::new();
+        if let Some(sp) = &t.specs {
+            for f in [sp.age.as_deref(), sp.geo.as_deref(), sp.genders.as_deref()]
+                .into_iter()
+                .flatten()
+            {
+                if f != "-" && f != "all" {
+                    let _ = write!(facts, r#"<span class="fact">{}</span>"#, esc(f));
+                }
+            }
+            if let Some(l) = sp.learning.as_deref() {
+                if l != "SUCCESS" {
+                    let _ = write!(facts, r#"<span class="fact">{}</span>"#, esc(l));
+                }
+            }
+        }
+        let chips: String = t
+            .verdicts
+            .iter()
+            .map(|v| {
+                format!(
+                    r#"<span class="vchip {}" title="{}">{}</span> "#,
+                    esc(&v.code),
+                    esc(&v.detail),
+                    esc(&v.label)
+                )
+            })
+            .collect();
+        let dim = |v: u64| if v == 0 { r#" class="dim""# } else { "" };
+        let _ = write!(
+            out,
+            r#"<tr><td class="tg-nm">{}<span class="tg-arch">{}</span><span class="tg-facts">{}</span></td><td>{}</td><td>{}</td><td{}>{}</td><td{}>{}</td><td{}>{}</td><td>{}</td><td>{}</td><td class="tg-vd">{}</td></tr>"#,
+            esc(&t.targeting),
+            esc(&t.archetype),
+            facts,
+            rupees(w.spend),
+            cpl,
+            dim(w.m_leads),
+            w.m_leads,
+            dim(c.l_leads),
+            c.l_leads,
+            dim(c.qualified),
+            c.qualified,
+            cpq,
+            s7q,
+            chips.trim_end()
+        );
+    }
+    out.push_str("</tbody></table></div>");
+    if !p.cross_reads.is_empty() {
+        out.push_str(r#"<div class="insight"><div class="ins-h">Cross-read</div><ul>"#);
+        for line in &p.cross_reads {
+            let _ = write!(out, "<li>{}</li>", esc(line));
+        }
+        out.push_str("</ul></div>");
+    }
+    out
 }

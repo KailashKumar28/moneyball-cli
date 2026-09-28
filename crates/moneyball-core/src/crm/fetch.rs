@@ -389,7 +389,7 @@ fn request_page(
     // follows still surfaces structural errors.
     let bytes = resp
         .bytes()
-        .map_err(|e| Error::Config(format!("CRM response read failed: {}", e)))?;
+        .map_err(|e| Error::Config(format!("CRM response read failed: {}", e.without_url())))?;
     if !progress.agent {
         eprintln!(
             "    -> {} {} ({} bytes) in {}",
@@ -438,11 +438,8 @@ fn status_error(status: reqwest::StatusCode, bytes: &[u8]) -> Error {
 fn write_crm_json(cfg: &AppConfig, date: &str, crm: &Value) -> Result<PathBuf> {
     let dir = cfg.history_dir().join("snap").join(date);
     std::fs::create_dir_all(&dir)?;
-    let final_path = dir.join("crm.json");
-    let tmp = dir.join("crm.json.tmp");
-    std::fs::write(&tmp, serde_json::to_string_pretty(crm)?)?;
-    std::fs::rename(&tmp, &final_path)?;
-    Ok(final_path)
+    // Tickets carry phone/email/lead_id when the spec maps them.
+    crate::snapshot::write_private(&dir, "crm.json", serde_json::to_string_pretty(crm)?)
 }
 
 /// `crm_contacts.json` (0600 - raw PII) next to crm.json.
@@ -453,15 +450,11 @@ fn write_contacts(cfg: &AppConfig, date: &str, rows: Vec<crate::schema::ContactR
         rows,
     };
     let dir = cfg.history_dir().join("snap").join(date);
-    let path = dir.join("crm_contacts.json");
-    let tmp = dir.join("crm_contacts.json.tmp");
-    std::fs::write(&tmp, serde_json::to_string_pretty(&file)?)?;
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::PermissionsExt;
-        std::fs::set_permissions(&tmp, std::fs::Permissions::from_mode(0o600))?;
-    }
-    std::fs::rename(&tmp, &path)?;
+    crate::snapshot::write_private(
+        &dir,
+        "crm_contacts.json",
+        serde_json::to_string_pretty(&file)?,
+    )?;
     Ok(())
 }
 

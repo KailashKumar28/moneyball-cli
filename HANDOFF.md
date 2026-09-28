@@ -15,7 +15,7 @@ Meta-access-token paste in setup. See `handle_paste` in lib.rs and the 9
 
 `~/.moneyball/sessions/<id>.json`; CLI flags `-c`, `--resume <id>`, `--list`.
 IDs are `mb-<UTC-timestamp>-<4-char random>` to dodge same-second collisions
-when a user reruns quickly. See `crates/moneyball-core/src/session.rs`.
+when a user reruns quickly. See `crates/moneyball-core/src/session/id.rs`.
 
 ## 2026-07-14 - multi-line per-product brief
 

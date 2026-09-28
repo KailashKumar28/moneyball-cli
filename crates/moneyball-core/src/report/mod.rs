@@ -51,12 +51,23 @@ pub fn build(
     );
 
     // ---- per-ad delivery aggregates over the window ----
+    // Identity comes from the same join range as targeting.rs (window
+    // union trailing 7d), delivery from the window only: a ticket from
+    // an ad paused before the window still joins its card instead of
+    // being reported to the client as "organic".
+    let d7_0s = (d1 - Duration::days(6)).format("%Y-%m-%d").to_string();
+    let join_lo = d0s.clone().min(d7_0s);
     let mut ads: BTreeMap<String, AdAgg> = BTreeMap::new();
     for r in &snap.ads_daily {
-        if r.date_start < d0s || r.date_start > d1s {
+        if r.date_start < join_lo || r.date_start > d1s {
             continue;
         }
-        ads.entry(r.ad_id.clone()).or_default().add_row(r);
+        let a = ads.entry(r.ad_id.clone()).or_default();
+        if r.date_start >= d0s {
+            a.add_row(r);
+        } else {
+            a.note(r);
+        }
     }
 
     // ---- group ads by creative identity, product-scoped ----
@@ -208,7 +219,13 @@ pub struct ReportOutput {
 /// runner and the TUI /report worker.
 pub fn generate(cfg: &AppConfig, date: Option<&str>, window_days: u32) -> Result<ReportOutput> {
     let snap = crate::snapshot::load(&cfg.snap_for(date)?)?;
-    let workspace_id = ensure_workspace_id(cfg)?;
+    // Minted once at config load (config::WorkspaceConfig::load);
+    // report generation never writes outside reports/<date>/.
+    let workspace_id = cfg
+        .workspace
+        .as_ref()
+        .and_then(|w| w.workspace_id.clone())
+        .ok_or_else(|| Error::Config("no workspace configured - run /setup first".into()))?;
     let generated_at = chrono::Utc::now().format("%Y-%m-%dT%H:%M:%SZ").to_string();
     let reports_root = cfg.mb_dir().join("reports");
     let prior = exec::load_prior(&reports_root, &snap.date, window_days.max(1) as i64);
@@ -245,6 +262,17 @@ pub fn generate(cfg: &AppConfig, date: Option<&str>, window_days: u32) -> Result
         .as_ref()
         .and_then(|w| w.brand.clone())
         .unwrap_or_else(|| "Portfolio".into());
+    // The brand also names the file: keep it one safe path segment.
+    let file_brand: String = brand
+        .chars()
+        .map(|c| {
+            if c.is_alphanumeric() || c == '-' || c == '_' {
+                c
+            } else {
+                '-'
+            }
+        })
+        .collect();
     let fmt_day = |s: &str, f: &str| {
         chrono::NaiveDate::parse_from_str(s, "%Y-%m-%d")
             .map(|d| d.format(f).to_string())
@@ -253,14 +281,14 @@ pub fn generate(cfg: &AppConfig, date: Option<&str>, window_days: u32) -> Result
     let html_name = if window_days.max(1) > 1 {
         format!(
             "{}-{}-to-{}.html",
-            brand,
+            file_brand,
             fmt_day(&report.window.since, "%d-%b"),
             fmt_day(&report.window.until, "%d-%b-%Y")
         )
     } else {
         format!(
             "{}-Daily-{}.html",
-            brand,
+            file_brand,
             fmt_day(&report.window.until, "%d-%b-%Y")
         )
     };
@@ -289,47 +317,6 @@ pub fn run(cfg: &AppConfig, date: Option<&str>, window_days: u32) -> Result<()> 
     println!("report written: {}", out.json_path.display());
     println!("open in browser: {}", out.html_path.display());
     Ok(())
-}
-
-/// Stable workspace UUID, minted into config.json on first use - the
-/// tenant key before accounts exist (docs/CLOUD_PLAN.md hedge 2).
-pub fn ensure_workspace_id(cfg: &AppConfig) -> Result<String> {
-    let ws = cfg
-        .workspace
-        .as_ref()
-        .ok_or_else(|| Error::Config("no workspace configured - run /setup first".into()))?;
-    if let Some(id) = &ws.workspace_id {
-        return Ok(id.clone());
-    }
-    let id = mint_id(&cfg.data_root.display().to_string());
-    let mut ws2 = ws.clone();
-    ws2.workspace_id = Some(id.clone());
-    ws2.save(&cfg.data_root)?;
-    Ok(id)
-}
-
-/// UUID-shaped id from sha256(data_root, time, pid) - collision-safe
-/// across machines without a rand dependency.
-fn mint_id(seed: &str) -> String {
-    use sha2::{Digest, Sha256};
-    let now = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map(|d| d.as_nanos())
-        .unwrap_or(0);
-    let h = format!(
-        "{:x}",
-        Sha256::digest(format!("{}|{}|{}", seed, now, std::process::id()))
-    );
-    // Hex output is pure ASCII; .get() keeps the no-string-indexing rule.
-    let seg = |a: usize, b: usize| h.get(a..b).unwrap_or_default();
-    format!(
-        "{}-{}-{}-{}-{}",
-        seg(0, 8),
-        seg(8, 12),
-        seg(12, 16),
-        seg(16, 20),
-        seg(20, 32)
-    )
 }
 
 /// Plain-text rendering of the aggregate - the CLI output and the dry

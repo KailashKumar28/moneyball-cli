@@ -58,8 +58,9 @@ pub fn render(
             })
             .unwrap_or_else(|_| r.generated_at.clone());
         format!(
-            "Data: {}, full day &middot; pulled {} &middot; sources: Meta Ads + your CRM{}",
+            "Data: {}, {} &middot; pulled {} &middot; sources: Meta Ads + your CRM{}",
             esc(&window),
+            if multi { "full days" } else { "full day" },
             esc(&pulled),
             prior
                 .map(|p| format!(" &middot; compared with {}", esc(&p.window.until)))
@@ -79,7 +80,7 @@ pub fn render(
     let products_line = r
         .products
         .iter()
-        .map(|p| p.product.as_str())
+        .map(|p| esc(&p.product))
         .collect::<Vec<_>>()
         .join(" &middot; ");
 
@@ -97,7 +98,19 @@ pub fn render(
     TEMPLATE
         .replace(
             "{{TITLE}}",
-            &format!("{} Daily - {}", brand, r.window.until),
+            &if multi {
+                format!("{} - {} to {}", esc(brand), r.window.since, r.window.until)
+            } else {
+                format!("{} Daily - {}", esc(brand), r.window.until)
+            },
+        )
+        .replace(
+            "{{KICKER}}",
+            if multi {
+                "Period Performance"
+            } else {
+                "Daily Performance"
+            },
         )
         .replace("{{DAYLINE}}", &dayline)
         .replace("{{H1}}", &format!("{} Portfolio", esc(brand)))
@@ -132,7 +145,7 @@ fn render_section(
         esc(&p.product),
         product_kpis(&p.kpis),
         super::table::comparison_table(p, report_date),
-        super::sections::targeting_block(p),
+        super::table::targeting_block(p),
     );
     for (i, c) in p.creatives.iter().enumerate() {
         if is_dead_tail(c, p.kpis.spend) {

@@ -1,6 +1,6 @@
-//! Report page sections above/around the product blocks: exec brief,
+//! Report page sections above the product blocks: exec brief,
 //! missing-leads banner, portfolio scorecard (+deltas), reconciliation
-//! line, products-at-a-glance, and the per-product targeting block.
+//! line, products-at-a-glance.
 //! Pure string builders over the aggregate (client + UI specs
 //! 2026-08-10).
 
@@ -15,8 +15,14 @@ pub(super) fn exec_brief(r: &CreativeReport) -> String {
     if r.exec_brief.is_empty() {
         return String::new();
     }
-    let mut out = String::from(
-        r##"<div class="pblock" id="brief"><section><div class="seckick">Yesterday in brief</div><div class="insight exec"><ul>"##,
+    let heading = if r.window.since == r.window.until {
+        "Yesterday in brief"
+    } else {
+        "This period in brief"
+    };
+    let mut out = format!(
+        r##"<div class="pblock" id="brief"><section><div class="seckick">{}</div><div class="insight exec"><ul>"##,
+        heading
     );
     for l in &r.exec_brief {
         let (class, tag, tagc) = match l.tone.as_str() {
@@ -67,9 +73,17 @@ pub(super) fn missing_banner(r: &CreativeReport) -> String {
         return String::new(); // silence is the reward
     }
     format!(
-        r#"<div class="missing"><b>{} lead(s) are missing from your CRM</b><p>They submitted your ad form on {} but never arrived in the CRM. They are paid for and still warm - a same-day call recovers them.</p><div class="mwhere">{}</div></div>"#,
+        r#"<div class="missing"><b>{} lead(s) are missing from your CRM</b><p>They submitted your ad form {} but never arrived in the CRM. They are paid for and still warm - a same-day call recovers them.</p><div class="mwhere">{}</div></div>"#,
         total,
-        esc(&r.window.until),
+        if r.window.since == r.window.until {
+            format!("on {}", esc(&r.window.until))
+        } else {
+            format!(
+                "between {} and {}",
+                esc(&r.window.since),
+                esc(&r.window.until)
+            )
+        },
         per.join(" &middot; ")
     )
 }
@@ -102,6 +116,10 @@ fn delta_cell(cur: f64, prior: Option<f64>, money: bool, up_is_good: bool) -> St
 pub(super) fn scorecard(r: &CreativeReport, prior: Option<&CreativeReport>) -> (String, String) {
     let p = &r.portfolio;
     let q = prior.map(|x| &x.portfolio);
+    // CRM tiles compare only when both days have CRM data.
+    let qc = prior
+        .filter(|x| r.source.crm_present && x.source.crm_present)
+        .map(|x| &x.portfolio);
     let f = &p.funnel;
     let tile = |v: String, label: &str, dot: &str, delta: String| {
         format!(
@@ -133,7 +151,7 @@ pub(super) fn scorecard(r: &CreativeReport, prior: Option<&CreativeReport>) -> (
         "c",
         delta_cell(
             f.l_leads as f64,
-            q.map(|x| x.funnel.l_leads as f64),
+            qc.map(|x| x.funnel.l_leads as f64),
             false,
             true,
         ),
@@ -144,7 +162,7 @@ pub(super) fn scorecard(r: &CreativeReport, prior: Option<&CreativeReport>) -> (
         "c",
         delta_cell(
             f.qualified as f64,
-            q.map(|x| x.funnel.qualified as f64),
+            qc.map(|x| x.funnel.qualified as f64),
             false,
             true,
         ),
@@ -155,7 +173,7 @@ pub(super) fn scorecard(r: &CreativeReport, prior: Option<&CreativeReport>) -> (
         .unwrap_or_else(|| "-".into());
     // No delta when today has no CPQ - a zero would paint a phantom win.
     let cpq_delta = match p.cost_per_qualified {
-        Some(c) => delta_cell(c, q.and_then(|x| x.cost_per_qualified), true, false),
+        Some(c) => delta_cell(c, qc.and_then(|x| x.cost_per_qualified), true, false),
         None => String::new(),
     };
     top += &tile(cpq, "Cost / qualified", "c", cpq_delta);
@@ -295,97 +313,5 @@ pub(super) fn glance(r: &CreativeReport) -> String {
         );
     }
     out.push_str("</tbody></table></div>");
-    out
-}
-
-/// The per-product targeting block: subhead + open ledger + insight.
-pub(super) fn targeting_block(p: &ProductSection) -> String {
-    if p.targetings.is_empty() {
-        return String::new();
-    }
-    let mut out = format!(
-        r#"<div class="subhead" id="t-{}"><span>Targeting</span></div><div class="tgwrap"><table class="tgtable"><thead><tr><th>targeting (by spend)</th><th>spend</th><th>cost / meta lead</th><th>meta leads</th><th>crm leads</th><th>qualified</th><th>cost / qualified</th><th>7d: spend &middot; q &middot; cost/q</th><th>verdict</th></tr></thead><tbody>"#,
-        slug(&p.product)
-    );
-    for t in &p.targetings {
-        let w = &t.window;
-        let c = &t.window_crm;
-        let s7 = &t.window_7d;
-        let cpl = if w.m_leads > 0 {
-            rupees(w.spend / w.m_leads as f64)
-        } else {
-            "-".into()
-        };
-        let cpq = if c.qualified > 0 {
-            rupees(w.spend / c.qualified as f64)
-        } else {
-            "-".into()
-        };
-        let s7q = if s7.qualified > 0 {
-            format!(
-                "{} &middot; {} &middot; {}",
-                rupees(s7.spend),
-                s7.qualified,
-                rupees(s7.spend / s7.qualified as f64)
-            )
-        } else {
-            format!("{} &middot; 0 &middot; -", rupees(s7.spend))
-        };
-        let mut facts = String::new();
-        if let Some(sp) = &t.specs {
-            for f in [sp.age.as_deref(), sp.geo.as_deref(), sp.genders.as_deref()]
-                .into_iter()
-                .flatten()
-            {
-                if f != "-" && f != "all" {
-                    let _ = write!(facts, r#"<span class="fact">{}</span>"#, esc(f));
-                }
-            }
-            if let Some(l) = sp.learning.as_deref() {
-                if l != "SUCCESS" {
-                    let _ = write!(facts, r#"<span class="fact">{}</span>"#, esc(l));
-                }
-            }
-        }
-        let chips: String = t
-            .verdicts
-            .iter()
-            .map(|v| {
-                format!(
-                    r#"<span class="vchip {}" title="{}">{}</span> "#,
-                    esc(&v.code),
-                    esc(&v.detail),
-                    esc(&v.label)
-                )
-            })
-            .collect();
-        let dim = |v: u64| if v == 0 { r#" class="dim""# } else { "" };
-        let _ = write!(
-            out,
-            r#"<tr><td class="tg-nm">{}<span class="tg-arch">{}</span><span class="tg-facts">{}</span></td><td>{}</td><td>{}</td><td{}>{}</td><td{}>{}</td><td{}>{}</td><td>{}</td><td>{}</td><td class="tg-vd">{}</td></tr>"#,
-            esc(&t.targeting),
-            esc(&t.archetype),
-            facts,
-            rupees(w.spend),
-            cpl,
-            dim(w.m_leads),
-            w.m_leads,
-            dim(c.l_leads),
-            c.l_leads,
-            dim(c.qualified),
-            c.qualified,
-            cpq,
-            s7q,
-            chips.trim_end()
-        );
-    }
-    out.push_str("</tbody></table></div>");
-    if !p.cross_reads.is_empty() {
-        out.push_str(r#"<div class="insight"><div class="ins-h">Cross-read</div><ul>"#);
-        for line in &p.cross_reads {
-            let _ = write!(out, "<li>{}</li>", esc(line));
-        }
-        out.push_str("</ul></div>");
-    }
     out
 }

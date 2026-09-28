@@ -79,11 +79,11 @@ pub fn fetch_and_write(
                 ("thumbnail_height", "1080"),
             ])
             .send()
-            .map_err(|e| Error::Meta(format!("creatives network: {}", e)))?;
+            .map_err(|e| crate::meta::net_err("creatives network", e))?;
         let status = resp.status();
         let body: Value = resp
             .json()
-            .map_err(|e| Error::Meta(format!("creatives json: {}", e)))?;
+            .map_err(|e| crate::meta::net_err("creatives json", e))?;
         if !status.is_success() {
             let msg = body
                 .pointer("/error/message")
@@ -231,7 +231,7 @@ fn download_image(
     let resp = client
         .get(url)
         .send()
-        .map_err(|e| Error::Meta(format!("image network: {}", e)))?;
+        .map_err(|e| crate::meta::net_err("image network", e))?;
     if !resp.status().is_success() {
         return Err(Error::Meta(format!("image HTTP {}", resp.status())));
     }
@@ -243,7 +243,7 @@ fn download_image(
         .to_string();
     let bytes = resp
         .bytes()
-        .map_err(|e| Error::Meta(format!("image body: {}", e)))?;
+        .map_err(|e| crate::meta::net_err("image body", e))?;
     if bytes.is_empty() {
         return Err(Error::Meta("image body empty".into()));
     }

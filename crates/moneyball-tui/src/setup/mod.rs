@@ -748,7 +748,11 @@ fn advance_save(app: &mut App, s: &mut SetupState) {
     // about: the minted workspace_id and the CRM config survive.
     let prev = app.cfg.workspace.as_ref();
     let cfg = WorkspaceConfig {
-        workspace_id: prev.and_then(|w| w.workspace_id.clone()),
+        workspace_id: prev.and_then(|w| w.workspace_id.clone()).or_else(|| {
+            Some(moneyball_core::config::mint_workspace_id(
+                &app.cfg.data_root,
+            ))
+        }),
         brand: prev.and_then(|w| w.brand.clone()),
         products,
         goals: goals_map,

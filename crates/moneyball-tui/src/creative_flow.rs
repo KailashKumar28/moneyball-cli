@@ -12,11 +12,27 @@ pub(crate) fn run_report(app: &mut App, arg: &str) {
         return;
     }
     // Optional arg: trailing window in days ("/report 7"); default 1.
-    let window: u32 = arg.trim().parse().unwrap_or(1);
+    // Anything else is a typo, never a silent 1-day report.
+    let window: u32 = match arg.trim() {
+        "" => 1,
+        a => match a.parse::<u32>() {
+            Ok(n) if n >= 1 => n,
+            _ => {
+                app.chat.push(Cell::System(cells::System(format!(
+                    "usage: /report [days] - e.g. /report 7 (got \"{}\")",
+                    a
+                ))));
+                return;
+            }
+        },
+    };
+    // The session's --date pins the snapshot, same as /funnel.
+    let date = app.cfg.date.clone();
     app.chat.push(Cell::AssistantText(cells::AssistantText {
         text: format!(
-            "building the creative report ({}d window) from the latest snapshot...",
-            window.max(1)
+            "building the creative report ({}d window) from the {} snapshot...",
+            window,
+            date.as_deref().unwrap_or("latest")
         ),
         streaming: false,
     }));
@@ -24,7 +40,7 @@ pub(crate) fn run_report(app: &mut App, arg: &str) {
     let cfg = app.cfg.clone();
     std::thread::spawn(move || {
         let started = std::time::Instant::now();
-        let ev = match moneyball_core::report::generate(&cfg, None, window) {
+        let ev = match moneyball_core::report::generate(&cfg, date.as_deref(), window) {
             Ok(out) => StreamEvent::ReportDone {
                 out: Box::new(out),
                 ms: started.elapsed().as_millis() as u64,

@@ -64,6 +64,13 @@ pub(super) fn per_ad(snap: &Snapshot, d0s: &str, d1s: &str) -> BTreeMap<String, 
             }
         }
     });
+    // No join keys in the CRM (no crm.json yet, or a spec that predates
+    // the lead_id/phone/email map): every lead would read "uncaptured"
+    // and paint a false red banner. No segmentation beats a wrong one.
+    if cam_ids.is_empty() && cam_ph.is_empty() && cam_em.is_empty() {
+        return BTreeMap::new();
+    }
+
     // Organic tickets never join a campaign but their contacts make a
     // window lead a RE-INQUIRY, not a new person.
     for c in snap.crm_contacts.iter().flat_map(|f| f.rows.iter()) {

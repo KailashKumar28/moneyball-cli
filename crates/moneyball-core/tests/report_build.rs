@@ -257,6 +257,73 @@ fn windows_beyond_7d_do_not_truncate_targeting_numbers() {
 }
 
 #[test]
+fn tickets_join_ads_that_delivered_before_the_window() {
+    let mut s = snapshot();
+    // a5 delivered on 08-04 only; the 1-day window is 08-06.
+    s.ads_daily.push(ad_row(
+        "a5",
+        "Income",
+        "Paused Ad",
+        "2026-08-04",
+        "80",
+        "800",
+        1,
+    ));
+    // Delivered exactly at IST midnight starting 08-06.
+    let start_of_day = epoch_in_window() - 43200;
+    if let serde_json::Value::Array(t) = &mut s.crm {
+        t.push(json!({"ad_id": "a5", "stage": "Contactable", "delivery": start_of_day}));
+    }
+    let r = report::build(&s, "ws", "t", 1, None, None).unwrap();
+    assert_eq!(r.portfolio.unattributed_l_leads, 1, "only zz-not-an-ad");
+    let card = r.products[0]
+        .creatives
+        .iter()
+        .find(|c| c.ad_ids.iter().any(|a| a == "a5"))
+        .expect("a5 keeps a card through its CRM lead");
+    assert_eq!(card.delivery.spend, 0.0, "pre-window delivery excluded");
+    assert_eq!(card.funnel[3].count, 1);
+    // A midnight delivery lands on its own day's trend bucket, and the
+    // bucket exists although a5 did not deliver that day.
+    assert_eq!(card.trend[0].date, "2026-08-06");
+    assert_eq!(card.trend[0].l_leads, 1);
+}
+
+#[test]
+fn segmentation_needs_crm_join_keys() {
+    let mut s = snapshot();
+    s.leads = Some(LeadsFile {
+        schema: LEADS_SCHEMA.into(),
+        fetched_at: String::new(),
+        rows: vec![LeadRow {
+            lead_id: "L1".into(),
+            ad_id: "a1".into(),
+            created_time: "2026-08-06T06:00:00+0000".into(),
+            phone: Some("9876543210".into()),
+            ..Default::default()
+        }],
+    });
+    // Tickets carry no lead_id/phone/email (a pre-map spec): no
+    // breakdown at all, never a false "missing from CRM" banner.
+    let r = report::build(&s, "ws", "t", 1, None, None).unwrap();
+    assert!(r.products[0]
+        .creatives
+        .iter()
+        .all(|c| c.segmentation.is_none()));
+    // Once a ticket carries the lead_id, the lead classifies captured.
+    if let serde_json::Value::Array(t) = &mut s.crm {
+        t[0]["lead_id"] = json!("L1");
+    }
+    let r = report::build(&s, "ws", "t", 1, None, None).unwrap();
+    let seg = r.products[0]
+        .creatives
+        .iter()
+        .find_map(|c| c.segmentation.clone())
+        .unwrap();
+    assert_eq!((seg.captured, seg.uncaptured), (1, 0));
+}
+
+#[test]
 fn no_creatives_file_falls_back_to_per_ad_cards() {
     let mut s = snapshot();
     s.creatives = None;
@@ -282,6 +349,24 @@ fn empty_crm_flags_source_and_zero_funnel() {
     // Text summary renders without CRM (bot-renderer dry run).
     let txt = report::text_summary(&r);
     assert!(txt.contains("CREATIVE REPORT"), "{}", txt);
+
+    // Against a prior WITH CRM, the brief must not narrate the zeros as
+    // a collapse (seen live: "fell to 0 qualified (3 in the last report)").
+    let with_crm = report::build(&snapshot(), "ws", "t", 1, None, None).unwrap();
+    let r = report::build(&s, "ws", "t", 1, None, Some(&with_crm)).unwrap();
+    let lines: Vec<&str> = r.exec_brief.iter().map(|l| l.text.as_str()).collect();
+    assert!(
+        lines
+            .iter()
+            .all(|l| !l.contains("fell to") && !l.contains("0 qualified")),
+        "{:?}",
+        lines
+    );
+    assert!(
+        lines.iter().any(|l| l.contains("CRM data missing")),
+        "{:?}",
+        lines
+    );
 }
 
 #[test]

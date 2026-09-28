@@ -45,11 +45,11 @@ pub fn fetch_and_write(
                 ("fields", ADSET_FIELDS),
             ])
             .send()
-            .map_err(|e| Error::Meta(format!("adsets network: {}", e)))?;
+            .map_err(|e| crate::meta::net_err("adsets network", e))?;
         let status = resp.status();
         let body: Value = resp
             .json()
-            .map_err(|e| Error::Meta(format!("adsets json: {}", e)))?;
+            .map_err(|e| crate::meta::net_err("adsets json", e))?;
         if !status.is_success() {
             let msg = body
                 .pointer("/error/message")

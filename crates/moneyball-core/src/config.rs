@@ -66,9 +66,9 @@ fn default_adset_id_path() -> String {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct WorkspaceConfig {
-    /// Stable workspace UUID, minted by the first `moneyball report`
-    /// run. Every pushed/synced artifact carries it - the tenant key
-    /// before accounts exist (docs/CLOUD_PLAN.md).
+    /// Stable workspace UUID, minted once when the config is first
+    /// loaded or saved by /setup. Every pushed/synced artifact carries
+    /// it - the tenant key before accounts exist (docs/CLOUD_PLAN.md).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub workspace_id: Option<String>,
     /// Client-facing brand for report mastheads/filenames ("Fincity").
@@ -124,8 +124,15 @@ impl WorkspaceConfig {
             });
         }
         let raw = std::fs::read_to_string(&path)?;
-        let cfg: WorkspaceConfig = serde_json::from_str(&raw)
+        let mut cfg: WorkspaceConfig = serde_json::from_str(&raw)
             .map_err(|e| Error::Config(format!("{}: {}", path.display(), e)))?;
+        // One-time mint, here and nowhere else at runtime: every loaded
+        // workspace has its id, so report generation only reads it and
+        // an in-memory clone can never mint a second one.
+        if cfg.workspace_id.is_none() {
+            cfg.workspace_id = Some(mint_workspace_id(data_root));
+            cfg.save(data_root)?;
+        }
         Ok(cfg)
     }
 
@@ -154,6 +161,35 @@ impl WorkspaceConfig {
         std::fs::write(&path, pretty)?;
         Ok(())
     }
+}
+
+/// UUID-shaped id from sha256(data_root, time, pid) - collision-safe
+/// across machines without a rand dependency.
+pub fn mint_workspace_id(data_root: &Path) -> String {
+    use sha2::{Digest, Sha256};
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_nanos())
+        .unwrap_or(0);
+    let h = format!(
+        "{:x}",
+        Sha256::digest(format!(
+            "{}|{}|{}",
+            data_root.display(),
+            now,
+            std::process::id()
+        ))
+    );
+    // Hex output is pure ASCII; .get() keeps the no-string-indexing rule.
+    let seg = |a: usize, b: usize| h.get(a..b).unwrap_or_default();
+    format!(
+        "{}-{}-{}-{}-{}",
+        seg(0, 8),
+        seg(8, 12),
+        seg(12, 16),
+        seg(16, 20),
+        seg(20, 32)
+    )
 }
 
 #[derive(Debug, Clone)]
@@ -293,8 +329,12 @@ fn resolve_data_root(cli_arg: Option<&str>) -> Result<PathBuf> {
     // A configured workspace in the current directory beats global
     // defaults and the legacy walk-up heuristics below (AGENTS lesson:
     // defaults adapt to where the user is).
+    // Never HOME itself: there ~/.moneyball/config.json is the global
+    // data_root pointer, not a workspace config.
     if let Ok(cwd) = std::env::current_dir() {
-        if cwd.join(DOT_DIR).join("config.json").is_file() {
+        let canon = |p: &Path| p.canonicalize().unwrap_or_else(|_| p.to_path_buf());
+        let is_home = dirs_home().is_some_and(|h| canon(&h) == canon(&cwd));
+        if !is_home && cwd.join(DOT_DIR).join("config.json").is_file() {
             return Ok(cwd);
         }
     }

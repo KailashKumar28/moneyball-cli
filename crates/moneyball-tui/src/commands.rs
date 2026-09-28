@@ -534,20 +534,18 @@ impl moneyball_core::agent::ToolExec for SnapshotTools {
                 Ok(out)
             }
             "funnel" => {
-                let products: Vec<String> = self
+                // Same resolver as typed /funnel and the CLI: the model's
+                // shorthand ("Namma Mane") must resolve like a user's.
+                let products = self
                     .cfg
                     .workspace
                     .as_ref()
-                    .map(|w| w.products.iter().map(|p| p.name.clone()).collect())
+                    .map(|w| w.products.as_slice())
                     .unwrap_or_default();
-                let product = args.get("product").and_then(|p| p.as_str()).unwrap_or("");
-                if !products.iter().any(|p| p == product) {
-                    return Err(format!(
-                        "unknown product \"{}\" - pass one of: {}",
-                        product,
-                        products.join(", ")
-                    ));
-                }
+                let product = moneyball_core::product::resolve_product(
+                    args.get("product").and_then(|p| p.as_str()).unwrap_or(""),
+                    products,
+                )?;
                 let snap = self.snap()?;
                 let rows = moneyball_core::funnel::compute(
                     &snap,

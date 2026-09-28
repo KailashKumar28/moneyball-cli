@@ -120,7 +120,7 @@ pub fn fetch_snapshot(cfg: &AppConfig, token: &str, days: u32) -> Result<FetchRe
     // Per-lead capture (Diff breakdown). Same best-effort contract: a
     // token without leads_retrieval warns, never loses the snapshot.
     let (leads, leads_error) = match leads::fetch_and_write(&client, token, &all_rows, &path) {
-        Ok(n) => (n, None),
+        Ok((n, warn)) => (n, warn),
         Err(e) => (0, Some(e.to_string())),
     };
 
@@ -175,11 +175,9 @@ fn fetch_account_rows(
             // paging.next is a complete URL (token included) - follow as-is.
             client.get(&url).send()
         }
-        .map_err(|e| Error::Meta(format!("network: {}", e)))?;
+        .map_err(|e| crate::meta::net_err("network", e))?;
         let status = resp.status();
-        let body: serde_json::Value = resp
-            .json()
-            .map_err(|e| Error::Meta(format!("json: {}", e)))?;
+        let body: serde_json::Value = resp.json().map_err(|e| crate::meta::net_err("json", e))?;
         if !status.is_success() {
             let msg = body
                 .pointer("/error/message")

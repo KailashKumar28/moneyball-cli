@@ -122,11 +122,7 @@ fn parse_creatives(v: serde_json::Value) -> Option<crate::schema::CreativesFile>
     use crate::schema::{CreativeRow, CreativesFile, CREATIVES_SCHEMA};
     match v {
         serde_json::Value::Object(_) => {
-            let schema_ok = v
-                .get("schema")
-                .and_then(|s| s.as_str())
-                .is_some_and(|s| s == CREATIVES_SCHEMA || s.starts_with("moneyball.creatives/1"));
-            if !schema_ok {
+            if !same_major(&v, CREATIVES_SCHEMA) {
                 return None; // unknown major: absent, not garbage
             }
             serde_json::from_value(v).ok()
@@ -184,8 +180,16 @@ pub fn load(snap_path: &Path) -> Result<Snapshot> {
             "adsets" => adsets = v,
             "creatives" => creatives = parse_creatives(v),
             "crm" => crm = v,
-            "leads" => leads = serde_json::from_value(v).ok(),
-            "crm_contacts" => crm_contacts = serde_json::from_value(v).ok(),
+            "leads" => {
+                leads = same_major(&v, crate::schema::LEADS_SCHEMA)
+                    .then(|| serde_json::from_value(v).ok())
+                    .flatten()
+            }
+            "crm_contacts" => {
+                crm_contacts = same_major(&v, crate::schema::CRM_CONTACTS_SCHEMA)
+                    .then(|| serde_json::from_value(v).ok())
+                    .flatten()
+            }
             "regions" => regions = v,
             "changes" => changes = v,
             "campaigns" => campaigns = v,
@@ -205,6 +209,28 @@ pub fn load(snap_path: &Path) -> Result<Snapshot> {
         changes,
         campaigns,
     })
+}
+
+/// Versioning policy (docs/schemas): a reader accepts exactly its own
+/// major; an unknown major is absent, never misread field-by-name.
+fn same_major(v: &serde_json::Value, want: &str) -> bool {
+    v.get("schema").and_then(|s| s.as_str()) == Some(want)
+}
+
+/// Atomic owner-only (0600) artifact write for raw contact PII
+/// (leads.json, crm.json, crm_contacts.json): temp-then-rename, same
+/// posture as ~/.moneyball/auth.json. Returns the final path.
+pub(crate) fn write_private(dir: &Path, name: &str, body: String) -> Result<PathBuf> {
+    let path = dir.join(name);
+    let tmp = dir.join(format!("{}.tmp", name));
+    std::fs::write(&tmp, body)?;
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::set_permissions(&tmp, std::fs::Permissions::from_mode(0o600))?;
+    }
+    std::fs::rename(&tmp, &path)?;
+    Ok(path)
 }
 
 pub fn list_dates(snap_root: &Path) -> Result<Vec<String>> {

@@ -116,6 +116,11 @@ bottom after a release-sized batch.)
       of live leads (18:30-24:00 UTC) bucketed to the wrong day.
       Segmentation now converts to IST before dating, like python.
 
+- [ ] **Leads pull cost**: `fetch/leads.rs` does one sequential GET
+      per ad and pulls each ad's lifetime leads. Add a `time_created`
+      filter (validate live first) or batch once /fetch on 200+ ads
+      starts to hurt. Marked `ponytail:` in code.
+
 - [ ] **Audit package G remainder** (structure P1/P2s from the 2026-07
       architecture audit): move `connect_flow.rs` orchestration into
       core behind an ask() seam; dedupe the three brief formatters;

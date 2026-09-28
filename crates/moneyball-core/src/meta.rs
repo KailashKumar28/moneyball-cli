@@ -46,11 +46,9 @@ pub fn validate_token(token: &str) -> Result<()> {
         .get(&url)
         .query(&[("access_token", token), ("fields", "id,name")])
         .send()
-        .map_err(|e| Error::Meta(format!("network: {}", e)))?;
+        .map_err(|e| crate::meta::net_err("network", e))?;
     let status = resp.status();
-    let body: serde_json::Value = resp
-        .json()
-        .map_err(|e| Error::Meta(format!("json: {}", e)))?;
+    let body: serde_json::Value = resp.json().map_err(|e| crate::meta::net_err("json", e))?;
     if !status.is_success() {
         return Err(Error::Meta(parse_error(&body, status)));
     }
@@ -69,11 +67,9 @@ pub fn list_ad_accounts(token: &str) -> Result<Vec<AdAccount>> {
             ("limit", "200"),
         ])
         .send()
-        .map_err(|e| Error::Meta(format!("network: {}", e)))?;
+        .map_err(|e| crate::meta::net_err("network", e))?;
     let status = resp.status();
-    let body: serde_json::Value = resp
-        .json()
-        .map_err(|e| Error::Meta(format!("json: {}", e)))?;
+    let body: serde_json::Value = resp.json().map_err(|e| crate::meta::net_err("json", e))?;
     if !status.is_success() {
         return Err(Error::Meta(parse_error(&body, status)));
     }
@@ -87,6 +83,13 @@ fn http_client() -> Result<reqwest::blocking::Client> {
         .timeout(std::time::Duration::from_secs(15))
         .build()
         .map_err(|e| Error::Meta(format!("client: {}", e)))
+}
+
+/// Transport/body error with the URL stripped: every Meta GET carries
+/// access_token in the query string (paging.next URLs embed it too),
+/// and reqwest's Display appends "for url (...)".
+pub(crate) fn net_err(what: &str, e: reqwest::Error) -> Error {
+    Error::Meta(format!("{}: {}", what, e.without_url()))
 }
 
 fn parse_error(body: &serde_json::Value, status: reqwest::StatusCode) -> String {
@@ -106,4 +109,22 @@ pub fn account_id_for_storage(act_id_or_id: &str) -> String {
         .strip_prefix("act_")
         .unwrap_or(act_id_or_id)
         .to_string()
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn net_err_never_carries_the_token() {
+        // Port 1 on loopback refuses instantly - a real reqwest error.
+        let e = reqwest::blocking::Client::new()
+            .get("http://127.0.0.1:1/x?access_token=SECRET123")
+            .send()
+            .unwrap_err();
+        assert!(
+            e.to_string().contains("SECRET123"),
+            "premise: reqwest leaks the url"
+        );
+        let msg = super::net_err("leads network", e).to_string();
+        assert!(!msg.contains("SECRET123"), "{}", msg);
+    }
 }

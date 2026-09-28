@@ -29,13 +29,19 @@ pub(super) struct AdAgg {
 }
 
 impl AdAgg {
-    pub fn add_row(&mut self, r: &AdsDailyRow) {
+    /// Identity only (first row wins): lets a CRM ticket join an ad
+    /// that delivered before the window but not inside it.
+    pub fn note(&mut self, r: &AdsDailyRow) {
         if self.ad_name.is_empty() {
             self.product = r._product.clone();
             self.ad_name = r.ad_name.clone();
             self.campaign = r.campaign_name.clone();
             self.targeting = base_targeting(&r.adset_name);
         }
+    }
+
+    pub fn add_row(&mut self, r: &AdsDailyRow) {
+        self.note(r);
         let m = crate::brief::count_m_leads(&r.actions);
         self.spend += r.spend_num();
         self.impressions += r.impressions_num();
@@ -261,19 +267,26 @@ impl GroupAgg {
         t.1.qualified += q as u64;
         t.1.visit += v as u64;
         t.1.booking += b as u64;
-        // Trend bucket by IST calendar day of the delivery epoch.
-        let day_offset = (crate::brief::ist_midnight_epoch(snap_date) - ep) / 86400;
+        // Trend bucket by IST calendar day of the delivery epoch. The -1
+        // keeps an exact IST midnight on its own day; the bucket is made
+        // on demand (a ticket can land on a day the ad did not deliver).
+        let day_offset = (crate::brief::ist_midnight_epoch(snap_date) - 1 - ep).div_euclid(86400);
         if let Some(date) = snap_date
             .pred_opt()
             .and_then(|d| d.checked_sub_days(chrono::Days::new(day_offset.max(0) as u64)))
             .map(|d| d.format("%Y-%m-%d").to_string())
         {
-            if let Some(bucket) = self.daily.get_mut(&date) {
-                bucket.l_leads += 1;
-                bucket.qualified += q as u64;
-                bucket.visit += v as u64;
-                bucket.booking += b as u64;
-            }
+            let bucket = self
+                .daily
+                .entry(date.clone())
+                .or_insert_with(|| TrendBucket {
+                    date,
+                    ..Default::default()
+                });
+            bucket.l_leads += 1;
+            bucket.qualified += q as u64;
+            bucket.visit += v as u64;
+            bucket.booking += b as u64;
         }
     }
 }

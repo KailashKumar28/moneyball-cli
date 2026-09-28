@@ -10,6 +10,9 @@ pub(super) fn brief(r: &CreativeReport, prior: Option<&CreativeReport>) -> Vec<E
     let mut out: Vec<ExecLine> = Vec::new();
     let p = &r.portfolio;
     let quiet = p.funnel.m_leads < 3;
+    // Without CRM data every L/Q count is a zero, not a truth: CRM-
+    // derived lines (G2 mover, G4 leak) must not fire on it.
+    let crm = r.source.crm_present;
 
     // G1 - missing (uncaptured) leads: always first when present.
     let uncap: u64 = each_card(r)
@@ -28,7 +31,7 @@ pub(super) fn brief(r: &CreativeReport, prior: Option<&CreativeReport>) -> Vec<E
 
     if !quiet {
         // G2 - qualified mover vs the prior comparable report.
-        if let Some(prev) = prior {
+        if let Some(prev) = prior.filter(|x| crm && x.source.crm_present) {
             let mut best: Option<(i64, &ProductSection, u64)> = None;
             for ps in &r.products {
                 if let Some(pp) = prev.products.iter().find(|x| x.product == ps.product) {
@@ -84,7 +87,8 @@ pub(super) fn brief(r: &CreativeReport, prior: Option<&CreativeReport>) -> Vec<E
                 c.delivery.spend >= 2000f64.max(0.15 * pspend) && c.funnel[4].count == 0
             })
             .max_by(|a, b| a.0.delivery.spend.total_cmp(&b.0.delivery.spend));
-        if let Some((c, prod, _)) = leak.filter(|(c, ..)| c.delivery.spend >= 0.10 * p.spend) {
+        if let Some((c, prod, _)) = leak.filter(|(c, ..)| crm && c.delivery.spend >= 0.10 * p.spend)
+        {
             out.push(line(
                 "watch",
                 format!(
@@ -113,21 +117,30 @@ pub(super) fn brief(r: &CreativeReport, prior: Option<&CreativeReport>) -> Vec<E
     }
 
     // G6 - guaranteed baseline.
-    let base =
-        if p.funnel.qualified == 0 {
-            format!(
-                "Rs {:.0} across {} projects -> {} CRM leads, none qualified yet.",
-                p.spend,
-                r.products.len(),
-                p.funnel.l_leads
-            )
-        } else {
-            format!(
+    let base = if !crm {
+        format!(
+            "Rs {:.0} across {} projects -> {} Meta leads. CRM data missing for this day - run a CRM fetch for the funnel.",
+            p.spend,
+            r.products.len(),
+            p.funnel.m_leads
+        )
+    } else if p.funnel.qualified == 0 {
+        format!(
+            "Rs {:.0} across {} projects -> {} CRM leads, none qualified yet.",
+            p.spend,
+            r.products.len(),
+            p.funnel.l_leads
+        )
+    } else {
+        format!(
             "Rs {:.0} across {} projects -> {} CRM leads, {} qualified (Rs {:.0} per qualified).",
-            p.spend, r.products.len(), p.funnel.l_leads, p.funnel.qualified,
+            p.spend,
+            r.products.len(),
+            p.funnel.l_leads,
+            p.funnel.qualified,
             p.cost_per_qualified.unwrap_or(0.0)
         )
-        };
+    };
     out.push(line(
         "info",
         if quiet {
@@ -185,6 +198,9 @@ pub(super) fn load_prior(
             let Ok(r) = serde_json::from_str::<CreativeReport>(&raw) else {
                 continue;
             };
+            if r.schema != CREATIVE_REPORT_SCHEMA {
+                continue; // other major: not comparable, never misread
+            }
             let len = chrono::NaiveDate::parse_from_str(&r.window.until, "%Y-%m-%d")
                 .and_then(|u| {
                     chrono::NaiveDate::parse_from_str(&r.window.since, "%Y-%m-%d")

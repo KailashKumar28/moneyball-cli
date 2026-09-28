@@ -12,15 +12,16 @@ use crate::error::{Error, Result};
 use crate::schema::{LeadRow, LeadsFile, LEADS_SCHEMA};
 
 /// Pull leads for every distinct ad in `ads_daily_rows` and write
-/// `<snap_dir>/leads.json` (0600). Returns the row count. Best-effort
-/// by contract: the caller treats an Err as a warning, never a lost
-/// snapshot (a token without leads_retrieval must not break /fetch).
+/// `<snap_dir>/leads.json` (0600). Returns (row count, warning). One ad
+/// failing (a Page the token cannot read leads for) skips that ad only:
+/// the rest still segment, and the warning names the damage. Err only
+/// when leads.json itself cannot be written.
 pub fn fetch_and_write(
     client: &reqwest::blocking::Client,
     token: &str,
     ads_daily_rows: &[Value],
     snap_dir: &Path,
-) -> Result<usize> {
+) -> Result<(usize, Option<String>)> {
     let mut ad_ids: Vec<&str> = ads_daily_rows
         .iter()
         .filter_map(|r| r.get("ad_id").and_then(|v| v.as_str()))
@@ -29,58 +30,76 @@ pub fn fetch_and_write(
     ad_ids.dedup();
 
     let mut rows: Vec<LeadRow> = Vec::new();
-    for ad_id in ad_ids {
-        let mut url = format!("{}/{}/leads", super::META_GRAPH_BASE, ad_id);
-        let mut first = true;
-        loop {
-            let req = if first {
-                client.get(&url).query(&[
-                    ("access_token", token),
-                    ("fields", "id,created_time,field_data"),
-                    ("limit", "300"),
-                ])
-            } else {
-                client.get(&url) // paging.next carries everything
-            };
-            let resp = req
-                .send()
-                .map_err(|e| Error::Meta(format!("leads network: {}", e)))?;
-            let status = resp.status();
-            let body: Value = resp
-                .json()
-                .map_err(|e| Error::Meta(format!("leads json: {}", e)))?;
-            if !status.is_success() {
-                let msg = body
-                    .pointer("/error/message")
-                    .and_then(|m| m.as_str())
-                    .unwrap_or("unknown error");
-                return Err(Error::Meta(format!("Meta {} for leads: {}", status, msg)));
-            }
-            for l in body
-                .get("data")
-                .and_then(|d| d.as_array())
-                .into_iter()
-                .flatten()
-            {
-                rows.push(row_from_lead(ad_id, l));
-            }
-            match body.pointer("/paging/next").and_then(|n| n.as_str()) {
-                Some(next) => {
-                    url = next.to_string();
-                    first = false;
-                }
-                None => break,
+    let (mut failed, mut first_err) = (0usize, None::<String>);
+    for ad_id in &ad_ids {
+        match pull_ad(client, token, ad_id) {
+            Ok(mut r) => rows.append(&mut r),
+            Err(e) => {
+                failed += 1;
+                first_err.get_or_insert(e.to_string());
             }
         }
     }
-
+    // Always write, even partial/empty: a stale same-day leads.json must
+    // never outlive the fetch that replaced it.
     let file = LeadsFile {
         schema: LEADS_SCHEMA.into(),
         fetched_at: chrono::Utc::now().format("%Y-%m-%dT%H:%M:%SZ").to_string(),
         rows,
     };
     write_leads(snap_dir, &file)?;
-    Ok(file.rows.len())
+    let warn =
+        first_err.map(|e| format!("{} of {} ads failed (first: {})", failed, ad_ids.len(), e));
+    Ok((file.rows.len(), warn))
+}
+
+// ponytail: sequential per-ad GETs, lifetime leads per ad; batch or add
+// a time_created filter if /fetch time on 200+ ads starts to hurt.
+fn pull_ad(client: &reqwest::blocking::Client, token: &str, ad_id: &str) -> Result<Vec<LeadRow>> {
+    let mut rows = Vec::new();
+    let mut url = format!("{}/{}/leads", super::META_GRAPH_BASE, ad_id);
+    let mut first = true;
+    loop {
+        let req = if first {
+            client.get(&url).query(&[
+                ("access_token", token),
+                ("fields", "id,created_time,field_data"),
+                ("limit", "300"),
+            ])
+        } else {
+            client.get(&url) // paging.next carries everything
+        };
+        let resp = req
+            .send()
+            .map_err(|e| crate::meta::net_err("leads network", e))?;
+        let status = resp.status();
+        let body: Value = resp
+            .json()
+            .map_err(|e| crate::meta::net_err("leads json", e))?;
+        if !status.is_success() {
+            let msg = body
+                .pointer("/error/message")
+                .and_then(|m| m.as_str())
+                .unwrap_or("unknown error");
+            return Err(Error::Meta(format!("Meta {} for leads: {}", status, msg)));
+        }
+        for l in body
+            .get("data")
+            .and_then(|d| d.as_array())
+            .into_iter()
+            .flatten()
+        {
+            rows.push(row_from_lead(ad_id, l));
+        }
+        match body.pointer("/paging/next").and_then(|n| n.as_str()) {
+            Some(next) => {
+                url = next.to_string();
+                first = false;
+            }
+            None => break,
+        }
+    }
+    Ok(rows)
 }
 
 /// field_data is `[{name, values: [..]}, ..]`; match by substring like
@@ -123,20 +142,11 @@ fn row_from_lead(ad_id: &str, l: &Value) -> LeadRow {
     }
 }
 
-/// Temp-then-rename, then 0600: raw contact PII must not be
-/// world-readable (same posture as ~/.moneyball/auth.json).
+/// leads.json carries raw contact PII: owner-only write.
 fn write_leads(snap_dir: &Path, file: &LeadsFile) -> Result<()> {
-    let final_path = snap_dir.join("leads.json");
-    let tmp = snap_dir.join("leads.json.tmp");
     let body = serde_json::to_string_pretty(file)
         .map_err(|e| Error::Config(format!("serialize leads: {}", e)))?;
-    std::fs::write(&tmp, body)?;
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::PermissionsExt;
-        std::fs::set_permissions(&tmp, std::fs::Permissions::from_mode(0o600))?;
-    }
-    std::fs::rename(&tmp, &final_path)?;
+    crate::snapshot::write_private(snap_dir, "leads.json", body)?;
     Ok(())
 }
 
