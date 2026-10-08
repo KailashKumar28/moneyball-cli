@@ -280,12 +280,12 @@ fn validate_and_write(
     let check = super::check_with_workspace(cfg, &crm);
     let path = if check.passed() {
         // `date` is status::target_snapshot: never an ads-free dir.
-        let written = write_crm_json(cfg, date, &crm)?;
+        let written = super::status::write_crm_json(cfg, date, &crm)?;
         // Organic contacts ride along for the re-inquiry check (lead
         // segmentation) - only when the spec maps contact fields.
         let contacts = source::organic_contacts(records, map);
         if !contacts.is_empty() {
-            write_contacts(cfg, date, contacts)?;
+            super::status::write_contacts(cfg, date, contacts)?;
         }
         Some(written)
     } else {
@@ -400,7 +400,7 @@ fn request_page(
     // "response is not JSON: EOF" buries the actual problem (found live
     // 2026-08-08 when the LeadZump token expired).
     if !status.is_success() {
-        return Err(status_error(status, &bytes));
+        return Err(status_error(status, &bytes, &request.secret_names()));
     }
     let body: Value = serde_json::from_slice(&bytes)
         .map_err(|e| Error::Config(format!("CRM response is not JSON: {}", e)))?;
@@ -410,7 +410,7 @@ fn request_page(
 /// Non-2xx -> an actionable error. 401/403 name the fix (expired token
 /// is the common case); everything else carries a truncated body
 /// snippet. Bodies may echo request details - never include headers.
-fn status_error(status: reqwest::StatusCode, bytes: &[u8]) -> Error {
+fn status_error(status: reqwest::StatusCode, bytes: &[u8], secrets: &[String]) -> Error {
     let snippet = crate::text::truncate_marked(String::from_utf8_lossy(bytes).trim(), 200, "...");
     let tail = if snippet.is_empty() {
         String::new()
@@ -418,41 +418,26 @@ fn status_error(status: reqwest::StatusCode, bytes: &[u8]) -> Error {
         format!(": {}", snippet)
     };
     if status == reqwest::StatusCode::UNAUTHORIZED || status == reqwest::StatusCode::FORBIDDEN {
+        // Name the spec's real secret, never a placeholder to decode.
+        let fix = match secrets {
+            [] => "moneyball crm secret <name> (the name crm.toml references as secret:<name>)"
+                .to_string(),
+            names => names
+                .iter()
+                .map(|n| format!("moneyball crm secret {}", n))
+                .collect::<Vec<_>>()
+                .join(" and "),
+        };
         Error::Secrets(format!(
             "CRM rejected the credentials (HTTP {}){} - the stored token has likely \
-             expired. Store a fresh one with: moneyball crm secret <name> \
-             (the <name> is what crm.toml references as secret:<name>)",
+             expired. Store a fresh one with: {}",
             status.as_u16(),
-            tail
+            tail,
+            fix
         ))
     } else {
         Error::Config(format!("CRM returned {}{}", status, tail))
     }
-}
-
-/// Atomic write of crm.json into the date's snapshot dir (tmp + rename,
-/// same pattern as fetch::write_snapshot).
-fn write_crm_json(cfg: &AppConfig, date: &str, crm: &Value) -> Result<PathBuf> {
-    let dir = cfg.history_dir().join("snap").join(date);
-    std::fs::create_dir_all(&dir)?;
-    // Tickets carry phone/email/lead_id when the spec maps them.
-    crate::snapshot::write_private(&dir, "crm.json", serde_json::to_string_pretty(crm)?)
-}
-
-/// `crm_contacts.json` (0600 - raw PII) next to crm.json.
-fn write_contacts(cfg: &AppConfig, date: &str, rows: Vec<crate::schema::ContactRow>) -> Result<()> {
-    let file = crate::schema::CrmContactsFile {
-        schema: crate::schema::CRM_CONTACTS_SCHEMA.into(),
-        fetched_at: chrono::Utc::now().format("%Y-%m-%dT%H:%M:%SZ").to_string(),
-        rows,
-    };
-    let dir = cfg.history_dir().join("snap").join(date);
-    crate::snapshot::write_private(
-        &dir,
-        "crm_contacts.json",
-        serde_json::to_string_pretty(&file)?,
-    )?;
-    Ok(())
 }
 
 #[cfg(test)]
@@ -461,11 +446,20 @@ mod status_tests {
 
     #[test]
     fn auth_failure_is_actionable_even_with_empty_body() {
-        let e = status_error(reqwest::StatusCode::UNAUTHORIZED, b"");
+        let e = status_error(
+            reqwest::StatusCode::UNAUTHORIZED,
+            b"",
+            &["leadzump_token".into()],
+        );
         let msg = e.to_string();
         assert!(
-            msg.contains("401") && msg.contains("moneyball crm secret"),
+            msg.contains("401") && msg.contains("moneyball crm secret leadzump_token"),
             "{}",
+            msg
+        );
+        assert!(
+            !msg.contains("<name>"),
+            "the real name, never a placeholder: {}",
             msg
         );
         assert!(!msg.contains("not JSON"), "never the parse error: {}", msg);
@@ -476,6 +470,7 @@ mod status_tests {
         let e = status_error(
             reqwest::StatusCode::INTERNAL_SERVER_ERROR,
             "boom".repeat(200).as_bytes(),
+            &[],
         );
         let msg = e.to_string();
         assert!(

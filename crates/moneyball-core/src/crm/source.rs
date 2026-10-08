@@ -47,6 +47,24 @@ pub struct RequestSpec {
     pub body: Option<String>,
 }
 
+impl RequestSpec {
+    /// The secret names the request references (`secret:<name>` in a
+    /// header or query value): what the user must store, and what an auth
+    /// error must name.
+    pub fn secret_names(&self) -> Vec<String> {
+        let mut names: Vec<String> = self
+            .headers
+            .values()
+            .chain(self.query.values())
+            .filter_map(|v| v.trim_matches(['{', '}']).strip_prefix("secret:"))
+            .map(String::from)
+            .collect();
+        names.sort();
+        names.dedup();
+        names
+    }
+}
+
 fn default_method() -> String {
     "GET".into()
 }

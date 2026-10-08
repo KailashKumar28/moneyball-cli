@@ -76,6 +76,39 @@ pub(crate) fn target_snapshot(cfg: &AppConfig) -> Result<Option<String>> {
         .find(|d| snap_root.join(d).join("ads_daily.json").is_file()))
 }
 
+/// Atomic write of crm.json into the date's snapshot dir (tmp + rename,
+/// same pattern as fetch::write_snapshot).
+pub(super) fn write_crm_json(
+    cfg: &AppConfig,
+    date: &str,
+    crm: &serde_json::Value,
+) -> Result<std::path::PathBuf> {
+    let dir = cfg.history_dir().join("snap").join(date);
+    std::fs::create_dir_all(&dir)?;
+    // Tickets carry phone/email/lead_id when the spec maps them.
+    crate::snapshot::write_private(&dir, "crm.json", serde_json::to_string_pretty(crm)?)
+}
+
+/// `crm_contacts.json` (0600 - raw PII) next to crm.json.
+pub(super) fn write_contacts(
+    cfg: &AppConfig,
+    date: &str,
+    rows: Vec<crate::schema::ContactRow>,
+) -> Result<()> {
+    let file = crate::schema::CrmContactsFile {
+        schema: crate::schema::CRM_CONTACTS_SCHEMA.into(),
+        fetched_at: chrono::Utc::now().format("%Y-%m-%dT%H:%M:%SZ").to_string(),
+        rows,
+    };
+    let dir = cfg.history_dir().join("snap").join(date);
+    crate::snapshot::write_private(
+        &dir,
+        "crm_contacts.json",
+        serde_json::to_string_pretty(&file)?,
+    )?;
+    Ok(())
+}
+
 /// The newest snapshot holding a crm.json.
 fn newest_crm_snapshot(cfg: &AppConfig) -> Option<String> {
     let snap_root = cfg.snap_dir();
@@ -106,16 +139,14 @@ pub fn status_lines(cfg: &AppConfig) -> Result<Vec<String>> {
     out.push(format!("spec:   crm.toml ({})", spec.name));
 
     // 2. Secrets the spec references - present in the store?
-    let mut missing: Vec<String> = Vec::new();
-    if let Some(req) = &spec.request {
-        for v in req.headers.values().chain(req.query.values()) {
-            if let Some(name) = v.trim_matches(['{', '}']).strip_prefix("secret:") {
-                if crate::secrets::load_crm_key(name).is_none() {
-                    missing.push(name.to_string());
-                }
-            }
-        }
-    }
+    let missing: Vec<String> = spec
+        .request
+        .as_ref()
+        .map(|r| r.secret_names())
+        .unwrap_or_default()
+        .into_iter()
+        .filter(|name| crate::secrets::load_crm_key(name).is_none())
+        .collect();
     if missing.is_empty() {
         out.push("secret: stored".into());
     } else {
