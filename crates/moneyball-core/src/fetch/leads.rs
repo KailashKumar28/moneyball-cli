@@ -146,7 +146,7 @@ fn row_from_lead(ad_id: &str, l: &Value) -> LeadRow {
 fn write_leads(snap_dir: &Path, file: &LeadsFile) -> Result<()> {
     let body = serde_json::to_string_pretty(file)
         .map_err(|e| Error::Config(format!("serialize leads: {}", e)))?;
-    crate::snapshot::write_private(snap_dir, "leads.json", body)?;
+    crate::secrets::write_private(snap_dir, "leads.json", body)?;
     Ok(())
 }
 

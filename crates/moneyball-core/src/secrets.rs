@@ -41,91 +41,123 @@ pub fn auth_path() -> Result<PathBuf> {
     Ok(home.join(".moneyball").join("auth.json"))
 }
 
-fn load_file() -> AuthFile {
-    let Ok(p) = auth_path() else {
-        return AuthFile::default();
-    };
-    std::fs::read_to_string(p)
-        .ok()
-        .and_then(|s| serde_json::from_str(&s).ok())
-        .unwrap_or_default()
+/// A missing file is empty. An unreadable one is an error, never "empty":
+/// treating it as empty let the next save silently wipe every stored key.
+fn load_file() -> Result<AuthFile> {
+    let p = auth_path()?;
+    match std::fs::read_to_string(&p) {
+        Ok(s) => serde_json::from_str(&s).map_err(|e| {
+            Error::Secrets(format!(
+                "{} is unreadable ({}) - fix it or move it aside; your stored keys were not touched",
+                p.display(),
+                e
+            ))
+        }),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(AuthFile::default()),
+        Err(e) => Err(e.into()),
+    }
 }
 
-fn save_file(f: &AuthFile) -> Result<()> {
+/// Every write goes through here: one process at a time (a lock file beside
+/// auth.json, so the TUI and the CLI never lose each other's update), a
+/// strict load (never save over a file we could not read), and an atomic,
+/// owner-only write.
+fn update(change: impl FnOnce(&mut AuthFile)) -> Result<()> {
     let p = auth_path()?;
-    std::fs::create_dir_all(p.parent().expect("auth path has parent"))?;
-    let body = serde_json::to_string_pretty(f)
+    let dir = p.parent().expect("auth path has parent");
+    std::fs::create_dir_all(dir)?;
+    let name = p
+        .file_name()
+        .and_then(|n| n.to_str())
+        .unwrap_or("auth.json")
+        .to_string();
+    let lock = std::fs::File::create(dir.join(format!("{}.lock", name)))?;
+    lock.lock()?;
+    let mut f = load_file()?;
+    change(&mut f);
+    let body = serde_json::to_string_pretty(&f)
         .map_err(|e| Error::Secrets(format!("serialize auth: {}", e)))?;
-    // Atomic replace: a crash (or a concurrent reader) mid-write must
-    // never leave a half-written auth.json - load_file treats parse
-    // failures as an empty file, and the next save would then silently
-    // wipe every stored key. Pid-unique tmp name so two processes
-    // saving at once cannot clobber each other's tmp.
-    let tmp = p.with_file_name(format!("auth.json.tmp.{}", std::process::id()));
-    std::fs::write(&tmp, body)?;
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::PermissionsExt;
-        let _ = std::fs::set_permissions(&tmp, std::fs::Permissions::from_mode(0o600));
-    }
-    std::fs::rename(&tmp, &p)?;
+    write_private(dir, &name, body)?;
     Ok(())
 }
 
+/// Atomic owner-only (0600) write for anything holding secrets or raw
+/// contact PII (auth.json, leads.json, crm.json, crm_contacts.json). The
+/// temp file is CREATED 0600 (a chmod after writing left a umask-readable
+/// window) and named per process, so two writers never share one.
+pub(crate) fn write_private(dir: &std::path::Path, name: &str, body: String) -> Result<PathBuf> {
+    use std::io::Write as _;
+    let path = dir.join(name);
+    let tmp = dir.join(format!("{}.tmp.{}", name, std::process::id()));
+    {
+        let mut opts = std::fs::OpenOptions::new();
+        opts.write(true).create(true).truncate(true);
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::{OpenOptionsExt, PermissionsExt};
+            opts.mode(0o600);
+            let file = opts.open(&tmp)?;
+            // A stale tmp from a crash keeps its old mode: set it anyway.
+            file.set_permissions(std::fs::Permissions::from_mode(0o600))?;
+            (&file).write_all(body.as_bytes())?;
+        }
+        #[cfg(not(unix))]
+        opts.open(&tmp)?.write_all(body.as_bytes())?;
+    }
+    std::fs::rename(&tmp, &path)?;
+    Ok(path)
+}
+
 pub fn store_meta_token(token: &str) -> Result<()> {
-    let mut f = load_file();
-    f.meta_access_token = Some(token.to_string());
-    save_file(&f)
+    update(|f| f.meta_access_token = Some(token.to_string()))
 }
 
 pub fn load_meta_token() -> Option<String> {
-    load_file().meta_access_token
+    load_file().ok()?.meta_access_token
 }
 
 pub fn clear_meta_token() -> Result<()> {
-    let mut f = load_file();
-    f.meta_access_token = None;
-    save_file(&f)
+    update(|f| f.meta_access_token = None)
 }
 
 /// Store the API key for `provider_id`. Overwrites any existing entry.
 /// Provider id is the same key used in `WorkspaceConfig.model_providers`.
 pub fn store_llm_key(provider_id: &str, api_key: &str) -> Result<()> {
-    let mut f = load_file();
-    f.llm_keys
-        .insert(provider_id.to_string(), api_key.to_string());
-    save_file(&f)
+    update(|f| {
+        f.llm_keys
+            .insert(provider_id.to_string(), api_key.to_string());
+    })
 }
 
 /// Read the API key for `provider_id`. `None` if absent.
 pub fn load_llm_key(provider_id: &str) -> Option<String> {
-    load_file().llm_keys.get(provider_id).cloned()
+    load_file().ok()?.llm_keys.get(provider_id).cloned()
 }
 
 /// Remove the API key for `provider_id`. Idempotent.
 pub fn clear_llm_key(provider_id: &str) -> Result<()> {
-    let mut f = load_file();
-    f.llm_keys.remove(provider_id);
-    save_file(&f)
+    update(|f| {
+        f.llm_keys.remove(provider_id);
+    })
 }
 
 /// Store a CRM secret referenced from crm.toml as `secret:<name>`.
 pub fn store_crm_key(name: &str, value: &str) -> Result<()> {
-    let mut f = load_file();
-    f.crm_keys.insert(name.to_string(), value.to_string());
-    save_file(&f)
+    update(|f| {
+        f.crm_keys.insert(name.to_string(), value.to_string());
+    })
 }
 
 /// Read a CRM secret. `None` if absent.
 pub fn load_crm_key(name: &str) -> Option<String> {
-    load_file().crm_keys.get(name).cloned()
+    load_file().ok()?.crm_keys.get(name).cloned()
 }
 
 /// Remove a CRM secret. Idempotent.
 pub fn clear_crm_key(name: &str) -> Result<()> {
-    let mut f = load_file();
-    f.crm_keys.remove(name);
-    save_file(&f)
+    update(|f| {
+        f.crm_keys.remove(name);
+    })
 }
 
 #[cfg(test)]
@@ -149,10 +181,26 @@ mod tests {
             Some("sk-test-1234")
         );
         assert_eq!(load_crm_key("test_crm").as_deref(), Some("tok-5678"));
-        // No stray tmp file left behind by the atomic save.
-        assert_eq!(std::fs::read_dir(&dir).unwrap().count(), 1);
+        // No stray tmp file left behind by the atomic save (the lock file stays).
+        let names: Vec<String> = std::fs::read_dir(&dir)
+            .unwrap()
+            .map(|e| e.unwrap().file_name().to_string_lossy().into_owned())
+            .collect();
+        assert!(names.iter().all(|n| !n.contains(".tmp")), "{:?}", names);
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let mode = std::fs::metadata(&file).unwrap().permissions().mode();
+            assert_eq!(mode & 0o777, 0o600);
+        }
         clear_llm_key("test_provider").unwrap();
         assert_eq!(load_llm_key("test_provider"), None);
+
+        // A file we cannot read is never saved over: the keys in it survive.
+        std::fs::write(&file, "{ not json").unwrap();
+        let err = store_llm_key("other", "sk-x").unwrap_err().to_string();
+        assert!(err.contains("unreadable"), "{}", err);
+        assert_eq!(std::fs::read_to_string(&file).unwrap(), "{ not json");
 
         std::env::remove_var("MONEYBALL_AUTH_PATH");
         std::fs::remove_dir_all(&dir).ok();

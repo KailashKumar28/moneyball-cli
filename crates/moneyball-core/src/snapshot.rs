@@ -217,22 +217,6 @@ fn same_major(v: &serde_json::Value, want: &str) -> bool {
     v.get("schema").and_then(|s| s.as_str()) == Some(want)
 }
 
-/// Atomic owner-only (0600) artifact write for raw contact PII
-/// (leads.json, crm.json, crm_contacts.json): temp-then-rename, same
-/// posture as ~/.moneyball/auth.json. Returns the final path.
-pub(crate) fn write_private(dir: &Path, name: &str, body: String) -> Result<PathBuf> {
-    let path = dir.join(name);
-    let tmp = dir.join(format!("{}.tmp", name));
-    std::fs::write(&tmp, body)?;
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::PermissionsExt;
-        std::fs::set_permissions(&tmp, std::fs::Permissions::from_mode(0o600))?;
-    }
-    std::fs::rename(&tmp, &path)?;
-    Ok(path)
-}
-
 pub fn list_dates(snap_root: &Path) -> Result<Vec<String>> {
     if !snap_root.is_dir() {
         return Ok(vec![]);

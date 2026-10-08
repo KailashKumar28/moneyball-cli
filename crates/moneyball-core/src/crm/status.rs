@@ -86,7 +86,7 @@ pub(super) fn write_crm_json(
     let dir = cfg.history_dir().join("snap").join(date);
     std::fs::create_dir_all(&dir)?;
     // Tickets carry phone/email/lead_id when the spec maps them.
-    crate::snapshot::write_private(&dir, "crm.json", serde_json::to_string_pretty(crm)?)
+    crate::secrets::write_private(&dir, "crm.json", serde_json::to_string_pretty(crm)?)
 }
 
 /// `crm_contacts.json` (0600 - raw PII) next to crm.json.
@@ -101,7 +101,7 @@ pub(super) fn write_contacts(
         rows,
     };
     let dir = cfg.history_dir().join("snap").join(date);
-    crate::snapshot::write_private(
+    crate::secrets::write_private(
         &dir,
         "crm_contacts.json",
         serde_json::to_string_pretty(&file)?,
