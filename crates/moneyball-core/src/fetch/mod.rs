@@ -35,8 +35,9 @@ cost_per_inline_link_click,cpc,ctr,cpm,actions";
 pub struct FetchReport {
     pub date: String,
     pub path: PathBuf,
-    /// (product name, row count) per configured product.
-    pub per_product: Vec<(String, usize)>,
+    /// Per configured product: its row count, or why its ad account
+    /// returned nothing (the other products still landed).
+    pub per_product: Vec<(String, std::result::Result<usize, String>)>,
     /// Creative rows captured into creatives.json, if that step ran.
     pub creatives: usize,
     /// Rows with a cached image / images downloaded this run.
@@ -73,24 +74,13 @@ pub fn fetch_snapshot(cfg: &AppConfig, token: &str, days: u32) -> Result<FetchRe
         .build()
         .map_err(|e| Error::Meta(format!("client: {}", e)))?;
 
-    let mut all_rows: Vec<serde_json::Value> = Vec::new();
-    let mut per_product: Vec<(String, usize)> = Vec::new();
-    for p in &workspace.products {
-        let rows = fetch_account_rows(
-            &client,
-            token,
-            &p.ad_account,
-            &since.format("%Y-%m-%d").to_string(),
-            &until.format("%Y-%m-%d").to_string(),
-        )?;
-        per_product.push((p.name.clone(), rows.len()));
-        for mut r in rows {
-            if let Some(obj) = r.as_object_mut() {
-                obj.insert("_product".into(), serde_json::Value::String(p.name.clone()));
-            }
-            all_rows.push(r);
-        }
-    }
+    let (since_s, until_s) = (
+        since.format("%Y-%m-%d").to_string(),
+        until.format("%Y-%m-%d").to_string(),
+    );
+    let (all_rows, per_product) = collect_products(&workspace.products, |account| {
+        fetch_account_rows(&client, token, account, &since_s, &until_s)
+    })?;
 
     let snap_root = cfg.history_dir().join("snap");
     let path = write_snapshot(&snap_root, &date, &all_rows)?;
@@ -143,6 +133,39 @@ pub fn fetch_snapshot(cfg: &AppConfig, token: &str, days: u32) -> Result<FetchRe
         leads,
         leads_error,
     })
+}
+
+type PerProduct = Vec<(String, std::result::Result<usize, String>)>;
+
+/// Every product's rows, tagged with `_product`. One account failing marks
+/// that product with its error and the others still land; only when every
+/// account fails (an expired token, no network) does the fetch fail.
+fn collect_products(
+    products: &[crate::config::Product],
+    mut fetch_account: impl FnMut(&str) -> Result<Vec<serde_json::Value>>,
+) -> Result<(Vec<serde_json::Value>, PerProduct)> {
+    let (mut all, mut per, mut first_err) = (Vec::new(), Vec::new(), None);
+    for p in products {
+        match fetch_account(&p.ad_account) {
+            Ok(rows) => {
+                per.push((p.name.clone(), Ok(rows.len())));
+                for mut r in rows {
+                    if let Some(obj) = r.as_object_mut() {
+                        obj.insert("_product".into(), serde_json::Value::String(p.name.clone()));
+                    }
+                    all.push(r);
+                }
+            }
+            Err(e) => {
+                per.push((p.name.clone(), Err(e.to_string())));
+                first_err.get_or_insert(e);
+            }
+        }
+    }
+    match first_err {
+        Some(e) if per.iter().all(|(_, r)| r.is_err()) => Err(e),
+        _ => Ok((all, per)),
+    }
 }
 
 /// One account's per-ad daily rows over [since, until], following paging.
@@ -221,4 +244,36 @@ pub fn write_snapshot(snap_root: &Path, date: &str, rows: &[serde_json::Value]) 
     std::fs::write(&tmp_path, body)?;
     std::fs::rename(&tmp_path, &final_path)?;
     Ok(dir)
+}
+
+#[cfg(test)]
+mod collect_tests {
+    use super::*;
+    use crate::config::Product;
+
+    fn product(name: &str, account: &str) -> Product {
+        Product {
+            name: name.into(),
+            ad_account: account.into(),
+        }
+    }
+
+    #[test]
+    fn one_failing_account_never_aborts_the_others() {
+        let products = [product("A", "1"), product("Primus", "2"), product("C", "3")];
+        let (rows, per) = collect_products(&products, |acct| match acct {
+            "2" => Err(Error::Meta("Meta 400: permission".into())),
+            _ => Ok(vec![serde_json::json!({ "ad_id": acct })]),
+        })
+        .unwrap();
+        assert_eq!(rows.len(), 2, "A and C landed");
+        assert!(rows.iter().all(|r| r["_product"] != "Primus"));
+        assert_eq!(per[0].1, Ok(1));
+        assert!(per[1].1.as_ref().unwrap_err().contains("permission"));
+
+        // Every account failing is a token or network problem: fail as before.
+        let all_fail =
+            collect_products(&products, |_| Err(Error::Meta("Meta 400: code 190".into())));
+        assert!(all_fail.unwrap_err().to_string().contains("190"));
+    }
 }

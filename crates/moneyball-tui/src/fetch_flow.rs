@@ -68,7 +68,10 @@ pub(crate) fn on_fetch_done(
     let mut out: Vec<String> = report
         .per_product
         .iter()
-        .map(|(name, n)| format!("{:<40} {:>5} rows", name, n))
+        .map(|(name, rows)| match rows {
+            Ok(n) => format!("{:<40} {:>5} rows", name, n),
+            Err(e) => format!("{:<40} no data - {}", name, e),
+        })
         .collect();
     out.push(String::new());
     match &report.creatives_error {

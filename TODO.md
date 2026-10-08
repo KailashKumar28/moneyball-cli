@@ -21,6 +21,8 @@ bottom after a release-sized batch.)
         state (not connected / connected but not fetched / fresh); the
         headless brief now warns, and crm status names the snapshot crm
         fetch really writes into.
+  - [x] Account isolation (2026-10-09): one ad account failing marks its
+        product "no data" with Meta's reason; the others still land.
 - [ ] **Daily creative report** (plan: docs/CLOUD_PLAN.md, agreed
       2026-08-07 - report.json is the product, HTML is a renderer;
       reimplements pipeline/creative_report.py, never imports it):

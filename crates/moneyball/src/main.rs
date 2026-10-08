@@ -191,8 +191,11 @@ fn main() -> Result<()> {
             println!("fetching {} days of insights from Meta...", days);
             let report = moneyball_core::fetch::fetch_snapshot(&strict, &token, days)
                 .with_context(|| "fetch failed")?;
-            for (name, n) in &report.per_product {
-                println!("  {:<40} {:>5} rows", name, n);
+            for (name, rows) in &report.per_product {
+                match rows {
+                    Ok(n) => println!("  {:<40} {:>5} rows", name, n),
+                    Err(e) => println!("  {:<40} no data - {}", name, e),
+                }
             }
             match &report.creatives_error {
                 None => println!(

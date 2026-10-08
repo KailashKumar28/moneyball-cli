@@ -199,7 +199,7 @@ const FRAMES = [
 		pins: [['dev', '#t-disha-namma-mane + .tgwrap .vchip.no_crm', 'No CRM chip', 'Detail: "no CRM data in this snapshot: kill and scale need qualified counts".']] },
 	{ s: 'F', scene: 'cli_fetch_notoken', title: 'fetch with no Meta token', next: '',
 		note: '<b>"run /setup to connect Meta":</b> a TUI command, from the shell, and /setup can\'t reach the token step anyway (A3).',
-		details: { 'Problems found': ['An expired token is worse: a raw "Meta 400 ... Error validating access token" with no next step, and one failing account aborts every product (fetch/mod.rs:79-86)'] },
+		details: { 'Problems found': ['An expired token is worse: a raw "Meta 400 ... Error validating access token" with no next step'], 'Fixed 9 Oct': ['One failing ad account no longer aborts every product: it prints "no data" with Meta\'s reason and the others land (verified live)'] },
 		pins: [['content', '~Error:', 'Dead end', 'No command in the shell sets a Meta token.']] },
 
 	// ── R · Redesign: daily refresh ──
