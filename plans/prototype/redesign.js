@@ -143,12 +143,12 @@ ${tool('[yellow]●[/]', 'refresh')}[dim]   for Wed 07 Oct  ·  finished without
 
 [gray]       1  Meta insights          [/][green]done[/][gray]     5 accounts, 1,104 rows, 28 days to 07 Oct            [/][green](18.2s)[/]
 [gray]       2  creatives and leads    [/][green]done[/][gray]     64 creatives, 1,812 leads, 33 new images             [/][green](21.0s)[/]
-[gray]       3  CRM (LeadZump)         [/][red]failed[/][gray]   LeadZump refused the token (HTTP 401): it has expired[/]
+[gray]       3  CRM (LeadZump)         [/][red]failed[/][gray]   LeadZump ended moneyball's sign-in (HTTP 401)[/]
 [gray]       4  daily report           [/][yellow]no CRM[/][gray]   Fincity-Daily-07-Oct-2026.html, CRM columns and verdicts hidden[/]
 
 [yellow]       ! The report went out without CRM.[/][gray] Meta numbers are complete; CRM leads, qualified, cost per[/]
 [gray]         qualified and every Kill/Scale verdict are hidden in it, not shown as zero.[/]
-[gray]       fix:  [/][cyan bold]moneyball crm secret leadzump_token[/][gray]   paste a fresh token (LeadZump > Settings > API)[/]
+[gray]       fix:  [/][cyan bold]/connect crm[/][gray]   sign in to LeadZump again; the stage map is kept[/]
 [gray]             then [/][cyan bold]/refresh[/][gray]   reuses this morning's Meta pull: only CRM and the report run again[/]
 [green]       (41.0s)[/]
 
@@ -162,14 +162,13 @@ ${user('/refresh', '07:31:02')}
 
 ${tool(FAILED, 'refresh')}[dim]   for Wed 07 Oct  ·  stopped at step 1[/]
 
-[gray]       1  Meta insights          [/][red]failed[/][gray]   Meta refused the access token (code 190): it expired on 03 Oct[/]
+[gray]       1  Meta insights          [/][red]failed[/][gray]   Facebook ended moneyball's sign-in on 03 Oct (code 190)[/]
 [dim]       2  creatives and leads    skipped[/]
 [dim]       3  CRM (LeadZump)         skipped, so CRM stays matched to the same day as Meta[/]
 [dim]       4  daily report           skipped[/]
 
 [red]       ✖ Nothing was written today.[/][gray] Your last good data (27 Sep) is untouched.[/]
-[gray]       fix:  [/][cyan bold]moneyball meta token[/][gray]   paste a new long-lived token (Business Settings > System users >[/]
-[gray]             Generate token, with ads_read). Long-lived tokens last about 60 days; /status shows the date.[/]
+[gray]       fix:  [/][cyan bold]/connect meta[/][gray]   sign in again in your browser (about a minute); products and settings stay[/]
 [gray]             then [/][cyan bold]/refresh[/]
 [green]       (1.9s)[/]
 
@@ -226,7 +225,7 @@ refresh for Wed 07 Oct 2026  (workspace ${WS})
   3 CRM (LeadZump)       failed  HTTP 401: token expired                    1.1s
   4 daily report         no CRM  Fincity-Daily-07-Oct-2026.html             0.7s
 outcome: degraded (CRM)
-fix: moneyball crm secret leadzump_token   then: moneyball refresh
+fix: moneyball connect crm   then: moneyball refresh
 report: ${WS}/.moneyball/reports/2026-10-08/Fincity-Daily-07-Oct-2026.html
 run record: ${WS}/.moneyball/runs/2026-10-08.json
 [dim]moneyball-data[/] $ echo $?

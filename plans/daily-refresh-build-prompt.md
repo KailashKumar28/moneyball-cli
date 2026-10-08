@@ -66,14 +66,11 @@ One `note()` gives the one sentence and the one fix. It replaces:
 
 | Error | When | Fix line |
 |---|---|---|
-| `MetaAuth { expired_on }` | Meta code 190 | `moneyball meta token` |
+| `MetaAuth { expired_on }` | Meta code 190 | `/connect meta` (shell: `moneyball connect meta`) |
 | `MetaPermission { account }` | codes 10, 200, 294 | grant the system user access to `<account>` |
-| `CrmAuth { secret_name }` | HTTP 401/403 | `moneyball crm secret <the spec's real secret name>` |
+| `CrmAuth { secret_name }` | HTTP 401/403 | `/connect crm`, asking only for that secret (shell: `moneyball connect crm`). Shipped 9 Oct: the shell error already names the real secret. |
 
-`moneyball meta token` is new:
-- It reads the token from stdin, the same pattern as `crm secret`.
-- It validates it with `/me` and stores it in `~/.moneyball/auth.json` (0600).
-- The token is never echoed and never put in argv.
+Token recovery is the connect redesign, not a new command here: see `plans/integrations-build-prompt.md`. The `moneyball meta token` command planned earlier is dropped; pasting a token is `moneyball connect meta --with-token`.
 
 ### A4. One account never aborts the pull
 
@@ -197,7 +194,7 @@ Match the frames cell for cell; their Copy for agent lists every styled run.
 3. **Missed days.** Default: show them as rows in `/status`, no backfill.
 4. **LLM after a refresh.** Default: none; commentary on demand.
 5. **Prior comparison horizon.** Default: 7 days, else "no comparable day in the last 7".
-6. **Meta token expiry.** Default: read `expires_at` from debug_token on each refresh and warn 7 days ahead.
+6. **Meta token expiry.** Default: the expiry written at sign-in (integrations plan, credentials v2) drives the 7-day warning, with no per-refresh network call.
 7. **`/fetch`.** Default: an alias of `/refresh`.
 8. **Run time.** Default: 07:30 IST.
 

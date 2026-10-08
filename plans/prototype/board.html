@@ -377,7 +377,7 @@ const buildsOf = f => (BUILD_OF[f.scene] || []).map(key => BUILD[key]);
 
 const SIDES = [['ui', 'Screens'], ['backend', 'Core']];
 const TASK_TABS = new Set(['ui', 'backend', 'plan']);
-const STATUS = { done: 'Done', todo: 'To do', check: 'Check on dev' };
+const STATUS = { done: 'Done', todo: 'To do', check: 'Check on the binary' };
 const TASK_BY_ID = new Map(TASK_LIST.map(task => [task.id, task]));
 // earlier versions let a click mark a task done; those unverified marks are dropped
 try { localStorage.removeItem('moneyball-board-tasks'); } catch { /* storage blocked: nothing to drop */ }
