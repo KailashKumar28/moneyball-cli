@@ -6,6 +6,85 @@
 
 use crate::config::AppConfig;
 use crate::error::Result;
+use crate::snapshot::Snapshot;
+
+/// Where a snapshot's CRM data stands: one type and one sentence for every
+/// surface (brief, the agent's tools, the TUI, /crm), so "connect a CRM"
+/// is never said to a user whose CRM is connected but not fetched.
+#[derive(Debug, Clone, PartialEq)]
+pub enum CrmHealth {
+    /// No crm.toml: the CRM was never connected.
+    NoSpec,
+    /// Connected, but this snapshot has no CRM data. `last` is the newest
+    /// snapshot that has a crm.json, if any.
+    NoData { last: Option<String> },
+    /// This snapshot has CRM data.
+    Fresh,
+}
+
+impl CrmHealth {
+    pub fn of(cfg: &AppConfig, snap: &Snapshot) -> Self {
+        if !super::is_empty(&snap.crm) {
+            CrmHealth::Fresh
+        } else if !super::fetch::spec_path(cfg).is_file() {
+            CrmHealth::NoSpec
+        } else {
+            CrmHealth::NoData {
+                last: newest_crm_snapshot(cfg),
+            }
+        }
+    }
+
+    /// The one sentence for a state that isn't fresh; None when fresh.
+    pub fn note(&self) -> Option<String> {
+        const ZEROS: &str =
+            "CRM leads and qualified read 0 and are NOT real zeros; verdicts are withheld";
+        match self {
+            CrmHealth::Fresh => None,
+            CrmHealth::NoSpec => Some(format!(
+                "no CRM connected - {}. Fix: moneyball crm connect",
+                ZEROS
+            )),
+            CrmHealth::NoData { last: Some(d) } => Some(format!(
+                "no CRM data in this snapshot (newest CRM pull: snapshot {}) - {}. Fix: moneyball crm fetch",
+                d, ZEROS
+            )),
+            CrmHealth::NoData { last: None } => Some(format!(
+                "no CRM data pulled yet - {}. Fix: moneyball crm fetch",
+                ZEROS
+            )),
+        }
+    }
+}
+
+/// The snapshot crm fetch writes into: today's if its ads are already
+/// there, else the newest snapshot that has ads (an ads-free "latest" dir
+/// would make /brief read zero spend). Shared with crm status, so the two
+/// never disagree about where the data goes.
+pub(crate) fn target_snapshot(cfg: &AppConfig) -> Result<Option<String>> {
+    let today = chrono::Local::now()
+        .date_naive()
+        .format("%Y-%m-%d")
+        .to_string();
+    let snap_root = cfg.history_dir().join("snap");
+    if snap_root.join(&today).join("ads_daily.json").is_file() {
+        return Ok(Some(today));
+    }
+    Ok(crate::snapshot::list_dates(&snap_root)?
+        .into_iter()
+        .rev()
+        .find(|d| snap_root.join(d).join("ads_daily.json").is_file()))
+}
+
+/// The newest snapshot holding a crm.json.
+fn newest_crm_snapshot(cfg: &AppConfig) -> Option<String> {
+    let snap_root = cfg.snap_dir();
+    crate::snapshot::list_dates(&snap_root)
+        .unwrap_or_default()
+        .into_iter()
+        .rev()
+        .find(|d| snap_root.join(d).join("crm.json").is_file())
+}
 
 /// Human-readable status lines + the single most useful next command.
 /// Same lines feed the CLI printout and the TUI tool cell.
@@ -47,11 +126,7 @@ pub fn status_lines(cfg: &AppConfig) -> Result<Vec<String>> {
     let snap_root = cfg.snap_dir();
     let dates = crate::snapshot::list_dates(&snap_root).unwrap_or_default();
     let latest_snap = dates.last().cloned();
-    let crm_home = dates
-        .iter()
-        .rev()
-        .find(|d| snap_root.join(d).join("crm.json").is_file())
-        .cloned();
+    let crm_home = newest_crm_snapshot(cfg);
     match (&crm_home, &latest_snap) {
         (None, _) => {
             out.push("data:   no crm.json in any snapshot".into());
@@ -96,7 +171,13 @@ pub fn status_lines(cfg: &AppConfig) -> Result<Vec<String>> {
             missing.join(" && moneyball crm secret ")
         )
     } else if crm_home.is_none() || crm_home != latest_snap {
-        "moneyball crm fetch   (writes crm.json into today's snapshot)".into()
+        match target_snapshot(cfg)? {
+            Some(d) => format!(
+                "moneyball crm fetch   (writes crm.json into snapshot {})",
+                d
+            ),
+            None => "moneyball fetch first: crm fetch needs a snapshot with ads".into(),
+        }
     } else {
         "up to date - moneyball report / brief will show the full funnel".into()
     };
@@ -158,6 +239,59 @@ mod tests {
         assert!(all.contains("snapshot 2026-08-01"), "{}", all);
         assert!(all.contains("STALE"), "{}", all);
         assert!(all.contains("crm fetch"), "{}", all);
+        std::fs::remove_dir_all(&tmp).ok();
+    }
+
+    /// One sentence per state: a connected-but-unfetched CRM is never told
+    /// to "connect", and the fix names where the data last came from.
+    #[test]
+    fn crm_health_says_fetch_not_connect_when_connected() {
+        let tmp = std::env::temp_dir().join(format!("mb-crmhealth-{}", std::process::id()));
+        let mb = tmp.join(".moneyball");
+        let snap_root = mb.join("history").join("snap");
+        std::fs::create_dir_all(snap_root.join("2026-08-12")).unwrap();
+        std::fs::write(snap_root.join("2026-08-12").join("crm.json"), "[]").unwrap();
+        let cfg = cfg_at(&tmp);
+        let empty = crate::snapshot::Snapshot {
+            path: snap_root.join("2026-09-28"),
+            date: "2026-09-28".into(),
+            ads_daily: vec![],
+            adsets: serde_json::json!({}),
+            creatives: None,
+            crm: serde_json::json!({}),
+            leads: None,
+            crm_contacts: None,
+            regions: serde_json::json!([]),
+            changes: serde_json::json!([]),
+            campaigns: serde_json::json!([]),
+        };
+
+        // No crm.toml yet: connect.
+        let h = CrmHealth::of(&cfg, &empty);
+        assert_eq!(h, CrmHealth::NoSpec);
+        assert!(h.note().unwrap().contains("crm connect"));
+
+        // Connected, this snapshot empty: fetch, naming the newest pull.
+        std::fs::write(mb.join("crm.toml"), "name = \"t\"\n").unwrap();
+        let h = CrmHealth::of(&cfg, &empty);
+        assert_eq!(
+            h,
+            CrmHealth::NoData {
+                last: Some("2026-08-12".into())
+            }
+        );
+        let note = h.note().unwrap();
+        assert!(
+            note.contains("crm fetch") && note.contains("2026-08-12"),
+            "{}",
+            note
+        );
+        assert!(!note.contains("connect"), "{}", note);
+
+        // CRM data present: nothing to say.
+        let mut fresh = empty;
+        fresh.crm = serde_json::json!([{"ad_id": "1", "stage": "Contactable", "delivery": 1}]);
+        assert_eq!(CrmHealth::of(&cfg, &fresh).note(), None);
         std::fs::remove_dir_all(&tmp).ok();
     }
 }

@@ -62,6 +62,8 @@ SCENES = [
     # the verdict gate on the CRM-less snapshot, in the TUI (model off: no paid call)
     dict(id="funnel_nocrm_tui", kind="tui", nollm=True, args=[],
          steps=[("wait_for", "ready"), ("type", "/funnel Disha Namma Mane"), ("key", "Enter"), ("sleep", 2)]),
+    dict(id="brief_nocrm_tui", kind="tui", nollm=True, args=[],
+         steps=[("wait_for", "ready"), ("type", "/brief"), ("key", "Enter"), ("sleep", 2)]),
     dict(id="keychain", kind="tui", args=["--date", "2026-08-12"],
          steps=[("wait_for", "ready"), ("type", "/keychain"), ("key", "Enter"), ("sleep", 1)]),
     dict(id="snapshots", kind="tui", args=["--date", "2026-08-12"],

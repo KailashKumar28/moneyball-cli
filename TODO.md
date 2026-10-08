@@ -17,6 +17,10 @@ bottom after a release-sized batch.)
   - [x] Verdict gate (2026-10-09): no kill / 0-CRM verdict from missing CRM
         data, in funnel rows, the table every surface prints, and the
         report's targeting chips. The 27 Sep report had 11 false Kill chips.
+  - [x] CRM health (2026-10-09): one type and one sentence for the CRM's
+        state (not connected / connected but not fetched / fresh); the
+        headless brief now warns, and crm status names the snapshot crm
+        fetch really writes into.
 - [ ] **Daily creative report** (plan: docs/CLOUD_PLAN.md, agreed
       2026-08-07 - report.json is the product, HTML is a renderer;
       reimplements pipeline/creative_report.py, never imports it):

@@ -267,22 +267,12 @@ fn validate_and_write(
         // into an empty today-dir would make /brief read zero spend for
         // everything. Join today's dir only if ads are already there,
         // else the newest snapshot that has them.
-        let today = Local::now().date_naive().format("%Y-%m-%d").to_string();
-        let snap_root = cfg.history_dir().join("snap");
-        let date = if snap_root.join(&today).join("ads_daily.json").is_file() {
-            today
-        } else {
-            crate::snapshot::list_dates(&snap_root)?
-                .into_iter()
-                .rev()
-                .find(|d| snap_root.join(d).join("ads_daily.json").is_file())
-                .ok_or_else(|| {
-                    Error::Config(
-                        "no ads snapshot to attach CRM data to - run `moneyball fetch` (or /fetch) first"
-                            .into(),
-                    )
-                })?
-        };
+        let date = super::status::target_snapshot(cfg)?.ok_or_else(|| {
+            Error::Config(
+                "no ads snapshot to attach CRM data to - run `moneyball fetch` (or /fetch) first"
+                    .into(),
+            )
+        })?;
         let written = write_crm_json(cfg, &date, &crm)?;
         // Organic contacts ride along for the re-inquiry check (lead
         // segmentation) - only when the spec maps contact fields.

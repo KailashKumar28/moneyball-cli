@@ -346,6 +346,9 @@ pub fn run(cfg: &AppConfig, date: Option<&str>) -> Result<()> {
     let history = load_history(&cfg.history_dir().join("scoreboard.csv"));
     let result = compute(&snap, cfg, &history);
     print_brief(&result);
+    if let Some(note) = crate::crm::status::CrmHealth::of(cfg, &snap).note() {
+        println!("!! {}", note);
+    }
     Ok(())
 }
 

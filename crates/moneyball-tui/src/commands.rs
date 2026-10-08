@@ -96,11 +96,11 @@ pub(crate) fn submit(app: &mut App) {
             if let Some(b) = &app.brief {
                 let mut out = format_brief_as_lines(b);
                 let mut user_prompt = build_brief_prompt(b);
-                if app.crm_missing {
-                    out.push(format!("warn: {}", moneyball_core::crm::NO_CRM_WARNING));
+                if let Some(note) = &app.crm_note {
+                    out.push(format!("warn: {}", note));
                     user_prompt.push_str(&format!(
                         "\n\nIMPORTANT: {}. Do not diagnose lead quality from l/q/v.",
-                        moneyball_core::crm::NO_CRM_WARNING
+                        note
                     ));
                 }
                 app.chat
@@ -388,8 +388,8 @@ names EXACTLY as listed - suggested commands must run verbatim when typed.\n",
     match &app.snap_date {
         Some(d) => {
             s.push_str(&format!("snapshot: {} loaded\n", d));
-            if app.crm_missing {
-                s.push_str(&format!("{}\n", moneyball_core::crm::NO_CRM_WARNING));
+            if let Some(note) = &app.crm_note {
+                s.push_str(&format!("{}\n", note));
             }
         }
         None => s.push_str(
@@ -525,10 +525,12 @@ impl moneyball_core::agent::ToolExec for SnapshotTools {
                 let history = brief::load_history(&self.cfg.history_dir().join("scoreboard.csv"));
                 let b = brief::compute(&snap, &self.cfg, &history);
                 let mut out = format_brief_as_lines(&b).join("\n");
-                if moneyball_core::crm::is_empty(&snap.crm) {
+                if let Some(note) =
+                    moneyball_core::crm::status::CrmHealth::of(&self.cfg, &snap).note()
+                {
                     out.push_str(&format!(
                         "\nIMPORTANT: {}. Do not diagnose lead quality from l/q/v.",
-                        moneyball_core::crm::NO_CRM_WARNING
+                        note
                     ));
                 }
                 Ok(out)

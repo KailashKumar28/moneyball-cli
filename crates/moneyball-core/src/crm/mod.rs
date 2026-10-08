@@ -58,10 +58,6 @@ pub fn is_empty(crm: &Value) -> bool {
     }
 }
 
-/// The user-facing sentence for that state - one wording everywhere.
-pub const NO_CRM_WARNING: &str = "no CRM data in this snapshot - l/q/v counts are NOT real \
-zeros; connect a CRM (moneyball crm connect) or write crm.json (moneyball crm contract)";
-
 // ---------- ticket iteration ----------
 
 /// Iterate tickets in either accepted crm.json shape: a flat array of

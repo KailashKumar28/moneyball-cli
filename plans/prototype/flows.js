@@ -137,7 +137,7 @@ const FRAMES = [
 
 	// ── D · In the shell ──
 	{ s: 'D', scene: 'cli_crm_status', title: 'moneyball crm status', next: '',
-		note: '<b>The one screen that knows CRM is stale.</b> Its next line is wrong: crm fetch would write into the 28 Sep snapshot, not today\'s.',
+		note: '<b>The one screen that knows CRM is stale.</b> Since 9 Oct its next line names the snapshot crm fetch really writes into (it said "today\'s").',
 		details: { 'Problems found': ['crm fetch files into the newest snapshot with ads, while its window is anchored on the pull date (crm/fetch.rs:78-79, 270-285): run it before fetch and it lands on yesterday'] },
 		pins: [['content', '~STALE', 'Stale call-out', 'Correct, and only here.'], ['content', '~next:', 'Next', '"today\'s snapshot" is wrong when today has no Meta pull yet.']] },
 	{ s: 'D', scene: 'cli_report', title: 'moneyball report', next: '',
@@ -181,9 +181,9 @@ const FRAMES = [
 		note: '<b>The latest snapshot has no crm.json.</b> /crm says STALE; every other screen just shows zeros.',
 		details: {}, pins: [['content', '~STALE', 'Only warning', 'The single screen that names the problem.']] },
 	{ s: 'F', scene: 'cli_brief_nocrm', title: 'brief with no CRM', next: '',
-		note: '<b>Every product: 0 CRM leads, 0 qualified, gap 10.</b> Feasibility reads "Rs.0/qualified".',
-		details: { 'Problems found': ['The headless brief prints no CRM warning at all (NO_CRM_WARNING is wired into the TUI only)', 'Where it is shown, the warning says "connect a CRM": it is connected, just not fetched (crm/mod.rs:62)'] },
-		pins: [['content', '~Rs.0/qualified', 'Rs.0', 'Zero qualified, printed as zero cost.']] },
+		note: '<b>Every product: 0 CRM leads, 0 qualified, gap 10.</b> Since 9 Oct (CRM health) the brief says why, names the newest CRM pull, and gives the fix.',
+		details: { 'Was': ['The headless brief printed no CRM warning at all; the TUI one said "connect a CRM" to a user whose CRM was connected, just not fetched'], 'Now': ['CrmHealth {NoSpec, NoData{last}, Fresh}: one sentence for the CLI, the TUI cell, the model\'s prompt and its state block'], 'Still open': ['Feasibility still reads "Rs.0/qualified" on zero qualified'] },
+		pins: [['content', '~Rs.0/qualified', 'Rs.0', 'Zero qualified, printed as zero cost.'], ['content', '~newest CRM pull', 'CRM health', 'Connected but not fetched: says fetch, never connect.']] },
 	{ s: 'F', scene: 'cli_funnel_nocrm', title: 'funnel with no CRM: verdict withheld', next: '',
 		note: '<b>Fixed 9 Oct (verdict gate).</b> Until then this printed kill=true on the three biggest ad sets (Rs 85k, 50k, 25k) because qualified was zero, not because they failed. Now: "no CRM", and why.',
 		details: { 'Was': ['funnel/mod.rs computed kill from q=0 with no CRM check; the agent\'s funnel tool and /funnel used the same rows', 'A real session (8 Aug) turned exactly that into "KILL all three"'], 'Now': ['FunnelRow.kill is None without CRM data; the one table printer says "no CRM" and adds the reason, so the CLI, the TUI cell and the agent\'s tool all carry it'] },

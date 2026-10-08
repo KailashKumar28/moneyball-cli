@@ -29,8 +29,8 @@ pub struct App {
     pub status: Option<String>,
     pub brief: Option<ProductRowsAndFeasibility>,
     pub snap_date: Option<String>,
-    /// Loaded snapshot had no CRM data - l/q/v are not real zeros.
-    pub crm_missing: bool,
+    /// The CRM health sentence when this snapshot's CRM data isn't fresh.
+    pub crm_note: Option<String>,
     /// First Ctrl+C timestamp - a second within 2s quits (codex/Claude
     /// Code pattern: one stray Ctrl+C never kills the session).
     pub ctrl_c_armed: Option<std::time::Instant>,
@@ -177,7 +177,7 @@ impl App {
             status: None,
             brief: None,
             snap_date: None,
-            crm_missing: false,
+            crm_note: None,
             ctrl_c_armed: None,
             quit: false,
             quit_emoji: String::new(),
@@ -265,7 +265,8 @@ impl App {
                     let history =
                         brief::load_history(&self.cfg.history_dir().join("scoreboard.csv"));
                     let r = brief::compute(&snap, &self.cfg, &history);
-                    self.crm_missing = moneyball_core::crm::is_empty(&snap.crm);
+                    self.crm_note =
+                        moneyball_core::crm::status::CrmHealth::of(&self.cfg, &snap).note();
                     self.snap_date = Some(r::date_of(&snap));
                     self.brief = Some(r);
                     self.status = None;
