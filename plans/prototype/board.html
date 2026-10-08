@@ -1,0 +1,927 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>moneyball flow board</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+/* moneyball flow board: every screen of the CLI as a frame, in the order a user moves through them, laid out
+   like a Figma file. Today's frames are the real binary's terminal, captured cell by cell (capture.py); the
+   redesign's are authored in the same cells (redesign.js). Zoomed out, frames are screenshots; zoomed in, they
+   become the live screens (index.html?scene=<id>&inspect), inspectable down to a run's ratatui Style. */
+:root{--ink:#1e1e1e;--muted:#757575;--faint:#b3b3b3;--line:#e6e6e6;--panel:#ffffff;--canvas:#ededed;--blue:#0d99ff;--blue-soft:#e5f4ff;--sel:#0d99ff;
+  --dev:#0d99ff;--interaction:#9747ff;--a11y:#14ae5c;--content:#f5a300}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+html,body{height:100%;margin:0}
+body{display:grid;grid-template-columns:248px minmax(0,1fr) 340px;overflow:hidden;background:var(--canvas);color:var(--ink);font:12px/1.45 Inter,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
+button,input{font:inherit;color:inherit}
+button{cursor:pointer}
+code,.mono{font-family:"JetBrains Mono",ui-monospace,Menlo,monospace}
+/* left: the file, the frames list, frame theme */
+.left,.right{z-index:2;display:flex;flex-direction:column;min-height:0;background:var(--panel)}
+.left{border-right:1px solid var(--line)}
+.right{border-left:1px solid var(--line)}
+.file{display:flex;flex-direction:column;gap:2px;padding:14px 16px;border-bottom:1px solid var(--line)}
+.file b{font-size:13px;font-weight:600}
+.file span{color:var(--muted)}
+.list{flex:1;overflow-y:auto;padding:8px 0}
+.list h3{margin:12px 16px 4px;color:var(--muted);font-size:11px;font-weight:500}
+.list button{display:flex;align-items:center;gap:8px;width:100%;height:28px;padding:0 16px;border:0;background:none;text-align:left}
+.list button:hover{background:#f5f5f5}
+.list button[aria-current="true"]{background:var(--blue-soft)}
+.list .code{flex:none;width:24px;color:var(--muted);font-variant-numeric:tabular-nums}
+.list .name{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.list .count{flex:none;color:var(--faint);font-size:11px}
+.left-foot{display:flex;gap:4px;padding:10px 12px;border-top:1px solid var(--line)}
+.seg{display:flex;flex:1;gap:2px;padding:2px;border-radius:6px;background:#f0f0f0}
+.seg button{flex:1;height:24px;border:0;border-radius:5px;background:none;color:var(--muted)}
+.seg button[aria-pressed="true"]{background:#fff;color:var(--ink);box-shadow:0 1px 2px rgba(0,0,0,.12)}
+/* canvas: laid out in frame pixels, moved by one transform; --z keeps labels and outlines a constant size on screen */
+.viewport{position:relative;overflow:hidden;cursor:default;touch-action:none}
+.viewport.panning{cursor:grabbing}
+.world{position:absolute;top:0;left:0;transform-origin:0 0;--z:1}
+.world.glide{transition:transform .5s cubic-bezier(.2,.8,.2,1)}
+.section{position:absolute;border:2px solid #d4d4d4;border-radius:48px;background:rgba(255,255,255,.45)}
+.section-title{position:absolute;bottom:100%;left:0;padding-bottom:calc(6px / var(--z));font-size:calc(13px / var(--z));font-weight:600;white-space:nowrap}
+.section-sub{position:absolute;top:56px;left:120px;max-width:2800px;color:var(--muted);font-size:40px}
+.frame{position:absolute;width:1440px}
+.frame-label{position:absolute;bottom:100%;left:0;display:flex;gap:calc(6px / var(--z));max-width:1440px;padding-bottom:calc(6px / var(--z));overflow:hidden;color:var(--muted);font-size:calc(12px / var(--z));white-space:nowrap}
+.frame-label b{overflow:hidden;color:var(--ink);font-weight:500;text-overflow:ellipsis}
+.frame.on .frame-label,.frame.on .frame-label b{color:var(--sel)}
+.frame-box{position:relative;height:900px;overflow:hidden;background:#fff;box-shadow:0 2px 8px rgba(0,0,0,.08),0 12px 40px rgba(0,0,0,.08);cursor:pointer}
+.frame-box>img{display:block;width:100%;height:100%}
+.frame-live{position:absolute;inset:0;width:1440px;height:900px;border:0;opacity:0;transition:opacity .25s}
+.frame-live.ready{opacity:1}
+.frame-box::after{content:"";position:absolute;inset:0;z-index:1;pointer-events:none}
+.frame:hover .frame-box::after{box-shadow:inset 0 0 0 calc(1px / var(--z)) var(--sel)}
+.frame.on .frame-box::after{box-shadow:inset 0 0 0 calc(2px / var(--z)) var(--sel)}
+.frame-missing{position:absolute;inset:0;display:grid;place-items:center;color:var(--muted);font-size:40px}
+.frame-note{margin-top:40px;padding:36px 44px;border-radius:24px;background:#fff8c5;color:#3d3500;font-size:32px;line-height:1.45;box-shadow:0 2px 6px rgba(0,0,0,.06)}
+.frame-note b{font-weight:600}
+.arrows{position:absolute;top:0;left:0;overflow:visible;pointer-events:none}
+.arrows path{fill:none;stroke:var(--blue);stroke-width:calc(2px / var(--z))}
+.arrow-label{position:absolute;width:max-content;max-width:270px;padding:10px 18px;border-radius:14px;background:var(--blue);color:#fff;font-size:28px;font-weight:500;line-height:1.3;text-align:center;transform:translate(-50%,calc(-100% - 16px))}
+.continue{position:absolute;padding:20px 32px;border:3px dashed var(--blue);border-radius:20px;color:var(--blue);font-size:32px;font-weight:500;white-space:nowrap}
+/* too small to read: names give way to the frames, as in Figma */
+.world.tiny .frame-label,.world.tiny .arrow-label{visibility:hidden}
+/* bottom dock and the one-line hint above the canvas */
+.dock{position:absolute;bottom:16px;left:50%;z-index:3;display:flex;align-items:center;gap:2px;padding:4px;border-radius:12px;background:#fff;box-shadow:0 2px 12px rgba(0,0,0,.14);transform:translateX(-50%);white-space:nowrap}
+.dock button{height:32px;min-width:32px;padding:0 10px;border:0;border-radius:8px;background:none}
+.dock button:hover{background:#f0f0f0}
+.dock button[aria-pressed="true"]{background:var(--blue);color:#fff}
+.dock .pct{min-width:56px;font-variant-numeric:tabular-nums}
+.dock i{width:1px;height:20px;margin:0 4px;background:var(--line)}
+.hint{position:absolute;top:12px;left:50%;z-index:3;padding:6px 12px;border-radius:8px;background:rgba(30,30,30,.86);color:#fff;font-size:12px;transform:translateX(-50%);pointer-events:none;transition:opacity .2s}
+/* right: the frame's story, the selected element's specs (Dev Mode), or the styles library */
+.head{padding:14px 16px 0;border-bottom:1px solid var(--line)}
+.head .where{color:var(--muted)}
+.head h2{margin:2px 0 10px;font-size:15px;font-weight:600;line-height:1.35}
+.tabs{display:flex;gap:16px}
+.tabs button{height:32px;padding:0;border:0;border-bottom:2px solid transparent;background:none;color:var(--muted);font-weight:500}
+.tabs button[aria-selected="true"]{border-bottom-color:var(--ink);color:var(--ink)}
+.inspect{flex:1;overflow-y:auto;padding:12px 16px 24px}
+.inspect h4{display:flex;align-items:center;justify-content:space-between;margin:18px 0 8px;color:var(--muted);font-size:11px;font-weight:500;letter-spacing:.02em;text-transform:uppercase}
+.inspect h4:first-child{margin-top:4px}
+.inspect ul{margin:0;padding-left:16px}
+.inspect li{margin:3px 0}
+.inspect p{margin:0}
+.lead{font-size:13px}
+.next{display:flex;align-items:center;gap:8px;padding:8px 10px;border-radius:8px;background:var(--blue-soft);color:#0a5a99}
+.next b{font-weight:600}
+.btn{display:inline-flex;align-items:center;gap:6px;height:32px;margin:14px 6px 0 0;padding:0 12px;border:0;border-radius:8px;background:var(--blue);color:#fff;font-weight:500;text-decoration:none}
+.btn:hover{background:#0b87e0}
+.btn.ghost{background:#f0f0f0;color:var(--ink)}
+.kbd{display:inline-block;min-width:18px;padding:0 4px;border:1px solid var(--line);border-bottom-width:2px;border-radius:4px;font-size:11px;text-align:center}
+/* annotations, in Figma's four categories */
+.notes{display:flex;flex-direction:column;gap:6px}
+.note{display:grid;grid-template-columns:20px 1fr;gap:4px 8px;padding:8px;border:1px solid var(--line);border-radius:8px;background:#fff;text-align:left;transition:border-color .15s,background .15s}
+.note:hover,.note.flash{border-color:var(--kind);background:color-mix(in srgb,var(--kind) 6%,#fff)}
+.note .n{display:grid;place-items:center;width:20px;height:20px;border-radius:50%;background:var(--kind);color:#fff;font-size:11px;font-weight:600}
+.note .kind{color:var(--kind);font-size:11px;font-weight:500}
+.note b{font-weight:600}
+.note p{grid-column:2;color:#444}
+[data-kind="dev"]{--kind:var(--dev)}[data-kind="interaction"]{--kind:var(--interaction)}[data-kind="a11y"]{--kind:var(--a11y)}[data-kind="content"]{--kind:var(--content)}
+.legend{display:flex;flex-wrap:wrap;gap:10px;margin-top:6px}
+.legend span{display:inline-flex;align-items:center;gap:5px}
+.legend i{width:10px;height:10px;border-radius:50%;background:var(--kind)}
+/* Dev Mode properties */
+.layer{padding:8px 10px;border-radius:8px;background:#f5f5f5;font-size:12px;font-weight:500;word-break:break-all}
+.crumbs{display:flex;flex-wrap:wrap;gap:2px 4px;margin-top:6px;color:var(--muted);font-size:11px}
+.crumbs button{padding:0 2px;border:0;border-radius:3px;background:none;color:var(--muted);font-family:"JetBrains Mono",monospace;font-size:10.5px}
+.crumbs button:hover{background:#f0f0f0;color:var(--ink)}
+.text{margin-top:6px;padding:6px 8px;border-left:2px solid var(--line);color:#444}
+.props{display:grid;grid-template-columns:96px minmax(0,1fr);gap:6px 8px;align-items:center;margin:0}
+.props dt{color:var(--muted)}
+.props dd{display:flex;flex-wrap:wrap;align-items:center;gap:4px;min-width:0;margin:0}
+.quad{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px}
+.quad div{padding:6px 8px;border-radius:6px;background:#f5f5f5}
+.quad span{display:block;color:var(--muted);font-size:10px}
+.v{max-width:100%;padding:1px 4px;border:0;border-radius:4px;background:none;font-family:"JetBrains Mono",monospace;font-size:11.5px;text-align:left;overflow-wrap:anywhere}
+.v:hover{background:var(--blue-soft);color:#0a5a99}
+.sw{flex:none;width:14px;height:14px;border-radius:3px;box-shadow:inset 0 0 0 1px rgba(0,0,0,.12)}
+.var{padding:1px 6px;border-radius:4px;background:#f0ebff;color:#6b2fd6;font-family:"JetBrains Mono",monospace;font-size:10.5px}
+.preview{margin-bottom:8px;padding:10px 12px;border-radius:8px;background:#f5f5f5;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
+.bm{position:relative;padding:20px 26px;border:1px dashed #d0a35c;border-radius:4px;background:#fdf3e3;font-size:10.5px;text-align:center}
+.bm .b{position:relative;padding:18px 24px;border:1px solid #c9c060;background:#fffbd4}
+.bm .p{position:relative;padding:18px 24px;border:1px dashed #6fb06f;background:#e6f4e4}
+.bm .c{padding:8px;border:1px solid #6ba3d9;background:#dcecfb;font-family:"JetBrains Mono",monospace}
+.bm .l{position:absolute;top:2px;left:6px;color:var(--muted)}
+.bm .t,.bm .r,.bm .bt,.bm .lf{position:absolute;font-family:"JetBrains Mono",monospace}
+.bm .t{top:3px;left:50%;transform:translateX(-50%)}
+.bm .bt{bottom:3px;left:50%;transform:translateX(-50%)}
+.bm .lf{left:6px;top:50%;transform:translateY(-50%)}
+.bm .r{right:6px;top:50%;transform:translateY(-50%)}
+pre.css{margin:0;padding:10px 12px;border-radius:8px;background:#1e1e1e;color:#e6e6e6;font:11.5px/1.6 "JetBrains Mono",monospace;white-space:pre-wrap;word-break:break-word}
+pre.css .p{color:#9cdcfe}pre.css .k{color:#c586c0}
+.copy{height:22px;padding:0 8px;border:0;border-radius:5px;background:#f0f0f0;color:var(--ink);font-size:11px;text-transform:none;letter-spacing:0}
+.empty{padding:16px;border:1px dashed var(--line);border-radius:8px;color:var(--muted);text-align:center}
+/* styles library */
+.filter{width:100%;height:30px;margin-bottom:8px;padding:0 10px;border:1px solid var(--line);border-radius:6px;outline:none}
+.filter:focus{border-color:var(--blue)}
+.tokens{display:flex;flex-direction:column}
+.token{display:grid;grid-template-columns:16px 16px minmax(0,1fr);gap:4px 8px;align-items:center;padding:5px 0;border-bottom:1px solid #f2f2f2}
+.token .name{overflow:hidden;font-size:11px;text-overflow:ellipsis;white-space:nowrap}
+.token .vals{grid-column:3;color:var(--muted);font-family:"JetBrains Mono",monospace;font-size:10.5px}
+.tstyle{padding:8px 0;border-bottom:1px solid #f2f2f2}
+.tstyle .spec{color:var(--muted);font-family:"JetBrains Mono",monospace;font-size:10.5px}
+.rows{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:6px 10px}
+.rows span:nth-child(even){color:var(--muted);font-family:"JetBrains Mono",monospace;font-size:11px;text-align:right}
+.handoff{display:flex;flex-wrap:wrap;gap:6px}
+.handoff .btn{margin:0}
+.fine{margin-top:6px!important;color:var(--muted)}
+.inspect .apis,.inspect .tasks{padding:0;list-style:none}
+.tasks li{margin:0 0 8px}
+.tasks li>div{font-size:12px;line-height:1.45}
+.tasks li.isdone>div{color:var(--muted)}
+.tasks .copy{display:block;margin-top:6px}
+.tasks .evidence{color:#14ae5c}
+.inspect h4 .step-actions{display:inline-flex;align-items:center;gap:8px}
+.inspect h4 .step-actions .copy{margin:0}
+.st{display:inline-block;margin-right:6px;padding:0 6px;border-radius:4px;font-size:10px;font-weight:600;line-height:16px;text-decoration:none}
+.st.todo{background:#fff1e6;color:#b4560a}
+.st.check{background:var(--blue-soft);color:var(--blue)}
+.st.done{background:#e8f6ee;color:#14ae5c}
+.tasks small{display:block;margin-top:2px;color:var(--muted);font-size:11px}
+.tasks .side{display:inline-block;margin-right:6px;padding:0 6px;border:1px solid var(--line);border-radius:4px;color:var(--muted);font-size:10px;font-weight:600;line-height:14px}
+.tasks.plan li{margin:0 -8px 6px;padding:6px 8px;border-radius:6px}
+.tasks.plan li.mine{background:#f5faff;box-shadow:inset 2px 0 var(--blue)}
+.tabs{gap:10px;overflow-x:auto;scrollbar-width:none}
+.tabs button{flex:none}
+.tabs .count{margin-left:4px;padding:0 5px;border-radius:999px;background:#f0f0f0;color:var(--muted);font-size:10px;line-height:15px}
+.apis li{margin:0 0 10px}
+.apis .verb{display:inline-block;min-width:44px;margin-right:6px;padding:1px 5px;border-radius:4px;background:var(--blue-soft);color:var(--blue);font:600 10px/16px "JetBrains Mono",monospace;text-align:center}
+.apis code{font:11px "JetBrains Mono",monospace;overflow-wrap:anywhere}
+.apis p{margin:2px 0 0;color:var(--muted);font-size:12px}
+.helper{position:fixed;top:0;left:-20000px;width:1440px;height:900px;border:0;visibility:hidden}
+.dialog{position:fixed;inset:0;z-index:20;display:grid;place-items:center;background:rgba(0,0,0,.3)}
+.dialog div{display:flex;flex-direction:column;gap:10px;width:min(720px,90vw);padding:16px;border-radius:12px;background:#fff;box-shadow:0 12px 40px rgba(0,0,0,.2)}
+.dialog textarea{height:50vh;padding:10px;border:1px solid var(--line);border-radius:8px;font:11px/1.5 "JetBrains Mono",monospace;resize:vertical}
+.toast{position:fixed;bottom:72px;left:50%;z-index:9;padding:6px 12px;border-radius:8px;background:#1e1e1e;color:#fff;font-size:12px;transform:translateX(-50%);pointer-events:none;opacity:0;transition:opacity .15s}
+.toast.on{opacity:1}
+@media (prefers-reduced-motion:reduce){.world.glide{transition:none}}
+</style>
+</head>
+<body>
+<aside class="left">
+  <div class="file"><b>moneyball · CLI flows</b><span>Frames from the real binary</span></div>
+  <nav class="list" id="list" aria-label="Frames"></nav>
+  <div class="left-foot"><div class="seg" role="group" aria-label="Frame theme"><button type="button" data-theme="light" aria-pressed="true">Light</button><button type="button" data-theme="dark" aria-pressed="false">Dark</button></div></div>
+</aside>
+<main class="viewport" id="viewport">
+  <div class="world" id="world"></div>
+  <div class="hint" id="hint"></div>
+  <div class="dock" role="toolbar" aria-label="View">
+    <button type="button" data-zoom="-1" aria-label="Zoom out">−</button>
+    <button type="button" class="pct" data-zoom="100" id="pct" title="Zoom to 100%">100%</button>
+    <button type="button" data-zoom="1" aria-label="Zoom in">+</button><i></i>
+    <button type="button" data-fit="1">Fit all</button><i></i>
+    <button type="button" data-step="-1" aria-label="Previous frame">←</button>
+    <button type="button" data-step="1" aria-label="Next frame">→</button>
+    <button type="button" id="play" aria-pressed="false">Play the flow</button><i></i>
+    <button type="button" id="pins" aria-pressed="true" title="Show annotation pins on the frames">Annotations</button>
+  </div>
+</main>
+<aside class="right" id="right"></aside>
+<div class="toast" id="toast"></div>
+
+<script src="tokens.js"></script>
+<script src="flows.js"></script>
+<script src="build.js"></script>
+<script>
+// ── The board's content (SECTIONS, FRAMES) lives in flows.js, shared with the prototype page. ──
+
+const KIND = { dev: 'Development', interaction: 'Interaction', a11y: 'Accessibility', content: 'Content' };
+
+// the TUI's visual language as the code paints it (ratatui named colours; tokens.js maps them per theme)
+const TEXT_STYLES = [
+	['Brand', 'Cyan, bold', '◆ MONEYBALL', 'color:var(--a6);font-weight:700'],
+	['Context bar', 'DarkGray, values Gray', '└─ workspace: ~/fincity · snapshot: 2026-08-12', 'color:var(--a8)'],
+	['Status ok', 'Green ●', '● ready', 'color:var(--a2)'],
+	['User message', '❯ then default fg', '❯ which creative should I scale?', 'color:var(--term-fg)'],
+	['Tool cell', '⎿ ● name, args DarkGray', '⎿ ● moneyball funnel', 'color:var(--a2)'],
+	['Tool result', 'DarkGray, clipped with …', 'spend Rs.20863/d  meta 142  crm 112', 'color:var(--a8)'],
+	['Assistant reply', 'default fg, markdown bold', 'Disha Namma Mane is closest to goal', 'color:var(--term-fg)'],
+	['Warning', 'Yellow', 'warn: no CRM data in this snapshot', 'color:var(--a3)'],
+	['Error', 'Red ✖', '✖ llm call failed', 'color:var(--a1)'],
+	['Caption', 'DarkGray', '↵ send · esc clear input · ⇥ complete', 'color:var(--a8)'],
+];
+const RADII = [['◆', 'brand mark'], ['└─', 'context bar lead'], ['❯', 'prompt and user turns'], ['█', 'drawn caret'], ['⎿', 'tool cell'], ['● ◐ ✖', 'tool done / running / failed'], ['▸', 'palette and wizard cursor'], ['↵ ⇥ ↑↓', 'key hints'], ['·', 'separator']];
+const SHADOWS = [['Terminal', '140 x 42 cells, inline viewport (no alternate screen)'], ['Composer', 'bottom: rule, ❯ input, key caption, status line'], ['Chat', 'scrolls under the pinned header and context bar'], ['Width', 'tool results clip at the panel edge with …']];
+const MOTION = [['Caret', 'blinks while a reply streams'], ['Tool cell', '◐ yellow while running, then ● green or ✖ red'], ['Status line', '"<ms> via <provider>" after a turn'], ['Esc', 'clears input; interrupts a running turn']];
+
+// ── Layout, in frame pixels ──
+
+const FW = 1440, FH = 900, GAP = 320, PAD = 120, HEAD = 300, NOTE = 360, SECTION_GAP = 300;
+const LIVE_AT = 0.2;   // frames turn into the live screens at this zoom and closer
+const MAX_LIVE = 8;
+const $ = id => document.getElementById(id);
+const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+const keep = (key, value) => { try { if (value === undefined) return JSON.parse(localStorage.getItem(key)); localStorage.setItem(key, JSON.stringify(value)); } catch { return null; } };
+
+for (const [k, val] of Object.entries(TOKENS[keep('moneyball-board-theme') || 'light'])) document.documentElement.style.setProperty(k, val);
+const view = { x: 0, y: 0, k: 0.1, theme: keep('moneyball-board-theme') || 'light', pins: keep('moneyball-board-pins') ?? true, selected: null, element: null, tab: 'frame', playing: 0, pending: null, flash: null, filter: '' };
+const order = [];
+const lives = new Map();
+
+// - a packed board (share.py) carries the prototype and the frame images inline; from disk they are files beside it
+const PACKED = typeof SHARE_PROTO === 'string';
+const PROTO_URL = PACKED ? URL.createObjectURL(new Blob([SHARE_PROTO], { type: 'text/html' })) : 'index.html';
+const frameImage = (theme, scene) => (PACKED ? SHARE_FRAMES[`${theme}/${scene}`] || '' : `frames/${theme}/${scene}.jpg`);
+
+// - points a frame at a scene: by query string from disk; by the frame's name from the packed blob, which takes no query
+function showScene(iframe, params) {
+	if (PACKED) { iframe.name = params; iframe.src = PROTO_URL; } else iframe.src = `index.html?${params}`;
+}
+
+function openScene(scene) {
+	const params = `scene=${scene}&theme=${view.theme}`;
+	window.open(PACKED ? PROTO_URL : `index.html?${params}`, PACKED ? params : '_blank');
+}
+const ready = new Set();
+
+function layout() {
+	let top = 0;
+	const arrows = [];
+	const html = SECTIONS.map((section, si) => {
+		const frames = FRAMES.filter(f => f.s === section.code);
+		const width = PAD * 2 + frames.length * FW + (frames.length - 1) * GAP + (section.flow ? GAP : 0);
+		const out = [`<div class="section" style="left:0;top:${top}px;width:${width}px;height:${HEAD + FH + NOTE + PAD}px"><span class="section-title">${section.code} · ${esc(section.title)}</span><span class="section-sub">${esc(section.sub)}</span></div>`];
+		frames.forEach((f, i) => {
+			f.code = `${section.code}${i + 1}`;
+			f.x = PAD + i * (FW + GAP);
+			f.y = top + HEAD;
+			order.push(f);
+			out.push(`<div class="frame" id="f-${f.scene}" data-scene="${f.scene}" style="left:${f.x}px;top:${f.y}px">
+				<div class="frame-label"><span>${f.code}</span><b>${esc(f.title)}</b></div>
+				<div class="frame-box"><span class="frame-missing">Run capture.py to draw this frame</span><img alt="${esc(f.title)}" loading="lazy" data-scene="${f.scene}"></div>
+				<div class="frame-note">${f.note}</div></div>`);
+			if (f.next) {
+				const y = f.y + FH / 2;
+				const x1 = f.x + FW;
+				const x2 = x1 + GAP;
+				arrows.push(`<path d="M${x1 + 16} ${y}H${x2 - 20}" marker-end="url(#head)"/>`);
+				out.push(`<div class="arrow-label" style="left:${(x1 + x2) / 2}px;top:${y}px">${esc(f.next)}</div>`);
+				if (i === frames.length - 1 && SECTIONS[si + 1]) out.push(`<div class="continue" style="left:${x2}px;top:${y - 40}px">Continues in ${SECTIONS[si + 1].code}</div>`);
+			}
+		});
+		top += HEAD + FH + NOTE + PAD + SECTION_GAP;
+		return out.join('');
+	}).join('');
+	$('world').innerHTML = html + `<svg class="arrows" width="1" height="1"><defs><marker id="head" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="4" markerHeight="4" orient="auto"><path d="M0 0L10 5L0 10z" fill="#0d99ff" stroke="none"/></marker></defs>${arrows.join('')}</svg>`;
+	view.width = Math.max(...SECTIONS.map(s => FRAMES.filter(f => f.s === s.code).length)) * (FW + GAP) + PAD * 2 + GAP;
+	view.height = top;
+	paintImages();
+}
+
+function paintImages() {
+	document.querySelectorAll('.frame-box img').forEach(img => {
+		img.onload = () => { img.previousElementSibling.hidden = true; };
+		img.onerror = () => { img.previousElementSibling.hidden = false; img.hidden = true; };
+		img.hidden = false;
+		img.src = frameImage(view.theme, img.dataset.scene);
+	});
+	document.querySelectorAll('[data-theme]').forEach(b => b.setAttribute('aria-pressed', b.dataset.theme === view.theme));
+}
+
+function paintList() {
+	$('list').innerHTML = SECTIONS.map(s => `<h3>${s.code} · ${esc(s.title)}</h3>` + FRAMES.filter(f => f.s === s.code)
+		.map(f => `<button type="button" data-go="${f.scene}" aria-current="${view.selected === f.scene}"><span class="code">${f.code}</span><span class="name">${esc(f.title)}</span>${f.pins.length ? `<span class="count" title="${f.pins.length} annotations">${f.pins.length}</span>` : ''}</button>`).join('')).join('');
+}
+
+// ── Live frames: the real screen in place of the screenshot once it's big enough to read ──
+
+const tell = (scene, message) => lives.get(scene)?.contentWindow?.postMessage({ source: 'moneyball-board', ...message }, '*');
+const pinsFor = f => f.pins.map(([kind, sel], i) => ({ n: i + 1, kind, sel }));
+
+function syncLive() {
+	clearTimeout(syncLive.timer);
+	syncLive.timer = setTimeout(() => {
+		const box = $('viewport').getBoundingClientRect();
+		const near = f => {
+			const x = view.x + f.x * view.k;
+			const y = view.y + f.y * view.k;
+			return x + FW * view.k > -200 && x < box.width + 200 && y + FH * view.k > -200 && y < box.height + 200;
+		};
+		const want = view.k >= LIVE_AT ? order.filter(near).slice(0, MAX_LIVE).map(f => f.scene) : [];
+		for (const [scene, iframe] of lives) if (!want.includes(scene)) { iframe.remove(); lives.delete(scene); ready.delete(scene); }
+		for (const scene of want) if (!lives.has(scene)) {
+			const iframe = document.createElement('iframe');
+			iframe.className = 'frame-live';
+			iframe.title = order.find(f => f.scene === scene).title;
+			showScene(iframe, `scene=${scene}&still&inspect&theme=${view.theme}`);
+			document.querySelector(`#f-${scene} .frame-box`).append(iframe);
+			lives.set(scene, iframe);
+		}
+		paintHint();
+	}, 140);
+}
+
+function paintHint() {
+	const hint = $('hint');
+	hint.textContent = view.k < LIVE_AT ? 'Zoom in to inspect: frames turn into the live screens' : view.element ? 'Hover another element to measure the gap · Esc clears' : 'Click any element in a frame to inspect it';
+	hint.style.opacity = view.playing ? 0 : 1;
+}
+
+// ── Right panel ──
+
+function paintRight() {
+	const f = order.find(x => x.scene === view.selected);
+	if (!f) { $('right').innerHTML = overviewHtml(); return; }
+	const section = SECTIONS.find(s => s.code === f.s);
+	const hasElement = view.element?.scene === f.scene;
+	$('right').innerHTML = `<div class="head"><span class="where">${f.code} · ${esc(section.title)}</span><h2>${esc(f.title)}</h2>
+		<div class="tabs" role="tablist"><button type="button" role="tab" data-tab="frame" aria-selected="${view.tab === 'frame'}">Frame</button><button type="button" role="tab" data-tab="inspect" aria-selected="${view.tab === 'inspect'}">Inspect</button>${SIDES.map(([side, label]) => `<button type="button" role="tab" data-tab="${side}" aria-selected="${view.tab === side}">${label}<span class="count">${openTasks(f, side)}</span></button>`).join('')}<button type="button" role="tab" data-tab="plan" aria-selected="${view.tab === 'plan'}">Build plan<span class="count">${TASK_LIST.filter(isOpen).length}</span></button></div></div>
+		<div class="inspect">${TASK_TABS.has(view.tab) ? tasksHtml(f, view.tab) : view.tab === 'inspect' ? (hasElement ? inspectHtml(view.element.data) : `<div class="empty">${view.k < LIVE_AT ? `Zoom in to ${Math.round(LIVE_AT * 100)}% or more and the frame turns into the live screen.` : 'Click any element in the frame to see its size, spacing, type, colours and CSS.'}<br><button type="button" class="btn ghost" data-focus="${f.scene}">Zoom to frame</button></div>`) : frameHtml(f)}</div>`;
+	if (view.flash) document.querySelector(`.note[data-n="${view.flash}"]`)?.scrollIntoView({ block: 'nearest' });
+}
+
+function frameHtml(f) {
+	const next = f.next && order[order.indexOf(f) + 1];
+	const groups = Object.entries(f.details || {}).filter(([, items]) => items.length).map(([label, items]) => `<h4>${esc(label)}</h4><ul>${items.map(t => `<li>${esc(t)}</li>`).join('')}</ul>`).join('');
+	const notes = f.pins.length ? `<h4>Annotations <span>${f.pins.length}</span></h4><div class="notes">${f.pins.map(([kind, , title, text], n) => `<button type="button" class="note${view.flash === n + 1 ? ' flash' : ''}" data-kind="${kind}" data-n="${n + 1}" data-note="${n}" title="Select this element">
+		<span class="n">${n + 1}</span><span><span class="kind">${KIND[kind]}</span> · <b>${esc(title)}</b></span><p>${esc(text)}</p></button>`).join('')}</div>` : '';
+	return `<p class="lead">${f.note}</p>
+		${next ? `<h4>Moves on when</h4><div class="next"><span>The user</span><b>${esc(f.next)}</b><span>→ ${next.code}</span></div>` : ''}
+		${notes}${groups}${buildHtml(f)}
+		<h4>Hand it to an agent</h4><div class="handoff"><button type="button" class="btn" data-export="agent">Copy for agent</button><button type="button" class="btn ghost" data-export="html">Copy screen text</button><button type="button" class="btn ghost" data-export="download">Download .md</button></div>
+		<p class="fine">Copy for agent: what the screen is for, how the user moves on, its annotations, how to build it (modules, contracts, steps), its tasks, the screen as text and every styled run with its ratatui Style. Copy screen text: just the cells.</p>
+		<button type="button" class="btn" data-open-scene="${f.scene}">Open in the prototype</button><button type="button" class="btn ghost" data-focus="${f.scene}">Zoom to frame</button>`;
+}
+
+const buildsOf = f => (BUILD_OF[f.scene] || []).map(key => BUILD[key]);
+
+// ── Tasks: what is left to build each frame in the live app, UI and backend, and the order to build them in.
+//    Read only: a task is done when build.js VERIFIED holds an agent's evidence for it. ──
+
+const SIDES = [['ui', 'Screens'], ['backend', 'Core']];
+const TASK_TABS = new Set(['ui', 'backend', 'plan']);
+const STATUS = { done: 'Done', todo: 'To do', check: 'Check on dev' };
+const TASK_BY_ID = new Map(TASK_LIST.map(task => [task.id, task]));
+// earlier versions let a click mark a task done; those unverified marks are dropped
+try { localStorage.removeItem('moneyball-board-tasks'); } catch { /* storage blocked: nothing to drop */ }
+
+const statusOf = task => (VERIFIED[task.id] ? 'done' : task.status);
+const isOpen = task => statusOf(task) !== 'done';
+const owns = (task, f) => (task.spec ? (BUILD_OF[f.scene] || []).includes(task.spec) : task.scenes.includes(f.scene));
+const waitingOn = task => task.after.map(id => TASK_BY_ID.get(id)).filter(isOpen);
+const unblocks = task => TASK_LIST.filter(other => isOpen(other) && other.after.includes(task.id));
+
+// - a task's step in the plan: 1 when nothing it waits on is open, else one after the latest of those
+function stepOf(task, memo = new Map()) {
+	if (!isOpen(task)) return 0;
+	if (!memo.has(task.id)) memo.set(task.id, 1 + Math.max(0, ...task.after.map(id => stepOf(TASK_BY_ID.get(id), memo))));
+	return memo.get(task.id);
+}
+
+// - the frame's tasks on one side, grouped by the part of the app they belong to, frame-only ones first
+function taskGroupsOf(f, side) {
+	const mine = TASK_LIST.filter(task => task.side === side && owns(task, f));
+	const own = mine.filter(task => task.scenes);
+	const groups = (BUILD_OF[f.scene] || []).map(key => [BUILD[key].title, mine.filter(task => task.spec === key)]);
+	return [['This frame', own], ...groups].filter(([, tasks]) => tasks.length);
+}
+
+const openTasks = (f, side) => taskGroupsOf(f, side).flatMap(([, tasks]) => tasks).filter(isOpen).length;
+
+// - one task row: tick, status, what it is, what it waits on and what it unblocks
+function taskRow(task, { side = false, mine = false } = {}) {
+	const status = statusOf(task);
+	const waits = waitingOn(task);
+	const opens = isOpen(task) ? unblocks(task) : [];
+	const frames = order.filter(f => owns(task, f)).map(f => f.code);
+	const meta = [
+		waits.length && `Waits on: ${waits.map(t => t.title).join(', ')}`,
+		opens.length && `Unblocks ${opens.length}: ${opens.map(t => t.title).join(', ')}`,
+		side && `${frames.length > 4 ? `${frames.length} frames` : frames.join(', ')}`,
+	].filter(Boolean);
+	const evidence = VERIFIED[task.id] && `<small class="evidence">Verified: ${esc(VERIFIED[task.id])}</small>`;
+	return `<li class="${mine ? 'mine' : ''}${status === 'done' ? ' isdone' : ''}"><div><span class="st ${status}">${STATUS[status]}</span>${side ? `<span class="side">${task.side === 'ui' ? 'Screens' : 'Core'}</span>` : ''}<b>${esc(task.title)}.</b> ${esc(task.text)}${meta.map(m => `<small>${esc(m)}</small>`).join('')}${evidence || ''}
+		${status === 'done' ? '' : `<button type="button" class="copy" data-task-prompt="${task.id}">Copy prompt</button>`}</div></li>`;
+}
+
+function tasksHtml(f, side) {
+	if (side === 'plan') return planHtml(f);
+	const groups = taskGroupsOf(f, side);
+	if (!groups.length) return '<div class="empty">Nothing to build here.</div>';
+	return `<p class="fine">As found in the code on 8 Oct 2026. Read only: an agent marks a task done in build.js after verifying it, with evidence. Copy prompt gives an agent everything to do one task; the Build plan tab orders them all.</p>
+		${groups.map(([title, tasks]) => `<h4>${esc(title)}</h4><ul class="tasks">${[...tasks].sort((a, b) => (stepOf(a) || 99) - (stepOf(b) || 99)).map(task => taskRow(task)).join('')}</ul>`).join('')}`;
+}
+
+// - every open task in the app, in steps: a step can start once everything it waits on is done
+function planHtml(f) {
+	const open = TASK_LIST.filter(isOpen);
+	const memo = new Map();
+	const steps = [];
+	open.forEach(task => { const n = stepOf(task, memo); (steps[n - 1] ||= []).push(task); });
+	const done = TASK_LIST.filter(task => !isOpen(task));
+	return `<p class="fine">All ${open.length} open tasks in the app, in the order to build them. A step can start once every task it waits on is verified; as agents verify tasks (build.js VERIFIED), what they unblock moves forward. This frame's tasks are highlighted. Copy prompt on a step gives an agent the whole step.</p>
+		${steps.map((tasks, i) => `<h4>Step ${i + 1} · ${i ? `after step ${i}` : 'start now'} <span class="step-actions">${tasks.length}<button type="button" class="copy" data-step-prompt="${i + 1}">Copy prompt</button></span></h4><ul class="tasks plan">${tasks.map(task => taskRow(task, { side: true, mine: owns(task, f) })).join('')}</ul>`).join('')}
+		<h4>Done <span>${done.length}</span></h4><ul class="tasks plan">${done.map(task => taskRow(task, { side: true, mine: owns(task, f) })).join('')}</ul>`;
+}
+
+// ── Prompts: everything an agent needs to finish one task, or one whole step of the plan ──
+
+const PROMPT_CONTEXT = `You are working on moneyball-cli, a Rust local-first, read-only Meta-ads advisor (ratatui TUI + headless CLI): /Users/Kailash/DEV/moneyball-cli.
+- Read its CLAUDE.md, AGENTS.md and ARCHITECTURE.md first: they are binding (network boundary, E2E-first, \`cargo install\` is shipping, ASCII-only authored TUI strings, never advertise unimplemented commands).
+- The design is the flow board: ${PACKED ? 'the shared moneyball flow board file (one HTML file)' : decodeURIComponent(new URL('board.html', location.href).pathname)}. Today's frames are captured from the real binary; the redesign's are authored. A frame's "Copy for agent" gives its exact cells, every styled run with its ratatui Style, and build notes.
+- The redesign's contract and wiring: /Users/Kailash/DEV/${BUILD_PROMPT}.`;
+
+const PROMPT_FINISH = `## Finishing
+1. Verify each task exactly as its "Done when" says: drive the installed binary (tmux for the TUI), reproduce bugs end to end first; cargo test and clippy green.
+2. Only then record it in /Users/Kailash/DEV/moneyball-cli/plans/prototype/build.js, in VERIFIED: \`'<task id>': 'YYYY-MM-DD what you checked and where'\`. A task without evidence stays open; never record one you did not verify. The board reads VERIFIED; nothing else marks a task done.
+3. If a task is wrong, blocked or bigger than written, say so and leave it open; new work goes into TASK_LIST as a new task.
+4. Don't commit or push unless the user asks.`;
+
+// - one task in full: what, where, how, what it waits on, the frames it serves, and how to prove it is done
+function taskSection(task, n) {
+	const d = TASK_DETAIL[task.id] || {};
+	const waits = task.after.map(id => TASK_BY_ID.get(id));
+	const frames = order.filter(f => owns(task, f));
+	const spec = task.spec && BUILD[task.spec];
+	const scene = f => (PACKED ? 'in the shared board' : new URL(`index.html?scene=${f.scene}`, location.href).href);
+	return [
+		`### ${n ? `${n}. ` : ''}${task.title} (${task.side === 'ui' ? 'Screens' : 'Core'} · \`${task.id}\`${task.status === 'check' ? ' · a check, not a build' : ''})`,
+		task.text,
+		d.where && `**Where:** ${d.where}`,
+		d.how?.length && `**How**\n${d.how.map(h => `- ${h}`).join('\n')}`,
+		waits.length && `**Waits on** (must be in VERIFIED first; stop and say so if not)\n${waits.map(t => `- ${t.title} (\`${t.id}\`): ${VERIFIED[t.id] ? 'verified' : 'NOT verified yet'}`).join('\n')}`,
+		frames.length && `**Frames** (open them; their Copy for agent has the HTML and build notes)\n${frames.slice(0, 6).map(f => `- ${f.code} ${f.title}: ${scene(f)}`).join('\n')}${frames.length > 6 ? `\n- and ${frames.length - 6} more on the board` : ''}`,
+		spec && `**Part of:** ${spec.title}. ${spec.where}`,
+		d.verify?.length && `**Done when**\n${d.verify.map(v => `- ${v}`).join('\n')}`,
+	].filter(Boolean).join('\n\n');
+}
+
+function taskPrompt(task) {
+	return [`# moneyball task: ${task.title}`, PROMPT_CONTEXT, `## The task (step ${stepOf(task)} of the build plan)`, taskSection(task), PROMPT_FINISH].join('\n\n');
+}
+
+// - a whole step: its tasks don't wait on each other, so they are grouped by where the work happens and can be split
+function stepPrompt(n) {
+	const memo = new Map();
+	const tasks = TASK_LIST.filter(task => isOpen(task) && stepOf(task, memo) === n);
+	const lanes = [
+		['Core (moneyball-core: data, verdicts, contracts)', task => task.side === 'backend' && task.status !== 'check'],
+		['Screens (moneyball-tui and the CLI)', task => task.side === 'ui' && task.status !== 'check'],
+		['Checks on the installed binary (compare and report; no building)', task => task.status === 'check'],
+	];
+	let i = 0;
+	const body = lanes.map(([label, keep]) => {
+		const lane = tasks.filter(keep);
+		return lane.length ? `## ${label}\n\n${lane.map(task => taskSection(task, ++i)).join('\n\n---\n\n')}` : '';
+	}).filter(Boolean).join('\n\n');
+	return [`# moneyball build plan, step ${n}: ${tasks.length} task${tasks.length > 1 ? 's' : ''}`, PROMPT_CONTEXT,
+		`Every task here can start now${n > 1 ? `, once step ${n - 1}'s tasks they wait on are verified` : ''}; none waits on another task in this step, so they can be split between people or agents. Work through them in order.`,
+		body, PROMPT_FINISH].join('\n\n');
+}
+
+// - Copy for agent: this frame's tasks in plan order, each with its step and what it waits on
+function tasksMarkdown(f) {
+	const line = task => {
+		const waits = waitingOn(task);
+		const tags = isOpen(task) ? [STATUS[statusOf(task)].toLowerCase(), `step ${stepOf(task)}`, waits.length && `waits on: ${waits.map(t => t.title).join(', ')}`].filter(Boolean) : [];
+		return `- [${isOpen(task) ? ' ' : 'x'}] **${task.title}**${tags.length ? ` (${tags.join(' · ')})` : ''}: ${task.text}`;
+	};
+	const sides = SIDES.map(([side, label]) => {
+		const tasks = taskGroupsOf(f, side).flatMap(([, list]) => list).sort((a, b) => (stepOf(a) || 99) - (stepOf(b) || 99));
+		return tasks.length ? `### ${label} tasks\n${tasks.map(line).join('\n')}` : '';
+	}).filter(Boolean);
+	return sides.length ? `## Tasks to reach this frame (as found in the code, 8 Oct 2026)\nStep numbers are the app-wide build plan: do lower steps first; a task can start once what it waits on is done.\n\n${sides.join('\n\n')}` : '';
+}
+
+// - where the frame lives in the live app and the API calls behind it
+function buildHtml(f) {
+	const specs = buildsOf(f);
+	if (!specs.length) return '';
+	const calls = [...new Map(specs.flatMap(b => b.apis).map(a => [a[0] + a[1], a])).values()];
+	return `<h4>How it's built</h4><ul>${specs.map(b => `<li><b>${esc(b.title)}.</b> ${esc(b.where)}</li>`).join('')}${BUILD_NOTE[f.scene] ? `<li>${esc(BUILD_NOTE[f.scene])}</li>` : ''}</ul>
+		<h4>Contracts <span>${calls.length}</span></h4><ul class="apis">${calls.map(([verb, path, what]) => `<li><span class="verb">${esc(verb)}</span><code>${esc(path)}</code><p>${esc(what)}</p></li>`).join('')}</ul>`;
+}
+
+// - the build section of Copy for agent: per spec, where it lives, the APIs, the wiring steps and the UI
+function buildMarkdown(f) {
+	const specs = buildsOf(f);
+	if (!specs.length) return '';
+	return [
+		'## How to build it in moneyball',
+		BUILD_NOTE[f.scene] && `**This frame:** ${BUILD_NOTE[f.scene]}`,
+		...specs.map(b => [
+			`### ${b.title}`,
+			`**Where:** ${b.where}`,
+			`**Contracts**\n| Kind | Name | What it is for |\n|---|---|---|\n${b.apis.map(([verb, path, what]) => `| ${verb} | \`${path}\` | ${what.replace(/\|/g, '\\|')} |`).join('\n')}`,
+			`**Integration steps**\n${b.steps.map((step, n) => `${n + 1}. ${step}`).join('\n')}`,
+			`**Building the UI**\n${b.ui.map(line => `- ${line}`).join('\n')}`,
+		].join('\n\n')),
+	].filter(Boolean).join('\n\n');
+}
+
+// - the selected run as the TUI paints it: text, cells, colours (light and dark) and the ratatui Style
+function inspectHtml(e) {
+	const v = (text, copy = text) => `<button type="button" class="v" data-copy="${esc(copy)}" title="Copy">${esc(text)}</button>`;
+	const crumbs = e.path.map((name, i) => `<button type="button" data-up="${e.path.length - i}" title="Select ${esc(name)}">${esc(name)}</button>`).join('<span>›</span>');
+	const row = (label, value) => (value ? `<dt>${label}</dt><dd>${value}</dd>` : '');
+	const swatch = c => {
+		if (!c) return '';
+		if (c.index === undefined || c.index > 15) return `<span class="sw" style="background:${esc(c.hex)}"></span>${v(c.name)}`;
+		const token = `--a${c.index}`;
+		return `<span class="sw" style="background:${TOKENS.light[token]}" title="Light"></span><span class="sw" style="background:${TOKENS.dark[token]}" title="Dark"></span>${v(`Color::${c.name}`)}<span class="var" title="Variable">${token}</span>`;
+	};
+	return `<h4>Layer</h4><div class="layer mono">${esc(e.name)}</div><div class="crumbs">${crumbs}</div>${e.text ? `<div class="text">"${esc(e.text)}"</div>` : ''}
+		${e.row ? `<h4>Cells</h4><div class="quad"><div><span>Row</span>${v(e.row)}</div><div><span>Col</span>${v(e.col ?? 1)}</div><div><span>W</span>${v(e.len)}</div><div><span>H</span>${v(1)}</div></div>` : ''}
+		${e.fg || e.bg || e.mods?.length ? `<h4>Style</h4><dl class="props">${row('Foreground', swatch(e.fg) || v('default'))}${row('Background', e.bg && swatch(e.bg))}${row('Modifiers', e.mods?.length && v(e.mods.join(' + ')))}</dl>` : ''}
+		${e.code ? `<h4>Code <span><button type="button" class="copy" data-copy="${esc(e.code)}">Copy</button></span></h4><pre class="css">${esc(e.code)}</pre>` : ''}
+		<p class="fine">A run is a stretch of cells with one style. Colours are the terminal palette's (tokens.js): the user's own theme decides the exact shade, so build with the named colour, never a hex.</p>`;
+}
+
+function tokenRow(name) {
+	const light = TOKENS.light[name] ?? '';
+	const dark = TOKENS.dark[name] ?? light;
+	return `<div class="token"><span class="sw" style="background:${esc(light)}" title="Light"></span><span class="sw" style="background:${esc(dark)}" title="Dark"></span><button type="button" class="v name" data-copy="var(${name})" title="Copy var(${name})">${esc(name)}</button><span class="vals">light ${esc(light)} · dark ${esc(dark)}</span></div>`;
+}
+
+// - nothing selected: how to move around, the annotation legend, and the styles library
+function overviewHtml() {
+	const names = Object.keys(TOKENS.light).filter(n => !view.filter || n.includes(view.filter.toLowerCase()));
+	return `<div class="head"><h2>moneyball CLI flows</h2></div><div class="inspect">
+		<p class="lead">${order.length} screens in the order a user moves through them. Today's frames are the real binary, captured cell by cell; the redesign's are authored the same way. Blue arrows name what the user does to move on. Zoom in and frames become live: click any run to see its ratatui Style.</p>
+		<h4>Move around</h4><ul><li>Scroll or drag to move; <span class="kbd">⌘</span> + scroll or pinch to zoom</li><li>Click a frame for its story; double-click to zoom to it</li><li>Zoomed in, click a run for its text, cells and ratatui Style</li><li><span class="kbd">←</span> <span class="kbd">→</span> step through frames · <span class="kbd">⇧</span><span class="kbd">1</span> fit · <span class="kbd">Esc</span> clear</li></ul>
+		<h4>Annotations</h4><div class="legend">${Object.entries(KIND).map(([k, label]) => `<span data-kind="${k}"><i></i>${label}</span>`).join('')}</div>
+		<h4>Terminal palette <span>${names.length}</span></h4><input class="filter" id="filter" placeholder="Filter, e.g. a6, term" value="${esc(view.filter)}" autocomplete="off">
+		<div class="tokens">${names.map(tokenRow).join('')}</div>
+		<h4>TUI styles</h4>${TEXT_STYLES.map(([name, spec, sample, css]) => `<div class="tstyle"><div class="mono" style="${css};background:var(--term-bg);padding:4px 8px;border-radius:4px;overflow:hidden;white-space:nowrap;text-overflow:ellipsis">${esc(sample)}</div><span class="spec">${name} · ${spec}</span></div>`).join('')}
+		<h4>Glyphs</h4><div class="rows">${RADII.map(([a, b]) => `<span>${a}</span><span>${b}</span>`).join('')}</div>
+		<h4>Layout</h4><div class="rows">${SHADOWS.map(([a, b]) => `<span>${a}</span><span>${esc(b)}</span>`).join('')}</div>
+		<h4>Behaviour</h4><div class="rows">${MOTION.map(([a, b]) => `<span>${a}</span><span>${b}</span>`).join('')}</div>
+		<h4>Keep it current</h4><p>Today's frames come from the installed binary. After a moneyball change, <code>cargo install</code> it, then run <code>capture.py</code> (it never calls the network or the LLM unless you pass <code>--llm</code>).</p></div>`;
+}
+
+// ── Camera ──
+
+function paintView(glide = false) {
+	const world = $('world');
+	world.classList.toggle('glide', glide);
+	world.style.transform = `translate(${view.x}px,${view.y}px) scale(${view.k})`;
+	world.style.setProperty('--z', view.k);
+	world.classList.toggle('tiny', view.k < 0.12);
+	$('pct').textContent = `${Math.round(view.k * 100)}%`;
+	for (const scene of ready) tell(scene, { type: 'zoom', k: view.k });
+	keep('moneyball-board-view', { x: view.x, y: view.y, k: view.k, selected: view.selected });
+	syncLive();
+}
+
+const clampK = k => Math.min(2, Math.max(0.02, k));
+
+function zoomAt(k, cx, cy, glide) {
+	k = clampK(k);
+	view.x = cx - (cx - view.x) * (k / view.k);
+	view.y = cy - (cy - view.y) * (k / view.k);
+	view.k = k;
+	paintView(glide);
+}
+
+function fitAll(glide = true) {
+	const box = $('viewport').getBoundingClientRect();
+	view.k = clampK(Math.min((box.width - 80) / view.width, (box.height - 80) / view.height));
+	view.x = (box.width - view.width * view.k) / 2;
+	view.y = 40;
+	paintView(glide);
+}
+
+function focusFrame(scene, glide = true) {
+	const f = order.find(x => x.scene === scene);
+	const box = $('viewport').getBoundingClientRect();
+	const h = FH + NOTE + 120;
+	view.k = clampK(Math.min((box.width - 120) / FW, (box.height - 80) / h));
+	view.x = box.width / 2 - (f.x + FW / 2) * view.k;
+	view.y = box.height / 2 - (f.y - 60 + h / 2) * view.k;
+	select(scene);
+	paintView(glide);
+}
+
+function select(scene, tab) {
+	if (view.selected !== scene) {
+		if (view.element) tell(view.element.scene, { type: 'clear' });
+		view.element = null;
+		view.flash = null;
+		view.tab = tab || 'frame';
+	}
+	view.selected = scene;
+	document.querySelectorAll('.frame').forEach(el => el.classList.toggle('on', el.dataset.scene === scene));
+	paintList();
+	paintRight();
+	paintHint();
+	document.querySelector(`[data-go="${scene}"]`)?.scrollIntoView({ block: 'nearest' });
+}
+
+function step(dir) {
+	const i = order.findIndex(f => f.scene === view.selected);
+	focusFrame(order[Math.max(0, Math.min(order.length - 1, i < 0 ? 0 : i + dir))].scene);
+}
+
+// - walks the new-user journey (A to C) frame by frame, gliding along the arrows; any touch stops it
+function play(on) {
+	clearInterval(view.playing);
+	view.playing = 0;
+	$('play').setAttribute('aria-pressed', on);
+	$('play').textContent = on ? 'Stop' : 'Play the flow';
+	if (on) {
+		const journey = order.filter(f => SECTIONS.find(s => s.code === f.s).flow);
+		let n = Math.max(0, journey.findIndex(f => f.scene === view.selected));
+		focusFrame(journey[n].scene);
+		view.playing = setInterval(() => {
+			n += 1;
+			if (n >= journey.length) return play(false);
+			focusFrame(journey[n].scene);
+		}, 3200);
+	}
+	paintHint();
+}
+
+function toast(text) {
+	$('toast').textContent = text;
+	$('toast').classList.add('on');
+	clearTimeout(toast.timer);
+	toast.timer = setTimeout(() => $('toast').classList.remove('on'), 1200);
+}
+
+async function copy(text, label = text.includes('\n') ? 'CSS' : text.slice(0, 48)) {
+	try {
+		await navigator.clipboard.writeText(text);
+		toast(`Copied ${label}`);
+	} catch {
+		// the clipboard can refuse a write that comes long after the click; hand the text over to copy by hand
+		const dialog = Object.assign(document.createElement('div'), { className: 'dialog' });
+		dialog.innerHTML = `<div><b>Press ⌘C to copy ${esc(label)}</b><textarea readonly></textarea><button type="button" class="btn ghost" data-close="1">Done</button></div>`;
+		dialog.querySelector('textarea').value = text;
+		document.body.append(dialog);
+		dialog.querySelector('textarea').select();
+		dialog.addEventListener('click', e => { if (e.target === dialog || e.target.dataset.close) dialog.remove(); });
+	}
+}
+
+// ── Hand a screen to an agent: its markup and CSS, and the story around it ──
+
+const waiting = new Map();
+const helpers = new Map();
+
+// - the screen's own window: the live frame if it's on screen, else a hidden copy loaded just for this
+function frameWindow(scene) {
+	if (ready.has(scene)) return Promise.resolve(lives.get(scene).contentWindow);
+	if (!helpers.has(scene)) {
+		const iframe = Object.assign(document.createElement('iframe'), { className: 'helper' });
+		showScene(iframe, `scene=${scene}&still&inspect&theme=${view.theme}`);
+		const helper = { iframe };
+		helper.promise = new Promise(resolve => { helper.resolve = resolve; });
+		helpers.set(scene, helper);
+		document.body.append(iframe);
+	}
+	return helpers.get(scene).promise;
+}
+
+async function exportOf(scene, what) {
+	const win = await frameWindow(scene);
+	const id = `${Date.now()}${Math.random()}`;
+	const result = await new Promise(resolve => { waiting.set(id, resolve); win.postMessage({ source: 'moneyball-board', type: 'export', what, id }, '*'); });
+	const helper = helpers.get(scene);
+	if (helper) { helper.iframe.remove(); helpers.delete(scene); }
+	return result;
+}
+
+const plain = html => html.replace(/<[^>]+>/g, '');
+const MODS = { B: 'BOLD', D: 'DIM', I: 'ITALIC', U: 'UNDERLINED', R: 'REVERSED' };
+function styleCode(style) {
+	const parts = style.split(' ').filter(Boolean);
+	const color = p => { const n = Number(p.slice(1)); return Number.isNaN(n) ? `Rgb(${p.slice(1)})` : n < 16 ? ANSI_NAMES[n] : `Indexed(${n})`; };
+	return ['Style::default()', ...parts.filter(p => /^f(#|\d)/.test(p)).map(p => `.fg(Color::${color(p)})`), ...parts.filter(p => /^b(#|\d)/.test(p)).map(p => `.bg(Color::${color(p)})`), ...parts.filter(p => MODS[p]).map(p => `.add_modifier(Modifier::${MODS[p]})`)].join('');
+}
+
+// - one Markdown message an agent can work from: intent, flow, annotations, build notes, and the screen itself
+function agentMarkdown(f, x) {
+	const folder = decodeURIComponent(new URL('.', location.href).pathname);
+	const next = f.next && order[order.indexOf(f) + 1];
+	const section = SECTIONS.find(s => s.code === f.s).title;
+	const screen = x.kind === 'web'
+		? `## The page\nThe HTML report, opened in a browser: ${x.url}. moneyball writes it with \`moneyball report\` (crates/moneyball-core/src/report/html.rs, template.html).`
+		: `## The screen, as it renders (${x.authored ? 'authored for the redesign in redesign.js: build this' : 'captured from the real binary by capture.py: this is today'})\nA ${x.cols} x ${x.rows} terminal; \`${x.cmd}\` run in ${x.cwd}.\n\n\`\`\`text\n${x.text}\n\`\`\`\n\n## Styled runs\nEverything not listed is the terminal's default foreground. Row and column are 1-based cells.\n| Row:col | Text | ratatui Style |\n|---|---|---|\n${x.runs.map(r => `| ${r.row}:${r.col} | \`${r.text.replace(/\|/g, '\\|').replace(/`/g, "'")}\` | \`${styleCode(r.style)}\` |`).join('\n')}`;
+	return [
+		`# ${f.code} · ${f.title}`,
+		`One screen of moneyball, the read-only Meta-ads advisor CLI (${section}), in the ${x.theme} terminal theme.`,
+		`## What this screen is for\n${plain(f.note)}`,
+		next && `## How the user moves on\nThe user: ${f.next} → ${next.code} ${next.title}`,
+		...Object.entries(f.details).filter(([, items]) => items.length).map(([label, items]) => `## ${label}\n${items.map(i => `- ${i}`).join('\n')}`),
+		f.pins.length && `## Annotations\nEach is pinned to a run: \`~text\` is the run where that text starts, \`@row:col\` a cell.\n${f.pins.map(([kind, sel, title, text], n) => `${n + 1}. **${title}** (${KIND[kind]}, \`${sel}\`): ${text}`).join('\n')}`,
+		buildMarkdown(f),
+		tasksMarkdown(f),
+		PACKED ? `## How it looks\nOpen the shared moneyball flow board file, find frame ${f.code} and zoom in: it is the live frame.`
+			: `## How it looks\n- Screenshot: ${folder}frames/${x.theme}/${f.scene}.jpg\n- Live frame (open in a browser): ${new URL(`index.html?scene=${f.scene}&theme=${x.theme}`, location.href).href}`,
+		screen,
+	].filter(Boolean).join('\n\n');
+}
+
+function download(name, text) {
+	const a = Object.assign(document.createElement('a'), { href: URL.createObjectURL(new Blob([text], { type: 'text/markdown' })), download: name });
+	a.click();
+	setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+	toast(`Saved ${name}`);
+}
+
+async function handOff(kind) {
+	const f = order.find(x => x.scene === view.selected);
+	toast('Preparing…');
+	const x = await exportOf(f.scene, 'page');
+	const kb = text => `${Math.round(text.length / 1024)} KB`;
+	if (kind === 'agent') { const md = agentMarkdown(f, x); return copy(md, `the handoff for ${f.code} (${kb(md)})`); }
+	if (kind === 'html') return copy(x.text || x.url, `${f.code} screen text`);
+	download(`${f.code}-${f.scene}.md`, agentMarkdown(f, x));
+}
+
+// ── Input: the board's own, and what live frames pass up to it ──
+
+const viewport = $('viewport');
+
+function wheel({ dx, dy, zoom, shift, cx, cy }) {
+	play(false);
+	if (zoom) return zoomAt(view.k * Math.exp(-dy * 0.01), cx, cy);
+	view.x -= shift && !dx ? dy : dx;
+	view.y -= shift && !dx ? 0 : dy;
+	paintView();
+}
+viewport.addEventListener('wheel', e => {
+	e.preventDefault();
+	const box = viewport.getBoundingClientRect();
+	wheel({ dx: e.deltaX, dy: e.deltaY, zoom: e.ctrlKey || e.metaKey, shift: e.shiftKey, cx: e.clientX - box.left, cy: e.clientY - box.top });
+}, { passive: false });
+
+// a press that moves pans the canvas; one that doesn't picks the frame under it, or clears the pick
+viewport.addEventListener('pointerdown', e => {
+	if ((e.button !== 0 && e.button !== 1) || e.target.closest('.dock')) return;
+	play(false);
+	const start = { x: e.clientX, y: e.clientY, vx: view.x, vy: view.y };
+	let moved = false;
+	const move = ev => {
+		if (!moved && Math.hypot(ev.clientX - start.x, ev.clientY - start.y) < 4) return;
+		moved = true;
+		viewport.classList.add('panning');
+		view.x = start.vx + ev.clientX - start.x;
+		view.y = start.vy + ev.clientY - start.y;
+		paintView();
+	};
+	const up = ev => {
+		removeEventListener('pointermove', move);
+		removeEventListener('pointerup', up);
+		viewport.classList.remove('panning');
+		if (moved) return;
+		const frame = ev.target.closest('.frame');
+		select(frame ? frame.dataset.scene : null);
+	};
+	addEventListener('pointermove', move);
+	addEventListener('pointerup', up);
+});
+viewport.addEventListener('dblclick', e => { const frame = e.target.closest('.frame'); if (frame) focusFrame(frame.dataset.scene); });
+
+addEventListener('message', e => {
+	const m = e.data;
+	if (!m || m.source !== 'moneyball-inspect') return;
+	if (m.type === 'export') { waiting.get(m.id)?.(m); waiting.delete(m.id); return; }
+	const helper = helpers.get(m.scene);
+	if (helper && e.source === helper.iframe.contentWindow) { if (m.type === 'ready') helper.resolve(e.source); return; }
+	if (!lives.has(m.scene) || e.source !== lives.get(m.scene).contentWindow) return;
+	const f = order.find(x => x.scene === m.scene);
+	if (m.type === 'ready') {
+		ready.add(m.scene);
+		lives.get(m.scene).classList.add('ready');
+		tell(m.scene, { type: 'zoom', k: view.k });
+		tell(m.scene, { type: 'pins', items: pinsFor(f), on: view.pins });
+		if (view.pending?.scene === m.scene) { tell(m.scene, { type: 'pick', sel: view.pending.sel }); view.pending = null; }
+	}
+	if (m.type === 'select') {
+		if (view.element && view.element.scene !== m.scene) tell(view.element.scene, { type: 'clear' });
+		if (view.selected !== m.scene) select(m.scene, 'inspect');
+		view.element = { scene: m.scene, data: m.element };
+		view.tab = 'inspect';
+		paintRight();
+		paintHint();
+	}
+	if (m.type === 'clear' && view.element?.scene === m.scene) { view.element = null; paintRight(); paintHint(); }
+	if (m.type === 'pin') { if (view.selected !== m.scene) select(m.scene); view.tab = 'frame'; view.flash = m.n; paintRight(); }
+	if (m.type === 'pan') { play(false); view.x += m.dx * view.k; view.y += m.dy * view.k; paintView(); }
+	if (m.type === 'wheel') wheel({ dx: m.dx, dy: m.dy, zoom: m.zoom, shift: m.shift, cx: view.x + (f.x + m.x) * view.k, cy: view.y + (f.y + m.y) * view.k });
+	if (m.type === 'key') key(m.key, m.shift, m.code);
+});
+
+document.addEventListener('click', e => {
+	const b = e.target.closest('button');
+	if (!b) return;
+	const d = b.dataset;
+	if (d.go) { play(false); return focusFrame(d.go); }
+	if (d.focus) return focusFrame(d.focus);
+	if (d.tab) { view.tab = d.tab; return paintRight(); }
+	if (d.copy !== undefined) return copy(d.copy);
+		if (d.export) return handOff(d.export);
+	if (d.openScene) return openScene(d.openScene);
+	if (d.taskPrompt) { const task = TASK_BY_ID.get(d.taskPrompt); return copy(taskPrompt(task), `the prompt for ${task.title}`); }
+	if (d.stepPrompt) return copy(stepPrompt(Number(d.stepPrompt)), `the prompt for step ${d.stepPrompt}`);
+	if (d.up) return tell(view.element.scene, { type: 'up', levels: Number(d.up) });
+	if (d.note !== undefined) {
+		const f = order.find(x => x.scene === view.selected);
+		const sel = f.pins[Number(d.note)][1];
+		if (ready.has(f.scene)) return tell(f.scene, { type: 'pick', sel });
+		view.pending = { scene: f.scene, sel };
+		return focusFrame(f.scene);
+	}
+	if (d.zoom) {
+		const box = viewport.getBoundingClientRect();
+		return zoomAt(d.zoom === '100' ? 1 : view.k * (d.zoom === '1' ? 1.5 : 1 / 1.5), box.width / 2, box.height / 2, true);
+	}
+	if (d.fit) return fitAll();
+	if (d.step) { play(false); return step(Number(d.step)); }
+	if (b.id === 'play') return play(!view.playing);
+	if (b.id === 'pins') {
+		view.pins = !view.pins;
+		keep('moneyball-board-pins', view.pins);
+		b.setAttribute('aria-pressed', view.pins);
+		for (const scene of ready) tell(scene, { type: 'pins', items: pinsFor(order.find(f => f.scene === scene)), on: view.pins });
+		return;
+	}
+	if (d.theme) {
+		view.theme = d.theme;
+		keep('moneyball-board-theme', view.theme);
+		for (const [, iframe] of lives) iframe.remove();
+		lives.clear();
+		ready.clear();
+		view.element = null;
+		paintImages();
+		paintRight();
+		syncLive();
+	}
+});
+
+// hovering an annotation outlines its element in the live frame
+document.addEventListener('mouseover', e => {
+	const f = order.find(x => x.scene === view.selected);
+	if (!f || !ready.has(f.scene)) return;
+	const note = e.target.closest('.note');
+	if (note) { const [kind, sel] = f.pins[Number(note.dataset.note)]; tell(f.scene, { type: 'hl', sel, kind }); }
+	else tell(f.scene, { type: 'hl', sel: null });
+});
+
+document.addEventListener('input', e => {
+	if (e.target.id !== 'filter') return;
+	view.filter = e.target.value;
+	const at = e.target.selectionStart;
+	paintRight();
+	$('filter').focus();
+	$('filter').setSelectionRange(at, at);
+});
+
+function key(k, shift, code) {
+	const box = viewport.getBoundingClientRect();
+	if (k === 'ArrowRight' || k === 'ArrowDown') { play(false); step(1); }
+	else if (k === 'ArrowLeft' || k === 'ArrowUp') { play(false); step(-1); }
+	else if (k === '!' || (shift && code === 'Digit1')) fitAll();
+	else if (k === '@' || (shift && code === 'Digit2')) { if (view.selected) focusFrame(view.selected); }
+	else if (k === 'Escape') {
+		play(false);
+		if (view.element) { tell(view.element.scene, { type: 'clear' }); view.element = null; paintRight(); paintHint(); }
+		else select(null);
+	}
+	else if (k === '=' || k === '+') zoomAt(view.k * 1.5, box.width / 2, box.height / 2, true);
+	else if (k === '-') zoomAt(view.k / 1.5, box.width / 2, box.height / 2, true);
+	else if (k === ' ') play(!view.playing);
+}
+document.addEventListener('keydown', e => {
+	if (e.target.closest('input, textarea')) return;
+	if ([' ', 'ArrowRight', 'ArrowLeft', 'ArrowUp', 'ArrowDown'].includes(e.key)) e.preventDefault();
+	key(e.key, e.shiftKey, e.code);
+});
+
+layout();
+paintList();
+$('pins').setAttribute('aria-pressed', view.pins);
+const saved = keep('moneyball-board-view');
+if (saved) { Object.assign(view, { x: saved.x, y: saved.y, k: saved.k }); paintView(); if (saved.selected) select(saved.selected); else paintRight(); }
+else { paintRight(); fitAll(false); }
+</script>
+</body>
+</html>

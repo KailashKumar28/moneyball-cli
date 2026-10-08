@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=1440, initial-scale=1">
+<title>moneyball prototype</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&family=Inter:wght@400;500;600&display=swap">
+<style>
+/* One frame of the moneyball flow board: a 1440 x 900 window, a terminal (cells from the real binary) or a browser
+   (the HTML report). Colours come from tokens.js; the terminal palette decides everything the TUI paints. */
+*{box-sizing:border-box}
+html,body{margin:0;width:1440px;height:900px;overflow:hidden;background:var(--term-bg)}
+.win{position:absolute;inset:0;display:flex;flex-direction:column;background:var(--term-bg)}
+.bar{flex:none;display:flex;align-items:center;gap:8px;height:38px;padding:0 14px;background:var(--chrome);border-bottom:1px solid var(--chrome-line);color:var(--chrome-ink);font:500 13px Inter,-apple-system,sans-serif}
+.bar i{width:12px;height:12px;border-radius:50%;background:#ff5f57}
+.bar i:nth-child(2){background:#febc2e}
+.bar i:nth-child(3){background:#28c840}
+.bar span{flex:1;text-align:center;margin-right:52px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.bar .url{flex:1;margin:0 40px 0 20px;padding:4px 12px;border-radius:6px;background:var(--term-bg);text-align:left;font-size:12px}
+.screen{flex:1;padding:14px 24px 0;color:var(--term-fg);font:16px/20px "JetBrains Mono",ui-monospace,Menlo,monospace;font-variant-ligatures:none;white-space:pre}
+.ln{height:20px}
+.run{display:inline-block;overflow:visible;vertical-align:top}
+.g{display:inline-block;width:1ch;text-align:center;overflow:visible}
+.B{font-weight:700}.D{opacity:.62}.I{font-style:italic}.U{text-decoration:underline}
+.web iframe{flex:1;border:0;width:100%;background:#fff}
+.missing{padding:40px;font:15px Inter,sans-serif;color:var(--term-fg)}
+/* inspect overlay: the board's Dev Mode, sized against the board's zoom */
+#ix{position:fixed;inset:0;z-index:9;pointer-events:none;--iz:1}
+#ix .box{position:absolute;outline:calc(1.5px / var(--iz)) solid #0d99ff;outline-offset:1px}
+#ix .box.sel{outline-width:calc(2px / var(--iz));background:rgba(13,153,255,.08)}
+#ix .k-dev{outline-color:#0d99ff}#ix .k-interaction{outline-color:#9747ff}#ix .k-a11y{outline-color:#14ae5c}#ix .k-content{outline-color:#f5a300}
+#ix .pin{position:absolute;pointer-events:auto;cursor:pointer;display:grid;place-items:center;width:calc(22px / var(--iz));height:calc(22px / var(--iz));margin:calc(-11px / var(--iz)) 0 0 calc(-11px / var(--iz));border:calc(2px / var(--iz)) solid #fff;border-radius:50%;background:#0d99ff;color:#fff;font:600 calc(11px / var(--iz)) Inter,sans-serif;box-shadow:0 1px 4px rgba(0,0,0,.25)}
+#ix .pin[data-kind="interaction"]{background:#9747ff}#ix .pin[data-kind="a11y"]{background:#14ae5c}#ix .pin[data-kind="content"]{background:#f5a300}
+/* prototype mode: step through the flow */
+.proto{position:fixed;right:16px;bottom:16px;z-index:10;display:flex;align-items:center;gap:8px;padding:8px 10px;border-radius:12px;background:rgba(30,30,30,.92);color:#fff;font:500 13px Inter,sans-serif;box-shadow:0 6px 24px rgba(0,0,0,.25)}
+.proto button,.proto select{padding:5px 10px;border:1px solid rgba(255,255,255,.2);border-radius:8px;background:transparent;color:#fff;font:inherit;cursor:pointer}
+.proto select option{color:#000}
+.proto span{min-width:220px}
+</style>
+</head>
+<body>
+<script src="tokens.js"></script>
+<script src="flows.js"></script>
+<script src="screens.js"></script>
+<script src="redesign.js"></script>
+<script>window.REPORTS = window.REPORTS || {};</script>
+<script src="term.js"></script>
+</body>
+</html>
