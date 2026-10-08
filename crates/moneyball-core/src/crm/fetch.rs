@@ -64,9 +64,9 @@ pub fn spec_path(cfg: &AppConfig) -> PathBuf {
     cfg.mb_dir().join("crm.toml")
 }
 
-/// Execute the workspace crm.toml: pull `days` of leads, transform to
-/// contract tickets, validate, and (only on PASS) write
-/// `<snap>/<today>/crm.json`.
+/// Execute the workspace crm.toml: pull the `days` of leads before the
+/// target snapshot's date (status::target_snapshot), transform to contract
+/// tickets, validate, and (only on PASS) write that snapshot's crm.json.
 pub fn fetch_crm(cfg: &AppConfig, days: u32) -> Result<CrmFetchReport> {
     let spec = load_spec(cfg)?;
     let request = spec.request.as_ref().ok_or_else(|| {
@@ -75,8 +75,18 @@ pub fn fetch_crm(cfg: &AppConfig, days: u32) -> Result<CrmFetchReport> {
                 .into(),
         )
     })?;
-    let today = Local::now().date_naive();
-    let from = today - Duration::days(days.max(1) as i64);
+    // Anchor to the snapshot the data will join (today's if its ads are in,
+    // else the newest with ads), decided BEFORE any network call: CRM must
+    // cover that snapshot's days, not the days around whenever this ran.
+    let date = super::status::target_snapshot(cfg)?.ok_or_else(|| {
+        Error::Config(
+            "no ads snapshot to attach CRM data to - run `moneyball fetch` (or /fetch) first"
+                .into(),
+        )
+    })?;
+    let anchor = chrono::NaiveDate::parse_from_str(&date, "%Y-%m-%d")
+        .map_err(|_| Error::Config(format!("bad snapshot date {}", date)))?;
+    let from = anchor - Duration::days(days.max(1) as i64);
     // from_epoch is the start of the window in epoch seconds; the
     // client-side cutover drops any record whose delivery is older. The
     // server-side cutover (via the spec's body/query) is preferred when
@@ -89,7 +99,7 @@ pub fn fetch_crm(cfg: &AppConfig, days: u32) -> Result<CrmFetchReport> {
         .unwrap_or(i64::MIN);
     let mut vars: HashMap<&str, String> = HashMap::from([
         ("from_date", from.format("%Y-%m-%d").to_string()),
-        ("to_date", today.format("%Y-%m-%d").to_string()),
+        ("to_date", anchor.format("%Y-%m-%d").to_string()),
         ("page_size", spec.paging.size.to_string()),
     ]);
 
@@ -100,8 +110,10 @@ pub fn fetch_crm(cfg: &AppConfig, days: u32) -> Result<CrmFetchReport> {
 
     if !cfg.agent {
         eprintln!(
-            "fetching {} days of leads from {} ({} {})",
+            "fetching {} days of leads to {} (snapshot {}) from {} ({} {})",
             days,
+            anchor.format("%Y-%m-%d"),
+            date,
             spec.name,
             request.method.to_uppercase(),
             request.url
@@ -191,7 +203,7 @@ pub fn fetch_crm(cfg: &AppConfig, days: u32) -> Result<CrmFetchReport> {
         page += 1;
     }
 
-    let report = validate_and_write(cfg, spec.name, &records, &spec.map, pages)?;
+    let report = validate_and_write(cfg, &date, spec.name, &records, &spec.map, pages)?;
     if !cfg.agent {
         let dropped = if report.dropped_no_ad_id > 0 {
             format!(
@@ -222,7 +234,10 @@ pub fn import_csv(cfg: &AppConfig, file: &std::path::Path) -> Result<CrmFetchRep
     let raw = std::fs::read_to_string(file)
         .map_err(|e| Error::Config(format!("cannot read {}: {}", file.display(), e)))?;
     let records = source::csv_records(&raw)?;
-    validate_and_write(cfg, spec.name, &records, &spec.map, 0)
+    let date = super::status::target_snapshot(cfg)?.ok_or_else(|| {
+        Error::Config("no ads snapshot to attach CRM data to - run `moneyball fetch` first".into())
+    })?;
+    validate_and_write(cfg, &date, spec.name, &records, &spec.map, 0)
 }
 
 fn load_spec(cfg: &AppConfig) -> Result<SourceSpec> {
@@ -243,6 +258,7 @@ fn load_spec(cfg: &AppConfig) -> Result<SourceSpec> {
 /// contract (+ latest snapshot join), write crm.json only on PASS.
 fn validate_and_write(
     cfg: &AppConfig,
+    date: &str,
     name: String,
     records: &[Value],
     map: &source::MapSpec,
@@ -263,22 +279,13 @@ fn validate_and_write(
     }
     let check = super::check_with_workspace(cfg, &crm);
     let path = if check.passed() {
-        // Never create an ads-free "latest" snapshot: writing crm.json
-        // into an empty today-dir would make /brief read zero spend for
-        // everything. Join today's dir only if ads are already there,
-        // else the newest snapshot that has them.
-        let date = super::status::target_snapshot(cfg)?.ok_or_else(|| {
-            Error::Config(
-                "no ads snapshot to attach CRM data to - run `moneyball fetch` (or /fetch) first"
-                    .into(),
-            )
-        })?;
-        let written = write_crm_json(cfg, &date, &crm)?;
+        // `date` is status::target_snapshot: never an ads-free dir.
+        let written = write_crm_json(cfg, date, &crm)?;
         // Organic contacts ride along for the re-inquiry check (lead
         // segmentation) - only when the spec maps contact fields.
         let contacts = source::organic_contacts(records, map);
         if !contacts.is_empty() {
-            write_contacts(cfg, &date, contacts)?;
+            write_contacts(cfg, date, contacts)?;
         }
         Some(written)
     } else {
