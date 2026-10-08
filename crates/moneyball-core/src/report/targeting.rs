@@ -27,6 +27,7 @@ pub(super) fn build(
     d1: NaiveDate,
 ) -> BTreeMap<String, Vec<TargetingReport>> {
     let target_rpq = cfg_target_rpq.unwrap_or(DEFAULT_TARGET_RPQ);
+    let crm = !crate::crm::is_empty(&snap.crm);
     let (d0s, d1s) = (fmt(d0), fmt(d1));
     let d7_0s = fmt(d1 - chrono::Duration::days(6));
 
@@ -123,15 +124,27 @@ pub(super) fn build(
     for ((product, targeting), a) in &aggs {
         let (pspend, pl, pq) = *prod_7d.get(product.as_str()).unwrap();
         let specs = super::specs::specs_for(snap, &a.adset_ids);
-        let verdicts = verdicts(
-            a.seven.clone(),
-            a.recent_l,
-            &specs,
-            target_rpq,
-            pspend,
-            pl,
-            pq,
-        );
+        // No CRM data, no verdict: every rule below reads qualified or CRM
+        // leads, and zeros would say "kill" to every targeting that spent.
+        let verdicts = if !crm && a.seven.spend == 0.0 {
+            Vec::new() // no spend, no chip - same as verdicts() below
+        } else if crm {
+            verdicts(
+                a.seven.clone(),
+                a.recent_l,
+                &specs,
+                target_rpq,
+                pspend,
+                pl,
+                pq,
+            )
+        } else {
+            vec![Verdict {
+                code: "no_crm".into(),
+                label: "No CRM".into(),
+                detail: "no CRM data in this snapshot: kill and scale need qualified counts".into(),
+            }]
+        };
         out.entry(product.clone())
             .or_default()
             .push(TargetingReport {

@@ -63,7 +63,10 @@ pub struct FunnelRow {
     pub rs_per_q: Option<u64>,
     pub l_to_q: Option<f64>,
     pub kill_mult: f64,
-    pub kill: bool,
+    /// None when the snapshot has no CRM data: qualified is unknown, not
+    /// zero, so there is no verdict (zeros said "kill" to every ad set
+    /// that spent).
+    pub kill: Option<bool>,
     pub sufficient: bool,
     pub immature: bool,
     pub learning: String,
@@ -151,11 +154,12 @@ pub fn compute(
         .and_then(|w| w.target_rs_per_q)
         .unwrap_or(DEFAULT_TARGET_RPQ);
 
+    let crm = !crate::crm::is_empty(&snap.crm);
     let mut rows: Vec<FunnelRow> = agg
         .into_iter()
         .map(|(id, e)| {
             let mult = e.spend / target_rpq;
-            let kill = e.q <= 2 && mult >= KILL_TABLE[e.q.min(2) as usize];
+            let kill = crm.then_some(e.q <= 2 && mult >= KILL_TABLE[e.q.min(2) as usize]);
             FunnelRow {
                 learning: learning_of(snap, &id, by),
                 cpl: (e.m > 0).then(|| (e.spend / e.m as f64).round() as u64),
@@ -227,104 +231,7 @@ pub fn run(cfg: &AppConfig, product: &str, by: &str, days: u32, date: Option<&st
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use serde_json::json;
-    use std::path::PathBuf;
-
-    fn snap() -> Snapshot {
-        let ads = json!([
-            { "campaign_id": "c1", "campaign_name": "Camp One", "adset_id": "s1",
-              "adset_name": "Set One", "ad_id": "a1", "ad_name": "Ad One",
-              "spend": "9000", "date_start": "2026-07-14", "date_stop": "2026-07-14",
-              "_product": "P",
-              "actions": [{"action_type": "lead", "value": "4"}] },
-            { "campaign_id": "c1", "campaign_name": "Camp One", "adset_id": "s2",
-              "adset_name": "Set Two", "ad_id": "a2", "ad_name": "Ad Two",
-              "spend": "1000", "date_start": "2026-07-14", "date_stop": "2026-07-14",
-              "_product": "P",
-              "actions": [] },
-            { "campaign_id": "c9", "campaign_name": "Other", "adset_id": "s9",
-              "adset_name": "S9", "ad_id": "a9", "ad_name": "A9",
-              "spend": "500", "date_start": "2026-07-14", "date_stop": "2026-07-14",
-              "_product": "OTHER", "actions": [] }
-        ]);
-        // 2026-07-14 ~noon IST as epoch (inside the 7d window before 07-16).
-        let ep = crate::brief::ist_midnight_epoch(
-            NaiveDate::parse_from_str("2026-07-14", "%Y-%m-%d").unwrap(),
-        ) + 12 * 3600;
-        let crm = json!([
-            { "ad_id": "a1", "stage": "Contactable", "delivery": ep },
-            { "ad_id": "a1", "stage": "Visit", "delivery": ep },
-            { "ad_id": "a2", "stage": "Lost", "delivery": ep },
-            { "ad_id": "a9", "stage": "Booking", "delivery": ep },
-            { "ad_id": "a1", "stage": "Booking", "delivery": 1 }
-        ]);
-        Snapshot {
-            path: PathBuf::new(),
-            date: "2026-07-16".into(),
-            ads_daily: serde_json::from_value(ads).unwrap(),
-            adsets: json!({ "s1": { "learning_stage_info": { "status": "LEARNING" } } }),
-            creatives: None,
-            leads: None,
-            crm_contacts: None,
-            crm,
-            regions: json!([]),
-            changes: json!([]),
-            campaigns: json!([]),
-        }
-    }
-
-    fn cfg() -> AppConfig {
-        AppConfig::resolve_optional(Some("/nonexistent-mb-funnel"), None)
-    }
-
-    #[test]
-    fn aggregates_by_adset_with_crm_join() {
-        let rows = compute(&snap(), &cfg(), "P", 7, By::Adset);
-        assert_eq!(rows.len(), 2);
-        // Sorted by spend desc: s1 first.
-        assert_eq!(rows[0].id, "s1");
-        assert_eq!(rows[0].m, 4);
-        assert_eq!((rows[0].l, rows[0].q, rows[0].v), (2, 2, 1));
-        assert_eq!(rows[0].learning, "LEARNING");
-        // a9's Booking belongs to another product; a1's epoch-1 ticket is
-        // outside the window - neither may leak in.
-        assert_eq!(rows[1].id, "s2");
-        assert_eq!((rows[1].l, rows[1].q), (1, 0));
-    }
-
-    #[test]
-    fn kill_logic_follows_the_table() {
-        let rows = compute(&snap(), &cfg(), "P", 7, By::Adset);
-        // s1: spend 9000, q 2, target 2500 -> mult 3.6 < 6.3 -> keep.
-        assert!(!rows[0].kill);
-        assert_eq!(rows[0].kill_mult, 3.6);
-        // s2: spend 1000, q 0 -> mult 0.4 < 3.0 -> keep.
-        assert!(!rows[1].kill);
-        // sufficient: s1 (spend 9000, m 4) yes; s2 (m 0) no.
-        assert!(rows[0].sufficient && !rows[1].sufficient);
-    }
-
-    #[test]
-    fn campaign_level_merges_adsets() {
-        let rows = compute(&snap(), &cfg(), "P", 7, By::Campaign);
-        assert_eq!(rows.len(), 1);
-        assert_eq!(rows[0].id, "c1");
-        assert_eq!(rows[0].spend, 10000);
-        assert_eq!((rows[0].l, rows[0].q), (3, 2));
-        assert_eq!(rows[0].learning, "-");
-    }
-
-    #[test]
-    fn table_renders_header_and_rows() {
-        let rows = compute(&snap(), &cfg(), "P", 7, By::Adset);
-        let t = table(&rows);
-        assert!(t.starts_with("id"));
-        assert!(t.contains("Set One"));
-        assert!(!table(&[]).contains("id"));
-    }
-}
+mod tests;
 
 /// Pre-computed CPL ordering, cheapest first. Injected into funnel tool
 /// output so the model NARRATES a ranking instead of comparing raw

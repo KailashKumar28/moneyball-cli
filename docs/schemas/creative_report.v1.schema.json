@@ -780,7 +780,7 @@
       "type": "object",
       "properties": {
         "code": {
-          "description": "scale | kill | zero_crm | learning | quality_leak | wait",
+          "description": "scale | kill | zero_crm | learning | quality_leak | wait | no_crm\n(no_crm: the snapshot has no CRM data, so no other verdict applies)",
           "type": "string"
         },
         "detail": {

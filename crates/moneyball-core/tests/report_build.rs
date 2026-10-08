@@ -350,6 +350,18 @@ fn empty_crm_flags_source_and_zero_funnel() {
     let txt = report::text_summary(&r);
     assert!(txt.contains("CREATIVE REPORT"), "{}", txt);
 
+    // No CRM, no verdict: every targeting that spent says so; none says Kill.
+    let chips: Vec<&str> = r.products[0]
+        .targetings
+        .iter()
+        .flat_map(|t| t.verdicts.iter().map(|v| v.code.as_str()))
+        .collect();
+    assert!(
+        !chips.is_empty() && chips.iter().all(|c| *c == "no_crm"),
+        "{:?}",
+        chips
+    );
+
     // Against a prior WITH CRM, the brief must not narrate the zeros as
     // a collapse (seen live: "fell to 0 qualified (3 in the last report)").
     let with_crm = report::build(&snapshot(), "ws", "t", 1, None, None).unwrap();

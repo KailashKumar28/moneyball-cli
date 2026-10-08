@@ -170,7 +170,8 @@ pub struct SevenDay {
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 pub struct Verdict {
-    /// scale | kill | zero_crm | learning | quality_leak | wait
+    /// scale | kill | zero_crm | learning | quality_leak | wait | no_crm
+    /// (no_crm: the snapshot has no CRM data, so no other verdict applies)
     pub code: String,
     /// Chip label, e.g. "Kill".
     pub label: String,

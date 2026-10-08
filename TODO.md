@@ -8,6 +8,15 @@ bottom after a release-sized batch.)
 
 ## Now (next slices, in order)
 
+- [ ] **Daily refresh and data health** (picked 2026-10-08 by a three-engineer
+      review panel; design: plans/prototype/board.html sections R and S;
+      contract: plans/daily-refresh-build-prompt.md; the task plan and its
+      verified evidence live in plans/prototype/build.js, which the board
+      reads). Open decisions: launchd write boundary, CRM-fails policy,
+      LLM after refresh.
+  - [x] Verdict gate (2026-10-09): no kill / 0-CRM verdict from missing CRM
+        data, in funnel rows, the table every surface prints, and the
+        report's targeting chips. The 27 Sep report had 11 false Kill chips.
 - [ ] **Daily creative report** (plan: docs/CLOUD_PLAN.md, agreed
       2026-08-07 - report.json is the product, HTML is a renderer;
       reimplements pipeline/creative_report.py, never imports it):

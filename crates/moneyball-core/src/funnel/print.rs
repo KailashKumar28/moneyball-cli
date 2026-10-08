@@ -40,7 +40,10 @@ fn cell(r: &FunnelRow, col: &str) -> String {
             .map(|x| x.to_string())
             .unwrap_or_else(|| "-".into()),
         "kill_mult" => r.kill_mult.to_string(),
-        "kill" => r.kill.to_string(),
+        "kill" => r
+            .kill
+            .map(|k| k.to_string())
+            .unwrap_or_else(|| "no CRM".into()),
         "sufficient" => r.sufficient.to_string(),
         "immature" => r.immature.to_string(),
         "learning" => r.learning.clone(),
@@ -82,6 +85,14 @@ pub fn table(rows: &[FunnelRow]) -> String {
             .collect();
         out.push_str(line.join("  ").trim_end());
         out.push('\n');
+    }
+    // Every surface prints through here (CLI, TUI cell, the agent's tool),
+    // so the reason travels with the withheld verdicts.
+    if rows.iter().any(|r| r.kill.is_none()) {
+        out.push_str(
+            "kill withheld: this snapshot has no CRM data, so qualified counts are unknown, not zero. \
+             Fetch CRM (moneyball crm fetch) and run this again.\n",
+        );
     }
     out
 }
