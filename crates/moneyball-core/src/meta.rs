@@ -113,6 +113,13 @@ pub(crate) fn api_error(
         ));
     }
     match code {
+        // Permission (#200, #10): the token's user lost access to this
+        // account. Meta's own sentence is a docs link; say where to fix it.
+        Some(c @ (200 | 10)) => Error::Meta(format!(
+            "the token can't read {}: its user has no ads_read permission there. \
+             In Meta Business Settings, give that user access to the ad account again (code {})",
+            what, c
+        )),
         Some(c) => Error::Meta(format!(
             "Meta {} for {}: {} (code {})",
             status, what, message, c
@@ -157,6 +164,12 @@ mod tests {
         assert_eq!(e.kind(), "meta");
         assert!(
             e.to_string().contains("(code 200)") && !e.to_string().contains("Some("),
+            "{}",
+            e
+        );
+        assert!(
+            e.reason().starts_with("the token can't read act_1:")
+                && e.reason().contains("Business Settings"),
             "{}",
             e
         );
