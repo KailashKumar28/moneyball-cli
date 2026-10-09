@@ -1,12 +1,16 @@
 # Build prompt: connect any client's ads and CRM
 
-You are building **connect** for moneyball-cli (`/Users/Kailash/DEV/moneyball-cli`). A new client sets up a folder and an AI model, nothing else. Then, from inside moneyball, they connect their ad platforms and their CRM: in the browser where the platform allows it, like Claude Code's login, and through a guided key where it does not.
+You are building **connect** for moneyball-cli (`/Users/Kailash/DEV/moneyball-cli`). A new client sets up a folder and an AI model, nothing else. From inside moneyball they then connect their ad platforms and their CRM in one click:
 
-The target design is the flow board's sections **L** (connect any client, L1 to L14), **M** (connect without a browser here, M1 to M7) and **X** (when a connection goes wrong, X1 to X11) in `plans/prototype/board.html`. Each frame's **Copy for agent** gives its exact cells, every styled run with its ratatui `Style`, and the build notes; the Build plan tab orders the tasks.
+**Connect → the browser opens the platform's own sign-in → choose and Allow → moneyball finishes by itself.**
+
+There are no codes to type and no tokens to paste, for Meta, Google, or any CRM that has a sign-in. Only CRMs with no sign-in of any kind take a key, through a guided, masked prompt.
+
+The target design is the flow board's sections **L** (connect any client), **M** (connect without a browser here) and **X** (when a connection goes wrong) in `plans/prototype/board.html`. Each frame's **Copy for agent** gives its exact cells, every styled run with its ratatui `Style`, and the build notes; the Build plan tab orders the tasks.
 
 Read the repo's `CLAUDE.md`, `AGENTS.md` and `ARCHITECTURE.md` first. They are binding: the network boundary, E2E first, `cargo install` is shipping, ASCII-only authored TUI strings, never advertise a command before it works.
 
-The design came from a four-engineer review panel on 9 Oct 2026, covering identity and security, Meta, Google Ads and CRMs, and UX and architecture. The facts below are from their reading of each platform's documentation. Two items need a spike before anyone commits to them; they are marked **[spike]**.
+The platform facts come from a four-engineer review panel on 9 Oct 2026, covering identity and security, Meta, Google Ads and CRMs, and UX and architecture. The one-click requirement is the product owner's, from the same day: "connect your account → opens in Chrome → gets permissions → token generated → done", with no Meta or Google token pasting.
 
 ---
 
@@ -17,55 +21,60 @@ The design came from a four-engineer review panel on 9 Oct 2026, covering identi
    - Re-running `/setup` on a configured workspace jumps straight to the model step, so the token step can't be reached again.
    - The wizard's summary says "meta token (0 chars)" although a token is saved.
 2. **Expiry is a dead end.**
-   - Long-lived Meta tokens last about 60 days, and nothing records when.
-   - Code 190 comes back as a raw "code Some(190)", and the fix it names ("run /setup") can't reach the token step.
-   - The LeadZump token is a session token that expires too: it returned 401 on 8 Aug and again on 9 Oct.
-3. **One CRM namespace for every client.**
-   - `crm_keys` in `auth.json` is global, so two clients on LeadZump both write `leadzump_token` and the second silently overwrites the first.
-   - This blocks "any client".
-4. **Secrets are echoed.** `crm secret` (stdin `read_line`) and `crm connect` (rustyline) both show the secret on screen, and a pasted LLM key is dropped on the wizard's key step (`event.rs:216-222`).
-5. **No Google Ads at all,** and no single place that says what is connected, what is expiring, and what is missing.
+   - Pasted user tokens last about 60 days, and nothing records when.
+   - Code 190 comes back as a raw "code Some(190)", and its fix ("run /setup") can't reach the token step.
+   - The LeadZump token is a session token that expires too (401 on 8 Aug and 9 Oct).
+3. **One CRM namespace for every client.** `crm_keys` in `auth.json` is global, so two clients on LeadZump overwrite each other's `leadzump_token`. This blocks "any client".
+4. **Secrets are echoed.** `crm secret` and `crm connect` show the secret on screen, and the wizard drops a pasted LLM key (`event.rs:216-222`).
+5. **No Google Ads at all,** and no single place that says what is connected and what is missing.
 6. **Fixed already (9 Oct).**
-   - An unreadable `auth.json` used to be treated as empty, so the next save wiped every key.
-   - Writes now take a lock, and files are created 0600.
-   - A CRM 401 now names the real secret ("moneyball crm secret leadzump_token") instead of a "&lt;name&gt;" placeholder.
+   - `auth.json` is never wiped when unreadable.
+   - Writes take a lock, and files are created 0600.
+   - A CRM 401 names the real secret.
 
 ---
 
-## 1. What each platform allows (the constraints the design follows)
+## 1. Why one-click needs a small connect service
 
-**Meta**
-- **No localhost callback.** In Live mode, Facebook blocks plain-http localhost redirects. Its code-for-token exchange and its long-lived exchange both need the **app secret**, which must never ship in a binary (Platform Terms 6.a.iv).
-- **Device sign-in** (`/device/login`, `/device/login_status`) needs only the app id and the client token, which Facebook documents as not secret.
-  - The user types a code at facebook.com/device, so it works over SSH and on a phone.
-  - Tokens last up to about 60 days, with no refresh.
-  - **[spike]** It is documented, but not confirmed, for `ads_read` on a Business-type app.
-- **Facebook Login for Business** with a system-user configuration issues business-owned tokens that never expire. Its code exchange needs the app secret, so it needs a small hosted broker.
-- **`ads_read`** covers everything moneyball reads. `leads_retrieval` drags `ads_management`, a write scope, plus `business_management` and page scopes onto the consent screen.
-- **"Any client" needs approvals.** Advanced Access for `ads_read` requires Business Verification (up to 14 business days), Access Verification, and App Review (about a week per round). Until then, only people with a role on the app can sign in.
+**Meta: the browser can't hand the token straight to moneyball.**
+- **No localhost callback.** In Live mode, Facebook blocks plain-http localhost redirects, so the browser can't send its result to `127.0.0.1`.
+- **The exchange needs a secret.** Facebook's code-for-token exchange needs the **app secret**, which must never ship in a binary (Platform Terms 6.a.iv).
+- **The way to non-expiring tokens.** Facebook Login for Business with a system-user configuration issues **business-owned tokens that do not expire**, on exactly the ad accounts the client picks in Facebook's own dialog. Its exchange also needs the app secret.
+- **So a small service sits between them.** It receives Facebook's redirect over HTTPS, exchanges the code with the secret, and hands the token to the waiting moneyball once.
 
-**Google Ads**
-- **A plain browser login works.** Desktop OAuth client, loopback `127.0.0.1`, PKCE S256. Google says a desktop client's secret is not treated as a secret, so the client id and secret ship in the binary.
-- **There is no device flow and no copy-paste flow:** the device grant excludes the `adwords` scope, and the out-of-band flow is gone. Headless means pasting the address the browser lands on.
-- **Developer tokens were retired on 9 Sep 2026.** API access now belongs to the Cloud project that owns the OAuth client.
-  - Basic access needs brand verification.
-  - `adwords` is a sensitive scope, so it needs verification too.
-  - A project left in "Testing" gets refresh tokens that die after 7 days.
-- **There is no read-only Ads scope;** the consent screen says "edit".
-- **Modlix may already have the project.** Its LeadZump and AdZump services already call the Google Ads API, so an Ads-enabled Cloud project may already exist; adding a Desktop client there is the fastest route.
+**Google** could work without the service, using a loopback listener and PKCE, because Google says a desktop client's secret is not a secret. It goes through the **same service** anyway:
+- **Same experience:** connecting works the same everywhere, including over SSH.
+- **Simpler moneyball:** moneyball never opens an inbound socket.
+
+**The connect service's rules**
+- Stateless. It holds a session's result for at most 2 minutes, then forgets it.
+- It logs no tokens, codes or query strings, and is rate-limited.
+- The Meta app secret (and any CRM OAuth secrets) live in its environment and nowhere else.
+- It is on the connect path only, never on the daily pull. If it is down, connecting waits; refreshes keep working.
+- It is not the CLOUD_PLAN server (no database, no accounts). The Phase 2 server can absorb it later.
+
+**The alternative, if no service may be hosted (decision 2).** A static HTTPS page relays the browser back to `127.0.0.1`, using Facebook's OIDC + PKCE flow with no secret.
+- Same screens.
+- Tokens last about 60 days.
+- It needs a one-hour spike to confirm `ads_read` is granted in that flow.
+
+**Approvals for "any client"** are calendar-bound, so start them now (decision 1). Until they clear, only people listed as testers can connect.
+- **Meta:** Business Verification (up to 14 business days), Access Verification, and App Review for `ads_read` Advanced Access (about a week per round).
+- **Google:**
+  - developer tokens were retired on 9 Sep 2026, so access belongs to the Cloud project;
+  - Basic access plus brand verification plus `adwords` sensitive-scope verification;
+  - never ship in "Testing", where refresh tokens die after 7 days.
+  - Modlix's LeadZump and AdZump services already call the Google Ads API, so an Ads-enabled project may already exist.
 
 **CRMs**
 
-| CRM | What it supports for a local app | moneyball's connect |
-|---|---|---|
-| LeadZump | Modlix session token that expires; the platform already has one-time-token SSO with a callback | Browser sign-in once Modlix adds an "Authorize moneyball" page; token paste until then |
-| LeadSquared | Access and secret keys only | Open Settings > API and Webhooks, ask for the API host, masked paste of both keys |
-| Freshsales | API key only | Open the API settings page, masked paste |
-| HubSpot | OAuth needs the client secret; private-app tokens exist | Paste a read-scoped token (browser sign-in only with a broker) |
-| Zoho CRM | OAuth, secret needed at exchange and refresh | Paste or broker |
-| Pipedrive | OAuth needs the secret; personal token exists | Paste the personal token |
-| Salesforce | OAuth with PKCE as a public client | Browser sign-in, after each client's admin installs the app |
-| anything else | an API | Paste the "list leads" request; the AI drafts the field map once (today's path) |
+| CRM | Connect |
+|---|---|
+| LeadZump | One-click browser sign-in through an "Authorize moneyball" page on the Modlix platform. Its one-time-token SSO already exists; it needs a callback allow-list and a long-lived read-only token (decision 4). |
+| HubSpot, Zoho, Pipedrive | One-click OAuth through the connect service, which holds their client secrets. |
+| Salesforce | One-click OAuth with PKCE, after each client's admin installs the app. |
+| LeadSquared, Freshsales | No sign-in exists, so a key. moneyball opens the exact settings page and asks for the values in a masked prompt; the save waits for a live test pull. |
+| anything else | Paste the "list leads" request; the AI drafts the field map once (today's path). |
 
 ---
 
@@ -75,63 +84,69 @@ The design came from a four-engineer review panel on 9 Oct 2026, covering identi
 
 | Key | Holds | Scope |
 |---|---|---|
-| `meta` | `token`, `method` (browser or paste), `who`, `user_id`, `scopes`, `obtained_at`, `expires_at` (null = never) | per person |
-| `google` | `refresh_token`, `who`, `scopes`, `obtained_at`; access tokens are minted per pull, never stored | per person |
+| `meta` | `token`, `business`, `ad_accounts`, `scopes`, `connected_at` (the token does not expire) | per person |
+| `google` | `refresh_token`, `who`, `accounts`, `scopes`, `connected_at`; access tokens are minted per pull, never stored | per person |
 | `llm_keys` | as today | per person |
-| `workspaces.<workspace_id>.crm_keys` | the CRM's secrets | **per client** |
+| `workspaces.<workspace_id>.crm_keys` / `crm_tokens` | the CRM's credentials | **per client** |
 
 - `secret:<name>` resolves the workspace's entry first, then the legacy global one.
-- **Migration:** a legacy `meta_access_token` loads as `{method: paste, expires_at: null}`.
-- **Stored expiry** is the earlier of `expires_at` and `data_access_expires_at`.
-- **A new credential replaces the old only after it is verified:** for Meta it covers the configured ad accounts, and for a CRM the test pull passes.
-- **Never log** tokens, refresh tokens, auth codes, PKCE verifiers, callback URLs or token-endpoint bodies. No agent tool may read connections.
+- **Migration:** the legacy pasted `meta_access_token` keeps working until the client connects through the browser.
+- **A new connection replaces the old only after it is verified:** for Meta it covers the configured ad accounts, and for a CRM the test pull passes.
+- **Never log** tokens, codes, verifiers, session links' results or token-endpoint bodies. No agent tool may read connections.
 
-### A2. `connections/`: status, the Prompter seam, the flows (new, no network of its own)
+### A2. `connections/`: status, the Prompter seam, the flows
 
 - `status_all(cfg)` reads `auth.json`, `crm.toml` and `config.json` only, so it is instant.
 - `trait Prompter { fn show(&mut self, s: Show); fn ask(&mut self, q: Ask) -> Option<Answer>; }` is one flow with two front ends:
-  - **the shell:** `println` and no-echo reads;
+  - **the shell:** `println`;
   - **the TUI:** a worker thread, mpsc both ways, polled on the 100 ms tick, with Esc setting an `AtomicBool`.
 - `fix_for(&Error) -> Option<Provider>`: `MetaAuth` goes to meta, `CrmAuth` to crm, `LlmAuth` to model. The fix line is rendered per surface: `/connect meta` in the TUI, `moneyball connect meta` in the shell.
 - The CRM orchestration moves here from the binary's `connect_flow.rs`, which closes audit package G.
 
-### A3. Meta device sign-in (`meta.rs`; the network boundary is unchanged)
+### A3. `connections/service.rs`: moneyball's side of one-click
 
-- **Run the [spike] first, for one hour:** `device/login` with `ads_read` on a Business-type app in Dev mode, signed in as a tester, then list the tester's ad accounts. If it fails, Meta v1 becomes Login for Business plus the broker (decision 2).
-- `device_login_start` returns the code, the URL, `expires_in` and `interval`. `device_login_poll` handles these codes:
-  - 1349174: still pending.
-  - 1349172: slow down.
-  - 1349152: the code expired.
-  - A token: success.
-- **After sign-in:** today's `list_ad_accounts`, then the picker, then a coverage check against the configured accounts.
-- **v1 scope is `ads_read` only.** Meta leads stay on the pasted system-user-token path and the CRM (decision 3).
+This file is the only new network module, and it is outbound only.
+1. `POST <service>/sessions {provider, code_challenge}` returns `{session_id, link}`.
+2. Open the link with `open` / `xdg-open`, or print it over SSH or when there is no display. The same link works on any device.
+3. Poll `GET <service>/sessions/{id}` with the verifier until the user has allowed. The response is `{token, business, ad_accounts, scopes}` or `{refresh_token, ...}`, returned once.
+4. Meta: the granted ad accounts become products (today's `list_ad_accounts` confirms them). Google: `listAccessibleCustomers` and the manager walk.
 
-### A4. CRM connect
+Hermetic tests run against a fake service: success, denied, the link expiring after 10 minutes, cancel, and a replaced connection seeing fewer accounts.
 
-- Presets gain `token_page` and per-field help; LeadSquared asks for its API host.
+### A4. The connect service (a separate small deployment)
+
+**Endpoints**
+- `POST /sessions`
+- `GET /sessions/{id}`
+- `/m/{id}`: redirect to Facebook Login for Business with `config_id`.
+- `/m/cb`: exchange the code with the app secret, then show the "connected" page.
+- The Google pair later.
+
+**Meta app setup**
+- A Business-type app with Facebook Login for Business.
+- A configuration: system-user token, never expires, assets = ad accounts, permission `ads_read`.
+- The redirect URI is the service's `/m/cb` only, with Strict Mode and Enforce HTTPS on.
+
+### A5. CRM connect
+
+- Browser sign-in where the CRM has one (the table above). Presets gain `connect: oauth | key` and, for keys, `token_page` plus per-field help.
 - The live test pull gates the save. Unknown stage names are mapped once and saved in `crm.toml`; re-connecting keeps the map.
-- A learned map is also kept per CRM host, with secrets stripped, in `~/.moneyball/crm-specs/<host>.toml`. The next client on the same host starts from a draft.
-- **LeadZump (decision 4):** an "Authorize moneyball" page on the Modlix platform hands a one-time token to moneyball's loopback. The Modlix side needs a callback allow-list and a long-lived, ideally read-only, token for this flow.
+- A learned map is kept per CRM host, with secrets stripped, in `~/.moneyball/crm-specs/<host>.toml`, and offered to the next client on that host.
 
-### A5. Google Ads, phase 3
+### A6. Google Ads (phase 3)
 
-- **`connections/loopback.rs`**, the one inbound socket:
-  - It binds `127.0.0.1` (never `0.0.0.0`) before the authorize URL is built.
-  - `state` must match; a wrong `state` gets a 400 and the listener keeps waiting.
-  - It handles one callback or 5 minutes, then closes.
-  - It serves a static ASCII success page that echoes nothing.
-- **`fetch/google.rs`:** `customers:listAccessibleCustomers`, then `customer_client` under managers, then `googleAds:searchStream` of daily ad-level stats.
+- Google's OAuth on the connect service.
+- `fetch/google.rs`: `googleAds:searchStream` of daily ad-level stats.
   - `segments.date` is in the account's time zone, and cost is `cost_micros / 1e6`.
   - Performance Max spend goes into an explicit unattributed bucket.
-- **The hub's Google row appears only once a Google pull lands in `/brief`.**
+- The hub's Google row appears only once a Google pull lands in `/brief`.
+- `arch_contract` forbids `:mutate` URLs, since Google has no read-only Ads scope.
 
-### A6. The network boundary
+### A7. The network boundary
 
-- **Phases 1 and 2: no amendment.** Device sign-in is two calls to graph.facebook.com from `meta.rs`, and CRM tests run through `crm/fetch.rs`.
-- **Phase 3 wording:** "and `connections/loopback.rs`, the one INBOUND socket: a 127.0.0.1-only listener for a single browser sign-in, closed after one callback or 5 minutes; never binds 0.0.0.0." `fetch/google.rs` joins the outbound list.
-- **`arch_contract` gains:**
-  - an inbound-socket test that rejects `TcpListener`, `UdpSocket` and `bind(` outside `loopback.rs`. Today an inbound listener anywhere passes unnoticed, because the test only greps for "reqwest".
-  - a check that no `:mutate` URL exists, since the Google scope can edit.
+- ARCHITECTURE section 1 gains `connections/service.rs`: outbound HTTPS to the connect service only.
+- `arch_contract` gets `service.rs` in its allowed list and a new test rejecting `TcpListener`, `UdpSocket` and `bind(` anywhere. moneyball never listens.
+- The read-only promise is reworded: "never mutates ad or CRM data; the only non-read calls are to the connect service and OAuth token endpoints."
 
 ---
 
@@ -140,47 +155,44 @@ The design came from a four-engineer review panel on 9 Oct 2026, covering identi
 ### B1. Commands
 
 ```
-moneyball connect                          status of every source; on a TTY, then asks which to connect
-moneyball connect meta   [--with-token] [--no-browser]
-moneyball connect crm    [--no-browser]
-moneyball connect model  [--with-key]
-moneyball connect google [--no-browser]    phase 3: hidden from --help until a Google pull exists
-moneyball disconnect <meta|crm|model|google>
+moneyball connect                  status of every source; on a TTY, then asks which to connect
+moneyball connect meta             one click: opens Facebook, waits, done
+moneyball connect google           phase 3: hidden from --help until a Google pull exists
+moneyball connect crm              browser sign-in where the CRM has one, else a guided key
+moneyball connect model            provider, key, model (LLM keys stay pasted: providers forbid reusing chat logins)
+moneyball disconnect <meta|google|crm|model>
 ```
 
-- **Secrets come from stdin only, never argv.**
-- **`--no-browser` turns on by itself** over SSH (`SSH_CONNECTION` or `SSH_TTY`) or with no display, and no browser ever opens when stdin is not a terminal (a launchd run).
-- **`MB_AGENT=1` prints JSON.**
+- No command or flag takes a Meta or Google token.
+- `MB_AGENT=1` prints JSON.
+- moneyball never opens a browser when stdin is not a terminal (a launchd run records the error instead).
 - **TUI:** `/connect` (the hub), `/connect <provider>` and `/disconnect <provider>`.
-- **Retired:**
-  - `/keychain`: the hub shows model keys.
-  - `crm connect`: kept as a hidden alias for one release.
-  - The planned `meta token`: it is `connect meta --with-token`.
-- **`crm secret` stays** as plumbing for scripts.
+- **Retired:** `/keychain` (the hub shows model keys), `crm connect` (kept as a hidden alias for one release), and the planned `meta token`.
+- **`crm secret` stays** as plumbing for key-only CRMs and scripts.
 
 ### B2. First run (L1, L2)
 
-- **Workspace and model only.** The token and products steps leave the wizard, and the ad-account picker moves into `/connect meta`.
-- **The paste fix:** `handle_paste` feeds the step's own insert for every character.
+- **Workspace and model only.** The token and products steps leave the wizard: ad accounts are chosen in Facebook's own dialog during connect.
+- **The paste fix (model key):** `handle_paste` feeds the step's own insert for every character.
 
-### B3. The hub and each flow (L3 to L14, M, X)
+### B3. The hub and each flow (L, M, X)
 
-- **Hub:** a modal view like `/setup`, so secrets never pass through the chat composer or the session file. Three groups (ads, leads, advisor), one row per source, colour-coded: Green connected, Yellow expiring, Red ended.
-- **Meta:** the code shown large, the URL, a countdown from `expires_in`, and "p paste a token instead".
-- **CRM:** choose, keys from the opened settings page (masked), a test pull with a join check, the stage map, then done.
-- **Failures save nothing** and name the next step. A new sign-in never replaces a working one that sees more accounts (X4).
-- **Expiry:**
-  - The bar and the landing warn 7 days ahead, read from `auth.json` with no network call.
-  - A scheduled refresh that hits an ended sign-in records it, and the landing shows it (X3).
-- **What stays in the transcript** is one summary cell per connect or disconnect, with facts only and never a secret.
+- **Hub:** a modal view like `/setup`. Three groups (ads, leads, advisor), one row per source: Green connected, Red removed.
+- **Meta and Google:**
+  - "Facebook (Google) is open in your browser", the steps there, then "moneyball comes back here by itself".
+  - `c` copies the link, Esc cancels.
+  - The browser tab lands on moneyball's "connected" page.
+- **Over SSH:** the link is printed and works on any device. moneyball still finishes by itself.
+- **CRM:** choose, then sign in (or, for a key-only CRM, enter masked keys from the opened page), then a test pull with a join check, then the stage map, then done.
+- **Failures save nothing** and name the next step. A new connection never replaces a working one that sees more accounts.
+- **Access removed** in Business Settings shows on the landing after the next refresh (X3), with `/connect meta` as the fix.
 
 ### B4. Size caps
 
 | File | Change |
 |---|---|
 | `setup/mod.rs` (999 of 1000) | loses the Meta and products steps (about -330 lines); lower its ceiling in the same commit |
-| `render_steps.rs` | loses the same two steps |
-| `commands.rs` | drops `/keychain` and gains the `/connect` dispatch |
+| `commands.rs` | drops `/keychain`, adds the `/connect` dispatch |
 | the binary's `main.rs` (392 of 400) | sheds its `crm` arm to `crm_cli.rs` first |
 | new files | stay under 400 lines each |
 
@@ -190,76 +202,79 @@ moneyball disconnect <meta|crm|model|google>
 
 Each phase lists its tasks in order; each task says when it is done.
 
-**0. Vendor setup.** Calendar-bound, so start now.
-1. **Meta app** in the publisher's business, with Business Verification, Access Verification, and App Review for `ads_read` Advanced Access.
-2. **Google:** a Cloud project with Ads API Basic access, plus brand and `adwords` verification.
-3. **The Meta spike (A3).**
+**0. Calendar and the service.** Start now.
+1. **Publisher accounts:** Meta Business Verification, Access Verification and App Review for `ads_read`; the Google Cloud project's verification.
+2. **The Meta app's Login for Business configuration.**
+3. **The connect service** deployed on the publisher's domain.
 
-- **Done when:** a tester's device sign-in lists their ad accounts.
+- **Done when:** a tester clicks the link, allows in Facebook, and the service returns a token that lists their ad accounts.
 
-**1. Meta sign-in and the hub.** No boundary change.
+**1. Meta one-click and the hub.**
 1. Credentials v2.
 2. `connections/` with the Prompter.
-3. Meta device sign-in with the typed `MetaAuth`.
+3. `service.rs`.
 4. `moneyball connect` in the shell.
 5. The `/connect` hub in the TUI.
 6. The two-step first run.
 7. The refresh's fix lines pointing to `/connect`.
 
-- **Done when:** on the installed binary, a tester connects Meta locally and over `ssh localhost`; `--with-token` works; `disconnect` removes the credential; and the expiry warning shows 5 days out.
+- **Done when:** on the installed binary, a tester clicks Connect, allows in Chrome and lands back connected, locally and over `ssh localhost`, with nothing pasted; and `disconnect` removes the credential.
 
 **2. CRM into connect.**
-- The flow moves to core, `token_page` presets are added, the test pull gates the save, and `CrmAuth` routes to `/connect crm`.
-- The LeadZump browser sign-in follows once the Modlix page exists.
-- **Done when:** tmux E2E connects LeadZump in the TUI and LeadSquared from the shell over SSH with hidden input.
+- The flow moves to core.
+- LeadZump's browser sign-in, once the Modlix page exists.
+- Key-only CRMs with masked prompts.
+- `CrmAuth` routes to `/connect crm`.
+- **Done when:** LeadZump connects in one click in the TUI, and LeadSquared connects from the shell over SSH.
 
 **3. Google Ads.**
-- `loopback.rs` with the amendment and the inbound-socket test, then `fetch/google.rs`, then the hub row.
+- OAuth on the service, then `fetch/google.rs`, then the hub row.
 - **Done when:** a real Google Ads account's spend shows in `/brief`.
 
 ## Out of scope
 
 - **A moneyball account or login of its own.** It is local-first; connect is per source.
-- **Reusing a Claude or ChatGPT subscription login for the model.** Providers forbid it in third-party tools; model keys stay pasted.
-- **Writing to any platform.** `disconnect` deletes locally. Revoking at the provider would be a write; at most it is a best-effort option, and it changes the read-only wording.
+- **Reusing a Claude or ChatGPT subscription login for the model.** Providers forbid it in third-party tools.
+- **Writing to any platform.** `disconnect` deletes locally and tells the client where to remove access.
 - **Meta lead retrieval for outside clients** in v1 (decision 3).
 
 ## Open decisions (defaults used above)
 
-1. **Publisher of record.**
-   - Which business owns moneyball's Meta app and its Google Cloud project? Its name appears on every client's consent screen.
-   - Default: reuse Modlix's existing Ads-enabled Google Cloud project, and start Meta Business Verification and App Review now.
-2. **Meta tokens.**
-   - Default: device sign-in now (no server, re-sign-in about every 60 days, warned a week ahead).
-   - Later: a small stateless broker for never-expiring business tokens, which also unlocks HubSpot and Zoho browser sign-in. It stores and logs nothing and sits only on the sign-in path, never the daily pull.
-3. **Meta leads for outside clients.** Default: `ads_read` only; leads come from the CRM.
-4. **LeadZump browser sign-in.** Default: yes. Build the "Authorize moneyball" page on the Modlix side; it is the one CRM where both ends are yours.
-5. **Credential scope.** Default: Meta and Google sign-ins per person, CRM keys per workspace (per client).
+1. **Publisher of record and domain.**
+   - Which business owns moneyball's Meta app and Google project? Its name is on every consent screen.
+   - Which domain runs the connect service? `connect.moneyball.example` is a placeholder.
+   - Start the verifications now.
+2. **The connect service.**
+   - Default: host it. You get one-click everywhere, tokens that never expire, and HubSpot/Zoho sign-in.
+   - Alternative: a static relay page with 60-day Meta tokens and a spike first.
+3. **Meta leads for outside clients.**
+   - Default: `ads_read` only; leads come from the CRM.
+   - `leads_retrieval` would add `ads_management`, a write scope, to the consent screen.
+4. **LeadZump one-click.** Default: yes, build the "Authorize moneyball" page on the Modlix side.
+5. **Credential scope.** Default: Meta and Google per person, CRM per workspace (per client).
 6. **Disconnect.** Default: local delete only.
 
 ## Done when (on the installed binary)
 
-- **A brand-new folder** goes through two steps to "nothing connected" (L3).
-- **A tester connects Meta in the browser** (L5 to L7) and over SSH (M1, M3).
-- **LeadZump or LeadSquared connects** with a passing test pull and a stage map (L8 to L11).
-- **`/refresh` then exits 0**, and its failures route to `/connect` (S1, S2).
-- **Two workspaces** on the same CRM keep separate keys.
-- **An expired Meta sign-in** shows X3 on the landing, and `/connect meta` fixes it.
-- **The gates:** `cargo test` and clippy green, `arch_contract` green (with the inbound-socket test from phase 3), and the binary reinstalled with `cargo install`.
+- **First run:** a brand-new folder goes through two steps to "nothing connected" (L3).
+- **Meta and Google, one click each:** Connect, Chrome, Allow, back in moneyball and done, with nothing typed or pasted (L5 to L7), and the same over SSH (M1).
+- **LeadZump in one click,** and a key-only CRM with a passing test pull and a stage map.
+- **`/refresh` then exits 0,** and its failures route to `/connect` (S1, S2).
+- **Per-client keys:** two workspaces on the same CRM keep separate credentials.
+- **The gates:** `cargo test` and clippy green, `arch_contract` green with the no-listener test, and the binary reinstalled with `cargo install`.
 
 ## Sources
 
 - **Meta:**
   - [manual flow](https://developers.facebook.com/docs/facebook-login/guides/advanced/manual-flow)
   - [login security](https://developers.facebook.com/docs/facebook-login/security)
-  - [devices](https://developers.facebook.com/docs/facebook-login/for-devices)
   - [Login for Business](https://developers.facebook.com/documentation/facebook-login/facebook-login-for-business)
   - [permissions](https://developers.facebook.com/docs/permissions/)
   - [access levels](https://developers.facebook.com/docs/graph-api/overview/access-levels/)
   - [Platform Terms](https://developers.facebook.com/terms/dfc_platform_terms/)
+  - [OIDC + PKCE](https://developers.facebook.com/docs/facebook-login/guides/advanced/oidc-token)
 - **Google:**
-  - [native-app OAuth](https://developers.google.com/identity/protocols/oauth2/native-app)
-  - [limited-input devices](https://developers.google.com/identity/protocols/oauth2/limited-input-device)
+  - [OAuth for web servers](https://developers.google.com/identity/protocols/oauth2/web-server)
   - [developer token change](https://developers.google.com/google-ads/api/docs/api-policy/developer-token)
   - [access levels](https://developers.google.com/google-ads/api/docs/api-policy/access-levels)
   - [sensitive scopes](https://developers.google.com/identity/protocols/oauth2/production-readiness/sensitive-scope-verification)
@@ -267,7 +282,7 @@ Each phase lists its tasks in order; each task says when it is done.
   - [RFC 8252](https://datatracker.ietf.org/doc/html/rfc8252) (OAuth for native apps)
   - [RFC 7636](https://datatracker.ietf.org/doc/html/rfc7636) (PKCE)
   - [RFC 9700](https://datatracker.ietf.org/doc/html/rfc9700) (OAuth security BCP)
+  - [token-mediating backend](https://datatracker.ietf.org/doc/html/draft-ietf-oauth-browser-based-apps)
 - **CRMs:**
   - [LeadSquared API keys](https://help.leadsquared.com/how-do-i-obtain-api-access-keys-in-leadsquared/)
   - [HubSpot OAuth](https://developers.hubspot.com/docs/api-reference/latest/authentication/manage-oauth-tokens)
-  - [Zoho device flow](https://www.zoho.com/accounts/protocol/oauth/devices/polling-request.html)

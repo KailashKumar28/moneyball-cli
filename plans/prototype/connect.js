@@ -21,7 +21,6 @@ const LOGO = `   [dim]__  __  ___  _   _ _______   ______    _    _     _[/]
    [dim]| |\\/| | | | |  \\| |  _|  \\ V /|  _ \\ / _ \\ | |   | |[/]
    [dim]| |  | | |_| | |\\  | |___  | | | |_) / ___ \\| |___| |___[/]
    [dim]|_|  |_|\\___/|_| \\_|_____| |_| |____/_/   \\_\\_____|_____|[/]`;
-const CODE = '            [white bold]WDJB-MJHT[/]';
 
 const AUTHORED_CONNECT = {
 	// L1 - first run asks two things: where, and which model. No token, no products.
@@ -92,60 +91,43 @@ ${title('Connections')}
 
 ${keys('enter connect  ·  up/down move  ·  esc back to chat')}` },
 
-	// L5 - Meta: browser opened, code on screen, waiting with the code's own expiry (device login, no local server)
+	// L5 - one click: the browser opens Facebook's own sign-in; moneyball waits, no code, no token
 	meta_waiting: { text: `${HEADER}
 ${abar(NONE)}
 
 ${title('Connect Meta Ads')}
 
-   [gray]1  Your browser opened at  [/][cyan]https://www.facebook.com/device[/]
-   [gray]2  Sign in as someone who can see this client's ad accounts in Ads Manager.[/]
-   [gray]3  Enter this code:[/]
+   [cyan]◐[/][gray] Facebook is open in your browser.[/]
 
-${CODE}
+   [gray]In the browser:[/]
+   [gray]  1  Continue as yourself, or switch to the account that runs this client's ads[/]
+   [gray]  2  Choose the business and the ad accounts moneyball may read[/]
+   [gray]  3  Allow[/]
 
-   [cyan]◐[/][gray] waiting for Facebook  ·  [/][dim]code expires in 6:41[/]
+   [gray]moneyball comes back here by itself when you are done.[/]
 
-   [dim]moneyball asks only for ads_read: it reads ads and results and cannot change them.[/]
-   [dim]Browser didn't open? Type that address on any device; your phone works too.[/]
-
-
-${keys('esc cancel  ·  p paste a token instead')}` },
-
-	// L6 - Meta: signed in, choose ad accounts (the wizard's picker, moved here)
-	meta_accounts: { text: `${HEADER}
-${abar(NONE)}
-
-${title('Connect Meta Ads')}[dim]   [/][green]✓[/][gray] signed in as Priya Sharma[/]
-
-   [gray]Choose the ad accounts to analyse. Each one becomes a product, named after the account.[/]
-   [dim]3 of 6 chosen[/]
-
- [cyan bold]▸ [x] Acme Homes - Whitefield      act_2087011578504572    active[/]
-   [gray][x] Acme Homes - Sarjapur        act_852565919728055     active[/]
-   [gray][x] Acme Villas                  act_1043714050577651    active[/]
-   [gray][ ] Acme Brand                   act_405885579167395     active[/]
-   [dim][ ] Acme Launch 2024             act_311902556120044     disabled[/]
-   [dim][ ] Test account                 act_771293847560        unsettled[/]
+   [dim]moneyball asks only to read ads and their results (ads_read). It can never change them.[/]
+   [dim]Browser didn't open? Open this link on any device:  https://connect.moneyball.example/m/7Hq2xK[/]
 
 
-${keys('space toggle  ·  a all or none  ·  enter confirm  ·  esc back')}` },
+${keys('c copy the link  ·  esc cancel')}` },
 
-	// L7 - Meta: success, back on the hub with what was granted and until when; cursor moves to the next gap
+
+	// L7 - back in moneyball: the business, the accounts chosen in Facebook, and a connection that does not expire
 	meta_done: { text: `${HEADER}
 ${abar(META_ONLY)}
 
 ${title('Connections')}
 
-   [green]✓ Meta Ads connected as Priya Sharma.[/]
-   [gray]    ad accounts   3 of 6: Acme Homes - Whitefield, Acme Homes - Sarjapur, Acme Villas[/]
+   [green]✓ Meta Ads connected: Acme Homes business.[/]
+   [gray]    ad accounts   3, chosen in Facebook: Acme Homes - Whitefield, Acme Homes - Sarjapur, Acme Villas[/]
    [gray]    products      named after the accounts (rename them in /setup)[/]
-   [gray]    permission    ads_read, read-only[/]
-   [gray]    valid until   Mon 07 Dec 2026 (59 days). Facebook asks for a new sign-in then; moneyball warns 7 days ahead.[/]
+   [gray]    permission    read ads and their results (ads_read)[/]
+   [gray]    lasts         until access is removed in Meta Business Settings; no sign-in to repeat[/]
    [gray]    next          [/][cyan bold]/refresh[/][gray] pulls the last 28 days (about a minute), or connect your CRM below[/]
 
    [dim]ads[/]
-   [white]Meta Ads        [/][green]connected        [/][gray]Priya Sharma, 3 ad accounts, until 07 Dec[/]
+   [white]Meta Ads        [/][green]connected        [/][gray]Acme Homes business, 3 ad accounts[/]
    [white]Google Ads      [/][dim]not connected    [/][gray]sign in with Google in your browser[/]
    [dim]leads[/]
  [cyan bold]▸ CRM             [/][dim]not connected    [/][gray]LeadZump, LeadSquared, or any CRM with an API[/]
@@ -161,90 +143,70 @@ ${abar(META_ONLY)}
 ${user('/connect meta', '10:02:14')}
 
 ${tool(OK, 'connect meta')}
-[gray]       Meta Ads connected as Priya Sharma: 3 ad accounts, ads_read, valid until Mon 07 Dec 2026[/]
+[gray]       Meta Ads connected: Acme Homes business, 3 ad accounts chosen in Facebook, read-only[/]
 [gray]       products: Acme Homes - Whitefield, Acme Homes - Sarjapur, Acme Villas[/]
 [gray]       next:  [/][cyan bold]/refresh[/][gray]   pulls the last 28 days from Meta[/]
 [green]       (41.3s)[/]
 
 ${COMPOSER()}` },
 
-	// L9 - Meta: paste instead (system user tokens, unapproved-app fallback). Never echoed, never in argv.
-	meta_paste: { text: `${HEADER}
-${abar(NONE)}
 
-${title('Connect Meta Ads')}[dim]  ·  paste a token[/]
-
-   [gray]For a system user token: Meta Business Settings > Users > System users > Generate new token,[/]
-   [gray]with ads_read. Those can be set to never expire.[/]
-
-${box('meta token', '••••••••••••••••••••••••••••••••••••••••••••••••+█')}
-   [dim](231 chars, pasted)[/]
-
-   [dim]Stored in ~/.moneyball/auth.json, readable only by you. Sent only to Facebook.[/]
-
-
-${keys('enter check it with Facebook  ·  esc back to browser sign-in')}` },
-
-	// L10 - Meta over SSH: the same code flow; nothing is opened locally
+	// M1 - over SSH: the same link opens on any device, and moneyball still finishes by itself
 	meta_ssh: { text: `${HEADER}
 ${abar(NONE)}
 
 ${title('Connect Meta Ads')}
 
    [gray]This is an SSH session, so no browser was opened here.[/]
-   [gray]1  On your laptop or phone, open  [/][cyan]https://www.facebook.com/device[/]
-   [gray]2  Sign in as someone who can see this client's ad accounts in Ads Manager.[/]
-   [gray]3  Enter this code:[/]
+   [gray]Open this link in the browser on your laptop or phone:[/]
 
-${CODE}
+            [white bold]https://connect.moneyball.example/m/7Hq2xK[/]
 
-   [cyan]◐[/][gray] waiting for Facebook  ·  [/][dim]code expires in 6:58[/]
+   [cyan]◐[/][gray] waiting for you to allow access in that browser  ·  [/][dim]the link works for 10 minutes[/]
 
-
-${keys('esc cancel  ·  p paste a token instead')}` },
-
-	// L11 - the shell: same flow, plain lines; status is the bare command
-	cli_connect_meta: { kind: 'shell', cmd: 'moneyball connect meta', text: `
-[dim]moneyball-data[/] $ moneyball connect meta
-No browser here (SSH session). On any device, open https://www.facebook.com/device
-and enter this code:  WDJB-MJHT
-waiting for Facebook (code expires in 7:00, ctrl+c cancels) ...
-signed in as Priya Sharma
-ad accounts this sign-in can see:
-  1  Acme Homes - Whitefield   act_2087011578504572  active
-  2  Acme Homes - Sarjapur     act_852565919728055   active
-  3  Acme Villas               act_1043714050577651  active
-  4  Acme Brand                act_405885579167395   active
-analyse which? (like 1,2,3 or all): 1,2,3
-Meta Ads connected: 3 ad accounts, ads_read, valid until Mon 07 Dec 2026 (59 days)
-stored in ~/.moneyball/auth.json (0600)
-next: moneyball refresh
-[dim]moneyball-data[/] $ moneyball connect
-connections  (workspace ${ACME})
-  Meta Ads    connected      Priya Sharma, 3 ad accounts, ads_read    until 07 Dec 2026 (59 days)
-  CRM         not connected  moneyball connect crm
-  model       connected      MiniMax, MiniMax-M3
-credentials: ~/.moneyball/auth.json (0600)
-[dim]moneyball-data[/] $ moneyball connect meta --with-token < acme-reporting.token
-token accepted: system user acme-reporting, sees all 3 of this workspace's ad accounts, ads_read, never expires
-[dim]moneyball-data[/] $ ` },
-
-	// L12 - Google (TARGET, phase 3): loopback sign-in; the short local link redirects to Google's long one
-	google_waiting: { text: `${HEADER}
-${abar(FRESH)}
-
-${title('Connect Google Ads')}
-
-   [gray]1  Your browser opened at Google's sign-in page.[/]
-   [dim]   Didn't open? On this computer, open  [/][cyan]http://127.0.0.1:53682/start[/]
-   [gray]2  Choose the Google account that can see this client's Google Ads, then allow access.[/]
-   [dim]   Google's screen says the access includes editing: Google has no read-only permission for Ads.[/]
-   [dim]   moneyball has no code that edits Google Ads; it only reads reports.[/]
-
-   [cyan]◐[/][gray] waiting for Google  ·  [/][dim]stops waiting in 4:52[/]
+   [dim]Same three steps there: continue, choose the business and ad accounts, Allow.[/]
+   [dim]moneyball comes back here by itself; nothing to type or paste.[/]
 
 
 ${keys('esc cancel')}` },
+
+	// M3 - the shell: the same browser flow, then bare connect as the status of every source
+	cli_connect_meta: { kind: 'shell', cmd: 'moneyball connect meta', text: `
+[dim]moneyball-data[/] $ moneyball connect meta
+Opening Facebook in your browser ...
+  (no browser? open on any device: https://connect.moneyball.example/m/7Hq2xK)
+waiting for you to allow access in the browser (ctrl+c cancels) ...
+connected: Acme Homes business, 3 ad accounts chosen in Facebook, read-only (ads_read)
+products: Acme Homes - Whitefield, Acme Homes - Sarjapur, Acme Villas
+next: moneyball refresh
+[dim]moneyball-data[/] $ moneyball connect
+connections  (workspace ${ACME})
+  Meta Ads    connected      Acme Homes business, 3 ad accounts, read-only
+  Google Ads  not connected  moneyball connect google
+  CRM         not connected  moneyball connect crm
+  model       connected      MiniMax, MiniMax-M3
+[dim]moneyball-data[/] $ ` },
+
+	// L12 - Google, phase 3: the same one-click flow as Meta, through the same connect service
+	google_waiting: { text: `${HEADER}
+${abar(META_ONLY)}
+
+${title('Connect Google Ads')}
+
+   [cyan]◐[/][gray] Google is open in your browser.[/]
+
+   [gray]In the browser:[/]
+   [gray]  1  Choose the Google account that can see this client's Google Ads[/]
+   [gray]  2  Allow[/]
+
+   [gray]moneyball comes back here by itself when you are done.[/]
+
+   [dim]Google's screen says the access includes editing: Google has no read-only permission for Ads.[/]
+   [dim]moneyball has no code that edits Google Ads; it only reads reports.[/]
+   [dim]Browser didn't open? Open this link on any device:  https://connect.moneyball.example/g/Rk4pW9[/]
+
+
+${keys('c copy the link  ·  esc cancel')}` },
 
 	// L13 - Google (TARGET): signed in, pick customers, attach each to a product (products can span Meta and Google)
 	google_accounts: { text: `${HEADER}
@@ -285,26 +247,23 @@ ${title('Connections')}
 
 ${keys('enter sign in again  ·  d disconnect  ·  up/down move  ·  esc back to chat')}` },
 
-	// L15 - Google over SSH (TARGET): the long link printed at column 0 (copy keeps no indent), then paste the address back
+	// M5 - Google over SSH, phase 3: the same link on any device
 	google_ssh: { text: `${HEADER}
-${abar(FRESH)}
+${abar(META_ONLY)}
 
 ${title('Connect Google Ads')}
 
-   [gray]This is an SSH session, so no browser was opened here. Two steps:[/]
-   [gray]1  Open this link in your laptop's browser. Copy all of it; the line breaks are not part of it.[/]
+   [gray]This is an SSH session, so no browser was opened here.[/]
+   [gray]Open this link in the browser on your laptop or phone:[/]
 
-[cyan]https://accounts.google.com/o/oauth2/v2/auth?client_id=40712-mb.apps.googleusercontent.com&redirect_uri=http%3A%2F%2F127.0.0.1%3A5368[/]
-[cyan]2%2Fcallback&response_type=code&scope=https%3A%2F%2Fwww.googleapis.com%2Fauth%2Fadwords&code_challenge=E9Melhoa2OwvFrEMTJguCHaoeK1t8[/]
-[cyan]URWbuGJSTw-cM&code_challenge_method=S256&state=af0ifjsldkj&access_type=offline&prompt=consent[/]
+            [white bold]https://connect.moneyball.example/g/Rk4pW9[/]
 
-   [gray]2  After you allow access, the browser shows "127.0.0.1 refused to connect". That is expected.[/]
-   [gray]   Copy the whole address from the address bar and paste it here:[/]
+   [cyan]◐[/][gray] waiting for you to allow access in that browser  ·  [/][dim]the link works for 10 minutes[/]
 
-${box('address from your browser', '█')}
+   [dim]moneyball comes back here by itself; nothing to type or paste.[/]
 
 
-${keys('enter finish  ·  esc cancel')}` },
+${keys('esc cancel')}` },
 
 	// L16 - CRM: choose. Only real presets render; HubSpot is a TARGET example of an OAuth CRM.
 	crm_choose: { text: `${HEADER}
@@ -314,7 +273,7 @@ ${title('Connect a CRM')}
 
    [gray]moneyball reads each lead's ad and stage, to show which ads bring qualified leads and site visits.[/]
 
- [cyan bold]▸ LeadZump        [/][gray]paste your API token[/]
+ [cyan bold]▸ LeadZump        [/][gray]sign in with LeadZump in your browser[/]
    [white]LeadSquared     [/][gray]paste the access key and secret key from Settings[/]
    [white]HubSpot         [/][gray]sign in with HubSpot in your browser[/]
    [white]another CRM     [/][gray]paste the 'list leads' request from its API docs; the AI drafts the field map once[/]
@@ -409,39 +368,21 @@ CRM connected: LeadSquared. stage map saved in .moneyball/crm.toml; keys stored 
 next: moneyball refresh
 [dim]moneyball-data[/] $ ` },
 
-	// L21 - the hub when everything is connected and one sign-in is close to its end
-	hub_expiring: { text: `${HEADER}
-${abar('[dim]  ·  data [/][gray]Thu 08 Oct[/][dim]  ·  CRM [/][gray]08 Oct[/][dim]  ·  [/][yellow]● Meta sign-in ends in 5 days[/]')}
 
-${title('Connections')}
-
-   [gray]moneyball reads from these. It never changes your ads or your CRM.[/]
-
-   [dim]ads[/]
- [cyan bold]▸ Meta Ads        [/][yellow]ends in 5 days   [/][gray]Priya Sharma, 3 ad accounts. Sign in again before Wed 14 Oct.[/]
-   [white]Google Ads      [/][green]connected        [/][gray]ads@acme.in, 2 accounts[/]
-   [dim]leads[/]
-   [white]CRM             [/][green]connected        [/][gray]LeadSquared, last pull ok 07:30 today[/]
-   [dim]advisor[/]
-   [white]model           [/][green]connected        [/][gray]MiniMax, MiniMax-M3[/]
-
-
-${keys('enter sign in again  ·  d disconnect  ·  up/down move  ·  esc back to chat')}` },
-
-	// X1 - Meta: the code ran out (also what an app not yet open to this Facebook user looks like from here)
+	// X4 - no answer in 10 minutes: nothing saved; before Facebook's approval, only testers can connect
 	meta_timeout: { text: `${HEADER}
 ${abar(NONE)}
 
 ${title('Connect Meta Ads')}
 
-   [red]✖ The code expired before Facebook confirmed it.[/][gray] Nothing was saved.[/]
+   [red]✖ Facebook didn't come back within 10 minutes.[/][gray] Nothing was saved.[/]
 
-   [gray]  If Facebook said "This app isn't available", moneyball's Meta app is not open to your[/]
-   [gray]  Facebook account yet. Paste a system user token instead (p), or ask whoever set up moneyball[/]
-   [gray]  to add you as a tester of its Meta app.[/]
+   [gray]  If Facebook said "This app isn't available", moneyball's Meta app isn't open to everyone yet:[/]
+   [gray]  until Facebook approves it, only people added as its testers can connect. Ask whoever set up[/]
+   [gray]  moneyball to add you.[/]
 
 
-${keys('enter get a new code  ·  p paste a token instead  ·  esc back')}` },
+${keys('enter open Facebook again  ·  esc back')}` },
 
 	// X2 - Meta: signed in but ads_read was switched off on Facebook's screen
 	meta_denied: { text: `${HEADER}
@@ -503,11 +444,9 @@ ${title('Connect Google Ads')}
 
    [red]✖ Google didn't come back within 5 minutes.[/][gray] Nothing was saved.[/]
 
-   [gray]  If your browser shows "127.0.0.1 refused to connect", moneyball runs on another machine:[/]
-   [gray]  press m and paste that page's address instead.[/]
 
 
-${keys('enter try again  ·  m paste the address  ·  esc back')}` },
+${keys('enter open Google again  ·  esc back')}` },
 
 	// X7 - Google (TARGET): a Google account with no Google Ads access
 	google_no_ads: { text: `${HEADER}
@@ -522,46 +461,35 @@ ${title('Connect Google Ads')}
 
 ${keys('enter try again  ·  esc back')}` },
 
-	// X8 - CRM: the live test refused the token; the previous connection is untouched
+	// X8 - a key-based CRM: the live test refused the keys; the previous connection is untouched
 	crm_refused: { text: `${HEADER}
 ${abar(FRESH)}
 
-${title('Connect LeadZump')}[dim]  ·  replacing the token (the stage map stays)[/]
+${title('Connect LeadSquared')}[dim]  ·  replacing the keys (the stage map stays)[/]
 
-   [red]✖ LeadZump refused this token (HTTP 401).[/][gray] Nothing was saved; the previous token is still in place.[/]
+   [red]✖ LeadSquared refused these keys (HTTP 401).[/][gray] Nothing was saved; the previous keys are still in place.[/]
 
-   [gray]   API token    [/][cyan bold]> █[/]
+   [gray]   secret key   [/][cyan bold]> █[/]
 
-   [dim]Paste the token again, with no spaces at either end.[/]
+   [dim]Copy the secret key again from Settings > API and Webhooks; no spaces at either end.[/]
 
 
 ${keys('enter test again  ·  esc back')}` },
 
 
-	// X10 - the morning after a scheduled run hit the expiry: the landing says so before any number
+	// X3 - a scheduled refresh found Meta access removed: what stopped, the data's real date, the fix
 	landing_signin_ended: { text: `${HEADER}
-${abar('[dim]  ·  data [/][yellow]Tue 13 Oct[/][dim]  ·  CRM [/][yellow]13 Oct[/][dim]  ·  [/][red]● Meta sign-in ended[/]')}
+${abar('[dim]  ·  data [/][gray]Tue 13 Oct[/][dim]  ·  CRM [/][gray]13 Oct[/][dim]  ·  [/][red]● Meta access removed[/]')}
 
-   [red bold]✖ This morning's 07:30 refresh stopped:[/][gray] Facebook ended moneyball's sign-in on Wed 14 Oct.[/]
-   [gray]  Your data is from Tue 13 Oct. Nothing new is pulled until you sign in again.[/]
+   [red]✖ This morning's 07:30 refresh stopped: Facebook no longer gives moneyball access to Acme Homes.[/]
+   [gray]  Someone removed moneyball in Meta Business Settings, or the person who connected it lost access.[/]
+   [gray]  Your data is from Tue 13 Oct. Nothing new is pulled until Meta is connected again.[/]
 
-   [gray]  next:  [/][cyan bold]/connect meta[/][gray]   sign in again in your browser (about a minute)[/]
+   [gray]  next:  [/][cyan bold]/connect meta[/][gray]   connect again in your browser (about a minute)[/]
    [gray]         [/][cyan bold]/refresh[/][gray]        then catch up today[/]
 
 ${COMPOSER()}` },
 
-	// X11 - expiry warning, 7 days ahead, on an otherwise fresh landing (R5 plus one notice)
-	landing_expiring: { text: `${HEADER}
-${abar('[dim]  ·  data [/][gray]Thu 08 Oct[/][dim]  ·  CRM [/][gray]08 Oct[/][dim]  ·  [/][yellow]● Meta sign-in ends in 5 days[/]')}
-
-   [bold]Thu 08 Oct[/][dim]  ·  refreshed 07:30 this morning (scheduled, 1m 18s)[/]
-[gray]   spend Rs.98,412  ·  Meta leads 47  ·  CRM leads 44  ·  qualified 9  ·  Rs.10,935 per qualified[/]
-[gray]   report  [/][cyan]${ACME}/.moneyball/reports/2026-10-09/Acme-Daily-08-Oct-2026.html[/]
-
-   [yellow]! Facebook ends moneyball's Meta sign-in on Wed 14 Oct (5 days).[/][gray] After that the morning refresh stops.[/]
-   [gray]  Signing in again takes a minute and keeps your products and settings.  next: [/][cyan bold]/connect meta[/]
-
-${COMPOSER()}` },
 
 	// X12 - disconnect: local delete only (revoking at Meta would be a write to Meta)
 	disconnect_cell: { text: `${HEADER}
@@ -580,3 +508,15 @@ ${COMPOSER()}` },
 };
 
 Object.assign(AUTHORED, AUTHORED_CONNECT);
+
+// L6 - the tab the browser lands on after Allow: moneyball's own page on the connect service (the publisher's
+// domain is decision 1; connect.moneyball.example is a reserved placeholder). Drawn as a browser frame.
+window.REPORTS = window.REPORTS || {};
+REPORTS.meta_connected = `<!doctype html><html><head><meta charset="utf-8"><style>
+body{margin:0;height:100vh;display:grid;place-items:center;background:#f4f4f2;font:16px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;color:#191918}
+.card{width:520px;padding:40px 44px;border-radius:16px;background:#fff;border:1px solid #e6e5df;text-align:center}
+.mark{width:56px;height:56px;margin:0 auto 18px;border-radius:50%;display:grid;place-items:center;background:#e7f6ec;color:#116329;font-size:28px;font-weight:700}
+h1{margin:0 0 10px;font-size:22px;letter-spacing:-.01em}p{margin:0 0 6px;color:#62625e}.small{margin-top:22px;font-size:13px;color:#8a8a84}
+</style></head><body><div class="card"><div class="mark">&#10003;</div><h1>Meta Ads is connected to moneyball</h1>
+<p>Acme Homes business &middot; 3 ad accounts &middot; read-only</p><p>You can close this tab and go back to moneyball.</p>
+<p class="small">moneyball can read ads and their results; it can never change them.</p><p class="small" style="margin-top:4px">Remove its access any time in Meta Business Settings &gt; Integrations &gt; Connected apps.</p></div></body></html>`;
