@@ -143,15 +143,15 @@ fn ascii_only_outside_comments() {
 fn file_size_ratchet() {
     let root = workspace_root();
     let frozen: &[(&str, usize)] = &[
-        ("crates/moneyball-core/src/agent.rs", 600),
-        ("crates/moneyball-core/src/crm/fetch.rs", 490),
-        ("crates/moneyball-core/src/crm/mod.rs", 440),
-        ("crates/moneyball-core/src/llm.rs", 850),
-        ("crates/moneyball-tui/src/chat.rs", 500),
-        ("crates/moneyball-tui/src/commands.rs", 750),
-        ("crates/moneyball-tui/src/event.rs", 750),
-        ("crates/moneyball-tui/src/setup/mod.rs", 660),
-        ("crates/moneyball-tui/src/setup/render_steps.rs", 440),
+        ("crates/moneyball-core/src/agent.rs", 586),
+        ("crates/moneyball-core/src/crm/fetch.rs", 489),
+        ("crates/moneyball-core/src/crm/mod.rs", 434),
+        ("crates/moneyball-core/src/llm.rs", 816),
+        ("crates/moneyball-tui/src/chat.rs", 460),
+        ("crates/moneyball-tui/src/commands.rs", 539),
+        ("crates/moneyball-tui/src/event.rs", 716),
+        ("crates/moneyball-tui/src/setup/mod.rs", 658),
+        ("crates/moneyball-tui/src/setup/render_steps.rs", 438),
     ];
     let mut violations = Vec::new();
     for krate in ["moneyball", "moneyball-core", "moneyball-tui"] {
