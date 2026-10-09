@@ -1,7 +1,7 @@
 //! CRM fetch executor - runs the `crm.toml` spec against the CRM's HTTP
 //! endpoint and writes a validated `crm.json` into today's snapshot dir.
 //!
-//! The fourth and last network module (with meta.rs, fetch.rs, llm.rs).
+//! The fourth and last network module (with meta.rs, fetch/, llm.rs).
 //! Deterministic: no LLM anywhere in this path - the spec was authored
 //! once (by hand or via /crm connect) and executes the same way forever.
 //! The validator gates the write: a non-conformant transform never

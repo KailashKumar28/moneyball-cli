@@ -45,7 +45,7 @@ pub struct ModelProviderInfo {
     pub base_url: String,
 
     /// Environment variable holding the API key. Used as a fallback if
-    /// the keychain entry for this provider is empty / absent.
+    /// the auth.json entry for this provider is empty / absent.
     #[serde(default)]
     pub env_key: Option<String>,
 
@@ -68,7 +68,7 @@ pub struct ModelProviderInfo {
 }
 
 impl ModelProviderInfo {
-    /// Resolve the API key for this provider. Tries the keychain first
+    /// Resolve the API key for this provider. Tries auth.json first
     /// (`llm:<provider_id>`), falls back to the `env_key` env var.
     /// Returns `None` if neither source has a non-empty value.
     pub fn api_key(&self, provider_id: &str) -> Option<String> {
@@ -291,10 +291,10 @@ mod tests {
     }
 
     #[test]
-    fn api_key_falls_back_to_env_when_keychain_empty() {
+    fn api_key_falls_back_to_env_when_no_key_is_stored() {
         let mut p = ModelProviderInfo::openai();
         p.env_key = Some("MONEYBALL_TEST_NONEXISTENT_VAR_XYZ".into());
-        // No keychain entry was stored for "openai", so it must fall back
+        // No key was stored for "openai", so it must fall back
         // to the env var - which is unset, so the result is None.
         assert!(p.api_key("openai").is_none());
     }

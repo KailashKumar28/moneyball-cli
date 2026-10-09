@@ -57,7 +57,7 @@ pub struct SetupState {
     pub llm_substep: u8,
     /// Step 4: selected provider id ("openai", "minimax", "custom", ...).
     pub llm_provider_id: String,
-    /// Step 4: API key paste buffer (raw, before keychain write).
+    /// Step 4: API key paste buffer (raw, before the auth.json write).
     pub llm_input: String,
     /// Step 4: length of captured API key for collapsed-summary bullets.
     pub llm_key_len: usize,
@@ -120,13 +120,13 @@ impl SetupState {
     ///   - products (name + ad_account)
     ///   - goals_input (re-serialized as "Prod1=10 Prod2=12")
     ///   - llm_provider_id, llm_model, llm_provider
-    ///   - llm_key_len (read from keychain; 0 if not present)
+    ///   - llm_key_len (read from auth.json; 0 if not present)
     ///   - meta_connected (true if products were configured)
     ///
     /// What we cannot restore (user must redo if they want to change):
     ///   - meta_input (the Meta API token itself - not in memory or config)
     ///   - meta_discovered / meta_selections (require live API call)
-    ///   - llm_input (the LLM API key - in keychain only)
+    ///   - llm_input (the LLM API key - in auth.json only)
     pub fn prefilled_from(cfg: &WorkspaceConfig, data_root: &Path) -> Self {
         let mut s = Self::new(data_root.to_path_buf());
         s.workspace_path = data_root.display().to_string();
@@ -164,7 +164,7 @@ impl SetupState {
                 s.llm_url = moneyball_core::llm::endpoint_for(info);
             }
         }
-        // Try the keychain so the collapsed summary shows bullet count.
+        // Read auth.json so the collapsed summary shows bullet count.
         if !s.llm_provider_id.is_empty() {
             s.llm_key_len = moneyball_core::secrets::load_llm_key(&s.llm_provider_id)
                 .map(|k| k.chars().count())
@@ -550,7 +550,7 @@ fn advance_save(app: &mut App, s: &mut SetupState) {
         s.error = Some(format!("save failed: {}", e));
         return;
     }
-    // If user skipped Meta, scrub any stale token from keychain.
+    // If user skipped Meta, scrub any stale token from auth.json.
     if !s.meta_connected {
         let _ = moneyball_core::secrets::clear_meta_token();
     }

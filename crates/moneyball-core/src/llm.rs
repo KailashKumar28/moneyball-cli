@@ -1,5 +1,4 @@
-//! LLM HTTP client. One `Client` per process; supports three wire
-//! protocols via the `WireApi` enum:
+//! LLM HTTP client: three wire protocols via the `WireApi` enum:
 //!
 //! - `Responses`        -> OpenAI Responses API: POST `{base}/responses`
 //!   body `{model, instructions, input}` -> `{output[0].content[0].text}`
@@ -12,7 +11,7 @@
 //! `stream_blocking` (one-shot prompt -> text, used by crm connect
 //! drafting) and `stream_turn` (full history + tools, the agent loop).
 //!
-//! Auth: provider.api_key() resolves a keychain entry first, then env_key.
+//! Auth: provider.api_key() resolves the auth.json entry first, then env_key.
 //! On 401/403 we return `Error::LlmAuth` with the provider id so the
 //! wizard can re-prompt.
 

@@ -1,6 +1,6 @@
 //! Configuration loader.
 //!
-//! Resolution: CLI flags > env > <data-root>/moneyball/config.json
+//! Resolution: CLI flags > env > <data-root>/.moneyball/config.json
 //! > ~/.moneyball/config.json > built-in defaults.
 
 use std::collections::HashMap;
@@ -93,7 +93,7 @@ pub struct WorkspaceConfig {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub model: Option<String>,
     /// Registry of provider entries (base URL, wire protocol, env_key, etc).
-    /// API keys live in the OS keychain keyed by provider id; this map only
+    /// API keys live in ~/.moneyball/auth.json keyed by provider id; this map only
     /// holds non-secret config.
     #[serde(default, skip_serializing_if = "HashMap::is_empty")]
     pub model_providers: HashMap<String, ModelProviderInfo>,

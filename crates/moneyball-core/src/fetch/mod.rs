@@ -60,7 +60,7 @@ pub struct FetchReport {
 
 /// Pull `days` of per-ad daily insights for every configured product and
 /// write `<workspace>/.moneyball/history/snap/<today>/ads_daily.json` +
-/// `creatives.json`. The caller resolves the Meta token (keychain in the
+/// `creatives.json`. The caller resolves the Meta token (auth.json in the
 /// CLI/TUI; per-tenant store in a future server) - core never reads
 /// ambient secrets for it.
 pub fn fetch_snapshot(cfg: &AppConfig, token: &str, days: u32) -> Result<FetchReport> {

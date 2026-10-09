@@ -1,4 +1,4 @@
-//! Bug-report registry - `~/.moneyball/reports/` (codex-style dotfile,
+//! Bug-report registry - `~/.moneyball/bug-reports/` (codex-style dotfile,
 //! same convention as auth.json and sessions/).
 //!
 //! A user who sees wrong analysis runs `/debug [comment]` (TUI) or
