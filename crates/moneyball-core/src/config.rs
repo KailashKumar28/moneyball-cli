@@ -89,7 +89,7 @@ pub struct WorkspaceConfig {
     /// LLM-driven command (`/ask`, `/brief` once wired). Set by the wizard.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub model_provider: Option<String>,
-    /// Active model slug (e.g. "MiniMax-M3", "gpt-5", "claude-sonnet-4-5").
+    /// Active model slug (e.g. "MiniMax-M3", "gpt-5", "claude-sonnet-5").
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub model: Option<String>,
     /// Registry of provider entries (base URL, wire protocol, env_key, etc).

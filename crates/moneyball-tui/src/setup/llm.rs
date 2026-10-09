@@ -182,9 +182,10 @@ pub(super) fn advance_llm(app: &mut App, s: &mut SetupState) {
                 s.error = Some("enter the model slug".into());
                 return;
             }
-            // Refresh the provider entry with the URL the user typed.
+            // Refresh the provider entry with the URL the user typed: its
+            // endpoint, when given, says the protocol.
             if let Some(p) = s.llm_provider.as_mut() {
-                p.base_url = s.llm_url.trim().to_string();
+                (p.base_url, p.wire_api) = moneyball_core::provider::wire_from_url(&s.llm_url);
             }
             advance_save(app, s);
         }

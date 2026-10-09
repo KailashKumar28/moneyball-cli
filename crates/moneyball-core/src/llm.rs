@@ -678,8 +678,8 @@ mod tests {
 
     #[test]
     fn messages_body_top_level_system_and_max_tokens() {
-        let v = build_messages_body("claude-sonnet-4-5", Some("be brief"), "hi");
-        assert_eq!(v["model"], "claude-sonnet-4-5");
+        let v = build_messages_body("claude-sonnet-5", Some("be brief"), "hi");
+        assert_eq!(v["model"], "claude-sonnet-5");
         assert_eq!(v["system"], "be brief");
         assert_eq!(v["max_tokens"], DEFAULT_MAX_TOKENS);
         assert_eq!(v["messages"][0]["role"], "user");

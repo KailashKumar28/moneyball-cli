@@ -176,8 +176,10 @@ fn render_llm_custom(s: &SetupState) -> Vec<Line<'static>> {
     let mut lines = vec![
         styled_title("Custom provider"),
         Line::from(""),
-        Line::from("  The base URL of an OpenAI Responses-compatible API, then the"),
-        Line::from("  model to call there. For Ollama, pick the Ollama preset instead."),
+        Line::from("  The base URL of an OpenAI-compatible API (called at"),
+        Line::from("  /chat/completions), then the model to call there. For the"),
+        Line::from("  Responses or Anthropic Messages API, give the full endpoint,"),
+        Line::from("  ending /responses or /messages."),
         Line::from(""),
     ];
     lines.extend(field("base URL", &s.llm_url, !s.llm_url_entered));

@@ -70,8 +70,12 @@ bottom after a release-sized batch.)
         a worker with the composer answering (secrets as *), moneyball
         connect crm in the shell. Every "connect a CRM" fix points there.
   - [ ] Review follow-ups (2026-10-09, after the second code review):
-        let the custom provider pick its wire protocol; one "when did this
-        step last pull" helper for /connect and /status.
+        one "when did this step last pull" helper for /connect and /status.
+  - [x] Custom model provider protocol (2026-10-09): its URL says it - a
+        bare base is Chat Completions (what every OpenAI-compatible server
+        speaks; it was Responses, which most do not), a full endpoint
+        ending /responses or /messages picks that wire. Anthropic's model
+        list moves to claude-opus-5-5 / claude-sonnet-5 / claude-haiku-4-5.
   - [x] No shared CRM key fallback (2026-10-09): a pull reads only the
         workspace's own key; the legacy shared one is copied once into a
         workspace that has pulled CRM data (it used that key), and never

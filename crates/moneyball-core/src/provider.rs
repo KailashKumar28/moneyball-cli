@@ -163,10 +163,28 @@ pub fn models_for(preset: &ModelProviderInfo) -> &'static [&'static str] {
             "o3",
             "o4-mini",
         ],
-        ("Anthropic", _) => &["claude-opus-4-5", "claude-sonnet-4-5", "claude-haiku-4-5"],
+        ("Anthropic", _) => &["claude-opus-5-5", "claude-sonnet-5", "claude-haiku-4-5"],
         ("MiniMax", _) => &["MiniMax-M3", "MiniMax-M2"],
         _ => &["custom"],
     }
+}
+
+/// What a custom provider's URL says about its protocol: a full endpoint
+/// (".../chat/completions", ".../responses", ".../messages") names it and
+/// gives the base; a bare base URL is Chat Completions, the one surface
+/// every OpenAI-compatible server speaks.
+pub fn wire_from_url(url: &str) -> (String, WireApi) {
+    let url = url.trim().trim_end_matches('/');
+    for (endpoint, wire) in [
+        ("/chat/completions", WireApi::ChatCompletions),
+        ("/responses", WireApi::Responses),
+        ("/messages", WireApi::Messages),
+    ] {
+        if let Some(base) = url.strip_suffix(endpoint) {
+            return (base.to_string(), wire);
+        }
+    }
+    (url.to_string(), WireApi::ChatCompletions)
 }
 
 /// Built-in presets the wizard offers before the "custom" branch.
@@ -182,6 +200,34 @@ pub fn built_in_presets() -> Vec<(&'static str, ModelProviderInfo)> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_custom_url_names_its_wire() {
+        for (url, base, wire) in [
+            (
+                "https://x.ai/v1",
+                "https://x.ai/v1",
+                WireApi::ChatCompletions,
+            ),
+            (
+                "https://x.ai/v1/chat/completions/",
+                "https://x.ai/v1",
+                WireApi::ChatCompletions,
+            ),
+            (
+                " https://x.ai/v1/responses",
+                "https://x.ai/v1",
+                WireApi::Responses,
+            ),
+            (
+                "https://x.ai/anthropic/v1/messages",
+                "https://x.ai/anthropic/v1",
+                WireApi::Messages,
+            ),
+        ] {
+            assert_eq!(wire_from_url(url), (base.to_string(), wire), "{}", url);
+        }
+    }
 
     #[test]
     fn wire_api_serde_round_trip() {
