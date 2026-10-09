@@ -87,7 +87,7 @@ pub fn fetch_snapshot(cfg: &AppConfig, token: &str, days: u32) -> Result<FetchRe
         fetch_account_rows(&client, token, account, &since_s, &until_s)
     })?;
 
-    let snap_root = cfg.history_dir().join("snap");
+    let snap_root = cfg.snap_dir();
     let path = write_snapshot(&snap_root, &date, &all_rows)?;
 
     // Creative identity + image capture (slices A1/A2). Best-effort by

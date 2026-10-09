@@ -48,7 +48,7 @@ pub(crate) fn run_brief(app: &mut App) {
         // Can't self-fetch (no Meta token / no workspace): explain
         // both paths. Status cleared so the error shows once.
         app.status = None;
-        let snap_dir = app.cfg.history_dir().join("snap");
+        let snap_dir = app.cfg.snap_dir();
         app.chat.push_tool(
             "brief",
             "",

@@ -77,7 +77,7 @@ pub fn run(
     crate::runs::write(cfg, &run)?;
 
     // 1 + 2. Meta insights, then creatives/leads/adsets (one fetch call).
-    let snap_dir = cfg.history_dir().join("snap").join(&date);
+    let snap_dir = cfg.snap_dir().join(&date);
     let reused = !opts.force && snap_dir.join("ads_daily.json").is_file();
     if reused {
         let carried = |name: &str| {

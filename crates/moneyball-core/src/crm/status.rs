@@ -103,7 +103,7 @@ pub(crate) fn target_snapshot(cfg: &AppConfig) -> Result<Option<String>> {
         .date_naive()
         .format("%Y-%m-%d")
         .to_string();
-    let snap_root = cfg.history_dir().join("snap");
+    let snap_root = cfg.snap_dir();
     if snap_root.join(&today).join("ads_daily.json").is_file() {
         return Ok(Some(today));
     }
@@ -120,7 +120,7 @@ pub(super) fn write_crm_json(
     date: &str,
     crm: &serde_json::Value,
 ) -> Result<std::path::PathBuf> {
-    let dir = cfg.history_dir().join("snap").join(date);
+    let dir = cfg.snap_dir().join(date);
     std::fs::create_dir_all(&dir)?;
     // Tickets carry phone/email/lead_id when the spec maps them.
     crate::secrets::write_private(&dir, "crm.json", serde_json::to_string_pretty(crm)?)
@@ -137,7 +137,7 @@ pub(super) fn write_contacts(
         fetched_at: chrono::Utc::now().format("%Y-%m-%dT%H:%M:%SZ").to_string(),
         rows,
     };
-    let dir = cfg.history_dir().join("snap").join(date);
+    let dir = cfg.snap_dir().join(date);
     crate::secrets::write_private(
         &dir,
         "crm_contacts.json",

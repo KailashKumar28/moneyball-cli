@@ -232,15 +232,17 @@ bottom after a release-sized batch.)
       needs the person's earlier submissions), no time_created window.
 
 - [ ] **Audit package G remainder** (structure P1/P2s from the 2026-07
-      architecture audit): move `connect_flow.rs` orchestration into
-      core behind an ask() seam; dedupe the three brief formatters;
-      split `submit()` and bring commands.rs (~800) / setup/mod.rs
-      (~980) / llm.rs back under the 400-line cap; snap_dir() at all
-      call sites; module-doc drift (tools.rs done, check others);
-      remaining P2 hygiene (ASCII strings, busy indicator,
-      IST vs Local snapshot dating, query_params support, usage/cost
-      parsing, render examples for new cells). Atomic config.json and
-      crm.toml writes: done 2026-10-09.
+      architecture audit): split `submit()` and bring commands.rs
+      (539) / setup/mod.rs (658) / llm.rs / event.rs / chat.rs /
+      agent.rs back under the 400-line cap; module-doc drift (tools.rs
+      done, check others); remaining P2 hygiene (ASCII strings, busy
+      indicator, IST vs Local snapshot dating, query_params support,
+      usage/cost parsing, render examples for new cells). Done since:
+      the CRM connect flow moved into core behind a Prompter
+      (2026-10-09); the brief is down to two formatters, the TUI's
+      per-product blocks and the CLI table on text::table (2026-10-10); atomic
+      config.json and crm.toml writes (2026-10-09); snap_dir() at every
+      call site (2026-10-10).
 
 - [x] **/brief and /funnel open as tool rounds** (2026-10-09): the turn
       is the typed command, the tool call it stands for and that tool's
