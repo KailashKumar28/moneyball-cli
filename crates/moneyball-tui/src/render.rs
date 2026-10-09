@@ -155,7 +155,13 @@ fn render_chat_view(f: &mut ratatui::Frame, area: Rect, app: &App) {
         f.render_widget(Paragraph::new(rows), chunks[palette_idx]);
     }
 
-    let placeholder = "ask moneyball about your portfolio or type / for commands";
+    // A connect question owns the composer: it is the placeholder, and a
+    // secret answer shows as stars.
+    let asking = app.connect.as_ref().and_then(|j| j.asking.clone());
+    let placeholder = asking.as_ref().map_or(
+        "ask moneyball about your portfolio or type / for commands",
+        |(q, _)| q.as_str(),
+    );
     let prompt_line = if app.input.is_empty() {
         // Caret sits at the input START (codex/claude-code); the dim
         // placeholder trails after it, not the other way round.
@@ -182,7 +188,13 @@ fn render_chat_view(f: &mut ratatui::Frame, area: Rect, app: &App) {
     } else {
         // Cursor is kept on char boundaries by event.rs insert/delete/moves.
         let (before, after) = app.input.split_at(app.cursor);
-        let (before, after) = (before.to_string(), after.to_string());
+        let (before, after) = match asking {
+            Some((_, true)) => (
+                "*".repeat(before.chars().count()),
+                "*".repeat(after.chars().count()),
+            ),
+            _ => (before.to_string(), after.to_string()),
+        };
         Line::from(vec![
             Span::styled(
                 "\u{276F} ",
@@ -205,6 +217,8 @@ fn render_chat_view(f: &mut ratatui::Frame, area: Rect, app: &App) {
     // 5. Keybinding caption (no borders) - contextual, codex-style.
     let caption_text = if palette_h > 0 {
         "  \u{2191}\u{2193} choose  \u{00B7}  \u{21B5} run  \u{00B7}  \u{21E5} complete  \u{00B7}  esc clear"
+    } else if asking.is_some() {
+        "  \u{21B5} answer  \u{00B7}  esc cancel the connect"
     } else if busy.is_some() && app.input.is_empty() && !app.turn_active && app.stream.is_none() {
         "  esc cancel refresh (after the current step)  \u{00B7}  other commands still work"
     } else {

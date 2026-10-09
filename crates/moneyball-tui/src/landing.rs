@@ -146,7 +146,7 @@ fn story(h: &Health, day: &str, scheduled: bool) -> (Vec<Para>, Vec<String>) {
             ));
             fixes.extend(run.map(fixes_of).unwrap_or_default());
             if !h.crm_connected && fixes.is_empty() {
-                fixes.push("moneyball crm connect".into());
+                fixes.push("/connect crm".into());
             }
         }
         State::Partial { have, of } => {

@@ -167,6 +167,17 @@ impl CheckReport {
     pub fn passed(&self) -> bool {
         self.errors.is_empty()
     }
+
+    /// The report as lines, one per finding: "-" info, "warn", "error".
+    pub fn lines(&self) -> Vec<String> {
+        let tag = |t: &str, l: &String| format!("  {:<5} {}", t, l);
+        self.info
+            .iter()
+            .map(|l| tag("-", l))
+            .chain(self.warnings.iter().map(|l| tag("warn", l)))
+            .chain(self.errors.iter().map(|l| tag("error", l)))
+            .collect()
+    }
 }
 
 /// `check` with its inputs resolved from the workspace: stage names

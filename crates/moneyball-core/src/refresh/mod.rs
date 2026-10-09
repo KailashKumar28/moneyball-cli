@@ -199,7 +199,7 @@ pub fn run(
     }
     if !crate::crm::fetch::spec_path(cfg).is_file() {
         let mut step = skipped("crm", "no CRM connected for this workspace");
-        step.fix = Some("moneyball crm connect".into());
+        step.fix = Some("/connect crm".into());
         push(cfg, &mut run, on_step, step);
     } else {
         on_step(Progress::Begin("crm"));

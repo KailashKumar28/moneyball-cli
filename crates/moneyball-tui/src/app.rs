@@ -41,6 +41,8 @@ pub struct App {
     pub schedule: Option<(u32, u32)>,
     /// A /schedule confirm waiting for its key.
     pub(crate) schedule_ask: Option<crate::schedule_view::Ask>,
+    /// /connect crm in flight; its question, if any, owns the composer.
+    pub(crate) connect: Option<crate::crm_connect::ConnectJob>,
     /// First Ctrl+C timestamp - a second within 2s quits (codex/Claude
     /// Code pattern: one stray Ctrl+C never kills the session).
     pub ctrl_c_armed: Option<std::time::Instant>,
@@ -183,6 +185,7 @@ impl App {
             report_path: None,
             schedule,
             schedule_ask: None,
+            connect: None,
             ctrl_c_armed: None,
             quit: false,
             quit_armed: false,

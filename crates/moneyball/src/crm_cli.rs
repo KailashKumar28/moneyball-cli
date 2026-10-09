@@ -94,7 +94,7 @@ pub(crate) fn run(cmd: CrmCmd, cfg: &AppConfig, data_root: Option<&str>) -> Resu
         }
         CrmCmd::Connect => {
             let strict = AppConfig::resolve(data_root, None)?;
-            crate::connect_flow::run(&strict)?;
+            crate::connect_cli::crm(&strict)?;
         }
         CrmCmd::Import { file } => {
             let strict = AppConfig::resolve(data_root, None)?;
@@ -236,13 +236,7 @@ fn print_ingest_outcome(r: &moneyball_core::crm::fetch::CrmFetchReport) {
 }
 
 pub(crate) fn print_check_lines(report: &moneyball_core::crm::CheckReport) {
-    for line in &report.info {
-        println!("  -     {}", line);
-    }
-    for line in &report.warnings {
-        println!("  warn  {}", line);
-    }
-    for line in &report.errors {
-        println!("  error {}", line);
+    for line in report.lines() {
+        println!("{}", line);
     }
 }

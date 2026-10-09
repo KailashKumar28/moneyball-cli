@@ -168,6 +168,8 @@ pub fn fix_does(fix: &str) -> &'static str {
         "paste a fresh Meta token; products and settings stay"
     } else if fix.contains("crm secret") {
         "in a shell; it asks for the new token"
+    } else if fix == "/connect crm" {
+        "pick your CRM and give its key; a test pull checks it"
     } else if fix.contains("crm connect") {
         "in a shell; it walks you through connecting your CRM"
     } else {

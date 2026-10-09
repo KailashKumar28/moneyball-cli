@@ -4,6 +4,8 @@
 //! prints and the TUI's /connect shows; each row names the one command
 //! that connects or fixes it today.
 
+pub mod crm;
+
 use chrono::{DateTime, Local};
 use serde::Serialize;
 
@@ -41,16 +43,29 @@ pub struct Source {
     pub fix: Option<String>,
 }
 
+/// One connect flow, two front ends: the shell prints and reads stdin;
+/// the TUI sends each line and question to its worker channel and waits
+/// for the composer.
+pub trait Prompter {
+    fn show(&mut self, line: &str);
+    /// The answer, trimmed; `secret` hides what is typed. None: cancelled.
+    fn ask(&mut self, prompt: &str, secret: bool) -> Option<String>;
+}
+
 pub fn status_all(cfg: &AppConfig) -> Vec<Source> {
     let run = crate::runs::latest(cfg);
     vec![meta(cfg, run.as_ref()), crm(cfg, run.as_ref()), model(cfg)]
 }
 
-/// A fix as the shell says it: an in-app command needs moneyball open.
+/// A fix as the shell says it: its own twin when there is one, else
+/// "open moneyball and run /...".
 pub fn fix_in_shell(fix: &str) -> String {
-    match fix.strip_prefix('/') {
-        Some(cmd) => format!("open moneyball and run /{}", cmd),
-        None => fix.to_string(),
+    match fix {
+        "/connect crm" => "moneyball connect crm".into(),
+        f => match f.strip_prefix('/') {
+            Some(cmd) => format!("open moneyball and run /{}", cmd),
+            None => f.to_string(),
+        },
     }
 }
 
@@ -101,7 +116,7 @@ fn crm(cfg: &AppConfig, run: Option<&RunRecord>) -> Source {
             "CRM".into(),
             Link::Missing,
             "no CRM connected".into(),
-            "moneyball crm connect",
+            "/connect crm",
         );
     };
     let unstored: Vec<String> = spec

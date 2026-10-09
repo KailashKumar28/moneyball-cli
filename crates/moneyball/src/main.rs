@@ -1,7 +1,6 @@
 //! moneyball binary - clap dispatch + session handling.
 
 mod connect_cli;
-mod connect_flow;
 mod crm_cli;
 mod debug_cli;
 mod refresh_cli;

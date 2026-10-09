@@ -38,6 +38,7 @@ pub(crate) fn event_loop(t: &mut Tui, app: &mut App) -> Result<()> {
         }
         drain_stream(app);
         crate::refresh_flow::drain(app);
+        crate::crm_connect::drain(app);
     }
     Ok(())
 }
@@ -228,7 +229,7 @@ fn handle_key(app: &mut App, k: KeyEvent) {
     {
         return crate::refresh_flow::open_report(app);
     }
-    if crate::schedule_view::on_key(app, k) {
+    if crate::crm_connect::on_key(app, k) || crate::schedule_view::on_key(app, k) {
         return;
     }
     if k.modifiers.contains(KeyModifiers::CONTROL) && k.code == KeyCode::Char('c') {

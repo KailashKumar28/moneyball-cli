@@ -37,7 +37,7 @@ pub(crate) const COMMANDS: &[(&str, &str)] = &[
     ("/clear", "start a fresh conversation (new session file)"),
     (
         "/connect",
-        "where ads, leads and the advisor stand, and each fix",
+        "where ads, leads and the advisor stand; /connect crm connects one",
     ),
     (
         "/setup",
@@ -235,6 +235,7 @@ pub(crate) fn submit(app: &mut App) {
             }
         }
         // /keychain is the old name, kept for muscle memory (unlisted).
+        "/connect" | "/keychain" if arg == "crm" => crate::crm_connect::run(app),
         "/connect" | "/keychain" => crate::connect_view::run_connect(app),
         "/help" | "/?" => {
             // Generated from COMMANDS so the three command surfaces

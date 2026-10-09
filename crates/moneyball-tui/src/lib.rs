@@ -7,6 +7,7 @@ pub mod chat;
 mod commands;
 mod connect_view;
 mod creative_flow;
+mod crm_connect;
 mod crm_flow;
 mod event;
 mod funnel_flow;

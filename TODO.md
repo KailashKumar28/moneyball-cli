@@ -65,6 +65,10 @@ bottom after a release-sized batch.)
         connected / refused / missing with each fix (MB_AGENT=1: JSON);
         /connect replaces /keychain (kept as an unlisted alias); moneyball
         connect crm runs the guided CRM flow.
+  - [x] CRM connect inside the app (2026-10-09, integrations A2 part 2):
+        the flow moved into core behind a Prompter; /connect crm runs it on
+        a worker with the composer answering (secrets as *), moneyball
+        connect crm in the shell. Every "connect a CRM" fix points there.
   - [ ] Token expiry for /status ("Meta valid to ...") waits on the
         connect work.
 - [ ] **Daily creative report** (plan: docs/CLOUD_PLAN.md, agreed

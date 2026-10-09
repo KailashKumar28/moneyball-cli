@@ -1,8 +1,8 @@
 //! `moneyball connect`: where every source stands (core
 //! connections::status_all) with the one command that fixes it, as text
-//! or, with MB_AGENT=1, JSON. `moneyball connect crm` runs the guided CRM
-//! flow. Meta and the model connect inside moneyball (/setup meta,
-//! /setup) until one-click sign-in exists.
+//! or, with MB_AGENT=1, JSON. `moneyball connect crm` runs core's CRM
+//! flow through the shell's Prompter. Meta and the model connect inside
+//! moneyball (/setup meta, /setup) until one-click sign-in exists.
 
 use anyhow::Result;
 use clap::Subcommand;
@@ -18,7 +18,7 @@ pub(crate) enum Connect {
 
 pub(crate) fn run(cfg: &AppConfig, what: Option<Connect>) -> Result<()> {
     if let Some(Connect::Crm) = what {
-        return crate::connect_flow::run(cfg);
+        return crm(cfg);
     }
     let sources = connections::status_all(cfg);
     if cfg.agent {
@@ -37,4 +37,32 @@ pub(crate) fn run(cfg: &AppConfig, what: Option<Connect>) -> Result<()> {
         }
     }
     Ok(())
+}
+
+/// The CRM flow in the shell: lines to stderr, answers from the terminal
+/// (masked for secrets); a failed test pull exits 1.
+pub(crate) fn crm(cfg: &AppConfig) -> Result<()> {
+    use moneyball_core::connections::crm::{connect, Done};
+    match connect(cfg, &mut Shell)? {
+        Done::TestFailed => std::process::exit(1),
+        Done::Cancelled => eprintln!("cancelled - nothing more was saved"),
+        Done::Connected | Done::NotSaved => {}
+    }
+    Ok(())
+}
+
+struct Shell;
+
+impl connections::Prompter for Shell {
+    fn show(&mut self, line: &str) {
+        eprintln!("{}", line);
+    }
+    fn ask(&mut self, prompt: &str, secret: bool) -> Option<String> {
+        let read = if secret {
+            crate::crm_cli::ask_secret(prompt)
+        } else {
+            crate::crm_cli::ask(prompt)
+        };
+        read.ok()
+    }
 }
