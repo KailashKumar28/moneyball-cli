@@ -431,8 +431,28 @@
           ],
           "default": null
         },
+        "crm_fetched_at": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
         "crm_present": {
           "type": "boolean"
+        },
+        "crm_status": {
+          "description": "Where CRM stood: `present`, `not_pulled` (connected, not in this\nsnapshot) or `not_connected`. Additive in /1.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "meta_fetched_at": {
+          "description": "When the snapshot's Meta and CRM data were written (UTC), so the\nreport says when its data was pulled, not when it was rendered.\nAdditive in /1.",
+          "type": [
+            "string",
+            "null"
+          ]
         },
         "snapshot_date": {
           "type": "string"

@@ -15,7 +15,7 @@ pub(super) fn comparison_table(p: &ProductSection, report_date: &str) -> String 
     let seg_id = format!("segx-{}", slug(&p.product));
     let tail_id = format!("tailx-{}", slug(&p.product));
     let mut out = format!(
-        r##"<div class="ttable"><input type="checkbox" id="{}" class="segx"><input type="checkbox" id="{}" class="tailx"><table><thead><tr><th>creative (ranked)</th><th>live since</th><th>status</th><th>spend</th><th>impressions</th><th>ctr</th><th title="People who submitted the instant form on Facebook/Instagram.">meta leads</th><th title="Spend divided by Meta leads.">cost/lead</th><th title="Share of Meta leads that arrived in your CRM.">reached crm</th><th title="Leads that arrived in your CRM.">crm leads</th><th title="Meta leads that did not become new CRM leads. Expand for why.">gap{}</th><th class="seg" title="This person was in your CRM before this ad - counted once, not lost.">already in crm</th><th class="seg" title="Same person submitted the form more than once.">repeat</th><th class="seg" title="Phone number your CRM rejected.">invalid</th><th class="seg" title="Submitted the form but never arrived in the CRM - recoverable.">missing</th><th title="Marked genuine by your sales team in the CRM.">qualified</th><th>visits</th><th>bookings</th></tr></thead><tbody>"##,
+        r##"<div class="ttable"><input type="checkbox" id="{}" class="segx"><input type="checkbox" id="{}" class="tailx"><table class="ctable"><thead><tr><th>creative (ranked)</th><th>live since</th><th>status</th><th>spend</th><th>impressions</th><th>ctr</th><th title="People who submitted the instant form on Facebook/Instagram.">meta leads</th><th title="Spend divided by Meta leads.">cost/lead</th><th title="Share of Meta leads that arrived in your CRM.">reached crm</th><th title="Leads that arrived in your CRM.">crm leads</th><th title="Meta leads that did not become new CRM leads. Expand for why.">gap{}</th><th class="seg" title="This person was in your CRM before this ad - counted once, not lost.">already in crm</th><th class="seg" title="Same person submitted the form more than once.">repeat</th><th class="seg" title="Phone number your CRM rejected.">invalid</th><th class="seg" title="Submitted the form but never arrived in the CRM - recoverable.">missing</th><th title="Marked genuine by your sales team in the CRM.">qualified</th><th>visits</th><th>bookings</th></tr></thead><tbody>"##,
         seg_id,
         tail_id,
         if has_seg {
@@ -97,9 +97,9 @@ pub(super) fn comparison_table(p: &ProductSection, report_date: &str) -> String 
     if !tail.is_empty() {
         let _ = write!(
             out,
-            r##"<tr><td class="nm" colspan="18"><label for="{}" class="taill">+ {} more creative(s) in early delivery &middot; {} total &middot; no leads yet</label></td></tr>"##,
+            r##"<tr><td class="nm" colspan="18"><label for="{}" class="taill">+ {} in early delivery &middot; {} total &middot; no leads yet</label></td></tr>"##,
             tail_id,
-            tail.len(),
+            crate::text::count(tail.len() as u64, "more creative", "more creatives"),
             rupees(tail_spend)
         );
     }

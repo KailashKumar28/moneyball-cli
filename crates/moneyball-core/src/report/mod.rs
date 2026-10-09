@@ -15,6 +15,7 @@ pub use exec::daily;
 mod group;
 pub mod html;
 mod img;
+mod provenance;
 mod sections;
 mod segmentation;
 mod specs;
@@ -196,6 +197,9 @@ pub fn build(
             snapshot_date: snap.date.clone(),
             crm_present,
             creatives_schema: snap.creatives.as_ref().map(|f| f.schema.clone()),
+            meta_fetched_at: None,
+            crm_fetched_at: None,
+            crm_status: None,
         },
         portfolio,
         products: sections,
@@ -219,7 +223,8 @@ pub struct ReportOutput {
 /// `reports/<date>/creative-report.{json,html}`. Shared by the CLI
 /// runner and the TUI /report worker.
 pub fn generate(cfg: &AppConfig, date: Option<&str>, window_days: u32) -> Result<ReportOutput> {
-    let snap = crate::snapshot::load(&cfg.snap_for(date)?)?;
+    let snap_dir = cfg.snap_for(date)?;
+    let snap = crate::snapshot::load(&snap_dir)?;
     // Minted once at config load (config::WorkspaceConfig::load);
     // report generation never writes outside reports/<date>/.
     let workspace_id = cfg
@@ -231,7 +236,7 @@ pub fn generate(cfg: &AppConfig, date: Option<&str>, window_days: u32) -> Result
     let reports_root = cfg.mb_dir().join("reports");
     let prior = exec::load_prior(&reports_root, &snap.date, window_days.max(1) as i64);
     let target_rpq = cfg.workspace.as_ref().and_then(|w| w.target_rs_per_q);
-    let report = build(
+    let mut report = build(
         &snap,
         &workspace_id,
         &generated_at,
@@ -239,6 +244,7 @@ pub fn generate(cfg: &AppConfig, date: Option<&str>, window_days: u32) -> Result
         target_rpq,
         prior.as_ref(),
     )?;
+    provenance::stamp(cfg, &snap_dir, &snap, &mut report);
 
     let dir = reports_root.join(&report.report_date);
     std::fs::create_dir_all(&dir)?;
@@ -323,7 +329,7 @@ pub fn run(cfg: &AppConfig, date: Option<&str>, window_days: u32) -> Result<()> 
     let out = generate(cfg, date, window_days)?;
     print!("{}", text_summary(&out.report));
     if !out.report.source.crm_present {
-        println!("note: no CRM data in this snapshot - L/Q/V/B are zeros, not truths.");
+        println!("note: no CRM data in this snapshot - the report hides CRM leads, qualified, visits and bookings (unknown, not zero).");
     }
     println!("report written: {}", out.json_path.display());
     println!("open in browser: {}", out.html_path.display());
@@ -360,7 +366,12 @@ pub fn text_summary(r: &CreativeReport) -> String {
         }
     );
     for p in &r.products {
-        let _ = writeln!(out, "\n{} - {} creative(s)", p.product, p.creatives.len());
+        let _ = writeln!(
+            out,
+            "\n{} - {}",
+            p.product,
+            crate::text::count(p.creatives.len() as u64, "creative", "creatives")
+        );
         for c in p.creatives.iter().take(3) {
             let fun: Vec<String> = c
                 .funnel

@@ -49,24 +49,7 @@ pub fn render(
     } else {
         format!("{} .. {}", r.window.since, r.window.until)
     };
-    let freshness = {
-        let pulled = chrono::DateTime::parse_from_rfc3339(&r.generated_at)
-            .map(|t| {
-                (t + chrono::Duration::minutes(330))
-                    .format("%d %b, %I:%M %P IST")
-                    .to_string()
-            })
-            .unwrap_or_else(|_| r.generated_at.clone());
-        format!(
-            "Data: {}, {} &middot; pulled {} &middot; sources: Meta Ads + your CRM{}",
-            esc(&window),
-            if multi { "full days" } else { "full day" },
-            esc(&pulled),
-            prior
-                .map(|p| format!(" &middot; compared with {}", esc(&p.window.until)))
-                .unwrap_or_else(|| " &middot; first comparable day".into())
-        )
-    };
+    let freshness = super::provenance::freshness(r, prior, &window, multi);
 
     let mut jumpnav = String::new();
     for p in &r.products {
@@ -92,7 +75,7 @@ pub fn render(
     let note = if r.source.crm_present {
         String::new()
     } else {
-        r#"<div class="warnbox">No CRM data in this snapshot - CRM leads/Qualified/Visits/Bookings are zeros, not truths. Run a CRM fetch and regenerate.</div>"#.into()
+        r#"<div class="warnbox">No CRM data for this day yet, so CRM leads, qualified, visits, bookings and every verdict are hidden, not shown as zero. They appear once the CRM is pulled.</div>"#.into()
     };
 
     TEMPLATE
@@ -114,7 +97,18 @@ pub fn render(
         )
         .replace("{{DAYLINE}}", &dayline)
         .replace("{{H1}}", &format!("{} Portfolio", esc(brand)))
-        .replace("{{PIPELINE}}", "Meta Ads -&gt; CRM -&gt; Qualified")
+        .replace(
+            "{{PIPELINE}}",
+            if r.source.crm_present {
+                "Meta Ads -&gt; CRM -&gt; Qualified"
+            } else {
+                "Meta Ads (CRM not in this report)"
+            },
+        )
+        .replace(
+            "{{BODYCLASS}}",
+            if r.source.crm_present { "" } else { "nocrm" },
+        )
         .replace("{{PRODUCTS_LINE}}", &products_line)
         .replace("{{FRESHNESS}}", &freshness)
         .replace("{{JUMPNAV}}", &jumpnav)
@@ -208,8 +202,8 @@ fn render_card(out: &mut String, rank: usize, pslug: &str, c: &CreativeCard, his
         .filter(|s| s.uncaptured > 0)
         .map(|s| {
             format!(
-                r#"<div class="cc-miss">{} lead(s) missing from CRM</div>"#,
-                s.uncaptured
+                r#"<div class="cc-miss">{} missing from CRM</div>"#,
+                crate::text::count(s.uncaptured, "lead", "leads")
             )
         })
         .unwrap_or_default();
@@ -260,7 +254,9 @@ fn funnel_bars(c: &CreativeCard) -> String {
         let color = if i == 2 { "var(--meta)" } else { "var(--crm)" };
         let _ = write!(
             out,
-            r#"<div class="hf-row"><span class="hf-lab">{}</span><span class="hf-track"><span class="hf-bar{}" style="width:{:.0}%;background:{}"></span></span><span class="hf-v">{}</span></div>"#,
+            r#"<div class="hf-row{}"><span class="hf-lab">{}</span><span class="hf-track"><span class="hf-bar{}" style="width:{:.0}%;background:{}"></span></span><span class="hf-v">{}</span></div>"#,
+            // Every stage after Meta leads is CRM's (hidden without it).
+            if i > 2 { " c" } else { "" },
             esc(stage_label(&s.stage)),
             if zero { " zero" } else { "" },
             pct,
@@ -312,8 +308,8 @@ fn product_kpis(k: &Kpis) -> String {
     ] {
         let _ = write!(
             out,
-            r#"<div class="ok"><div class="okv tabnum">{}</div><div class="okl"><i class="kdot {}"></i>{}</div></div>"#,
-            v, dot, l
+            r#"<div class="ok {}"><div class="okv tabnum">{}</div><div class="okl"><i class="kdot {}"></i>{}</div></div>"#,
+            dot, v, dot, l
         );
     }
     out

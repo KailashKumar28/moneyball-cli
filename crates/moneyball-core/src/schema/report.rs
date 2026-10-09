@@ -62,6 +62,17 @@ pub struct ReportSource {
     /// one-ad-per-card grouping).
     #[serde(default)]
     pub creatives_schema: Option<String>,
+    /// When the snapshot's Meta and CRM data were written (UTC), so the
+    /// report says when its data was pulled, not when it was rendered.
+    /// Additive in /1.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub meta_fetched_at: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub crm_fetched_at: Option<String>,
+    /// Where CRM stood: `present`, `not_pulled` (connected, not in this
+    /// snapshot) or `not_connected`. Additive in /1.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub crm_status: Option<String>,
 }
 
 /// Delivery + funnel roll-up. Numbers are NUMBERS here - Meta's

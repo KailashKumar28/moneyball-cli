@@ -154,10 +154,16 @@ footer{margin-top:48px;border-top:1px solid var(--rule);padding-top:12px;font-fa
  .ttable th:first-child{background:var(--paper)}
  .tgtable td.tg-nm,.tgtable th:first-child{position:sticky;left:0;background:var(--paper);z-index:1;box-shadow:4px 0 8px -6px rgba(38,29,15,.25)}
 }
+/* No CRM data for this day: every CRM figure is hidden, never shown as 0.
+   Column positions are pinned by report::html's crm_columns_sit_where_the_css_hides_them. */
+.nocrm .ok.c,.nocrm .hf-row.c,.nocrm .crm-legend{display:none}
+.nocrm .ctable th:nth-child(n+9),.nocrm .ctable td:nth-child(n+9){display:none}
+.nocrm .ptable th:nth-child(n+3),.nocrm .ptable td:nth-child(n+3){display:none}
+.nocrm .tgtable th:nth-child(n+5):nth-child(-n+8),.nocrm .tgtable td:nth-child(n+5):nth-child(-n+8){display:none}
 @media(hover:none){.ccard:hover{transform:none;box-shadow:var(--sh-sm)}}
 @media(prefers-reduced-motion:reduce){.ccard{transition:none}}
 </style></head>
-<body><div class="sheet" id="top">
+<body class="{{BODYCLASS}}"><div class="sheet" id="top">
 <header class="masthead"><div class="kicker">{{KICKER}} &middot; {{DAYLINE}}</div>
 <h1>{{H1}}</h1>
 <div class="sub"><span>{{PIPELINE}}</span><span>{{PRODUCTS_LINE}}</span></div>
@@ -168,7 +174,7 @@ footer{margin-top:48px;border-top:1px solid var(--rule);padding-top:12px;font-fa
 <div class="pblock" id="portfolio"><section><div class="seckick">Portfolio &middot; {{WINDOW}}</div><h2>Overview</h2>
 <div class="okpis">{{SCORECARD}}</div>
 <div class="okpis muted">{{SCORECARD2}}</div>
-<p class="legend">How to read this: <b>Meta leads</b> = people who submitted the ad form. <b>CRM leads</b> = those that arrived in your CRM. <b>Qualified</b> = leads your sales team confirmed as genuine. We report the gap between every stage.</p>
+<p class="legend">How to read this: <b>Meta leads</b> = people who submitted the ad form.<span class="crm-legend"> <b>CRM leads</b> = those that arrived in your CRM. <b>Qualified</b> = leads your sales team confirmed as genuine. We report the gap between every stage.</span></p>
 {{RECON}}
 {{PORTFOLIO_NOTE}}
 {{GLANCE}}

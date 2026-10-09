@@ -375,7 +375,9 @@ fn empty_crm_flags_source_and_zero_funnel() {
         lines
     );
     assert!(
-        lines.iter().any(|l| l.contains("CRM data missing")),
+        lines
+            .iter()
+            .any(|l| l.contains("CRM data for this day is not in this report")),
         "{:?}",
         lines
     );
@@ -411,4 +413,66 @@ fn html_renders_from_aggregate_and_cache_only() {
     // Escaping: ad names are data, not markup.
     assert!(!html.contains("<script"));
     std::fs::remove_dir_all(&tmp).ok();
+}
+
+/// The header cells of the table whose tag carries `class`, tags stripped.
+fn header_cells(html: &str, class: &str) -> Vec<String> {
+    let Some((_, rest)) = html.split_once(&format!(r#"<table class="{}">"#, class)) else {
+        return Vec::new();
+    };
+    let head = rest.split_once("</thead>").map_or("", |(h, _)| h);
+    head.split("<th")
+        .skip(1)
+        // "<thead" splits here too; a header cell is "<th>" or "<th ...>".
+        .filter(|cell| cell.starts_with('>') || cell.starts_with(' '))
+        .map(|cell| {
+            let inner = cell.split_once('>').map_or("", |(_, i)| i);
+            let text = inner.split_once("</th>").map_or(inner, |(t, _)| t);
+            text.split('<').next().unwrap_or("").trim().to_string()
+        })
+        .collect()
+}
+
+#[test]
+fn crm_columns_sit_where_the_css_hides_them() {
+    use moneyball_core::report::html;
+    let history = std::env::temp_dir().join("mb-html-nocrm-none");
+    let mut s = snapshot();
+    s.crm = json!({});
+    let r = report::build(&s, "ws", "2026-08-07T00:00:00Z", 1, None, None).unwrap();
+    let page = html::render(&r, None, "TestBrand", &history);
+    assert!(page.contains(r#"<body class="nocrm">"#));
+    assert!(page.contains("Meta Ads only (no CRM data for this day)"));
+    assert!(!page.contains("Meta Ads + your CRM"));
+
+    // template.html hides creative-table columns 9+, targeting 5-8,
+    // project 3+: those must be exactly the CRM ones, and only them.
+    let crm = |h: &str| {
+        [
+            "crm",
+            "qualified",
+            "visits",
+            "bookings",
+            "gap",
+            "repeat",
+            "invalid",
+            "missing",
+            "7d",
+        ]
+        .iter()
+        .any(|w| h.contains(w))
+    };
+    let creative = header_cells(&page, "ctable");
+    assert_eq!(creative.len(), 18, "{:?}", creative);
+    assert!(creative[..8].iter().all(|h| !crm(h)), "{:?}", creative);
+    assert!(creative[8..].iter().all(|h| crm(h)), "{:?}", creative);
+    let targeting = header_cells(&page, "tgtable");
+    assert_eq!(targeting.len(), 9, "{:?}", targeting);
+    assert!(targeting[..4].iter().all(|h| !crm(h)), "{:?}", targeting);
+    assert!(targeting[4..8].iter().all(|h| crm(h)), "{:?}", targeting);
+    assert_eq!(targeting[8], "verdict");
+    let project = header_cells(&page, "ptable");
+    if !project.is_empty() {
+        assert!(project[..2].iter().all(|h| !crm(h)) && project[2..].iter().all(|h| crm(h)));
+    }
 }

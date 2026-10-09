@@ -37,6 +37,12 @@ pub fn commas(n: u64) -> String {
     out
 }
 
+/// "1 lead", "4 leads": a count with its noun agreeing (client-facing
+/// text never says "lead(s)" or "1 leads").
+pub fn count(n: u64, one: &str, many: &str) -> String {
+    format!("{} {}", n, if n == 1 { one } else { many })
+}
+
 /// Split a pre-formatted line into pieces of at most `width` columns
 /// (chars), the first at `width` and the rest at `rest`. Keeps every
 /// internal space, so aligned columns survive (word-wrapping collapses

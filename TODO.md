@@ -38,6 +38,10 @@ bottom after a release-sized batch.)
         products / refresh failed) instead of "ready"; the landing says
         what is wrong and the one command that fixes it, or yesterday's
         numbers and report when all is well.
+  - [x] Report provenance (2026-10-09): report.json says when Meta and CRM
+        were pulled and where CRM stood; the client report hides every CRM
+        figure when there is none (never zeros), says when its data was
+        pulled, and compares only within 7 days.
   - [x] /status and moneyball status (2026-10-09): the last 14 data days,
         missed days as rows, how Meta and the CRM last answered (frame R6).
   - [x] /schedule and moneyball schedule (2026-10-09): the morning refresh as

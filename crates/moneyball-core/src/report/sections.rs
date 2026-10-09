@@ -73,8 +73,8 @@ pub(super) fn missing_banner(r: &CreativeReport) -> String {
         return String::new(); // silence is the reward
     }
     format!(
-        r#"<div class="missing"><b>{} lead(s) are missing from your CRM</b><p>They submitted your ad form {} but never arrived in the CRM. They are paid for and still warm - a same-day call recovers them.</p><div class="mwhere">{}</div></div>"#,
-        total,
+        r#"<div class="missing"><b>{} missing from your CRM</b><p>They submitted your ad form {} but never arrived in the CRM. They are paid for and still warm - a same-day call recovers them.</p><div class="mwhere">{}</div></div>"#,
+        crate::text::count(total, "lead is", "leads are"),
         if r.window.since == r.window.until {
             format!("on {}", esc(&r.window.until))
         } else {
@@ -123,8 +123,8 @@ pub(super) fn scorecard(r: &CreativeReport, prior: Option<&CreativeReport>) -> (
     let f = &p.funnel;
     let tile = |v: String, label: &str, dot: &str, delta: String| {
         format!(
-            r#"<div class="ok"><div class="okv tabnum">{}</div><div class="okl"><i class="kdot {}"></i>{}</div>{}</div>"#,
-            v, dot, label, delta
+            r#"<div class="ok {}"><div class="okv tabnum">{}</div><div class="okl"><i class="kdot {}"></i>{}</div>{}</div>"#,
+            dot, v, dot, label, delta
         )
     };
     let mut top = String::new();
@@ -252,8 +252,8 @@ pub(super) fn reconciliation(r: &CreativeReport) -> String {
         if explained < gap {
             let _ = write!(
                 s,
-                " {} lead(s) are still syncing and not yet classified.",
-                gap - explained
+                " {} still syncing and not yet classified.",
+                crate::text::count((gap - explained) as u64, "lead is", "leads are")
             );
         } else if explained > gap {
             // Buckets over-explain: Meta's two reporting systems
@@ -268,8 +268,8 @@ pub(super) fn reconciliation(r: &CreativeReport) -> String {
     if r.portfolio.unattributed_l_leads > 0 {
         let _ = write!(
             s,
-            " Separately, {} CRM lead(s) came from outside these ads (portals, walk-ins, organic).",
-            r.portfolio.unattributed_l_leads
+            " Separately, {} came from outside these ads (portals, walk-ins, organic).",
+            crate::text::count(r.portfolio.unattributed_l_leads, "CRM lead", "CRM leads")
         );
     }
     format!(r#"<p class="recon">{}</p>"#, esc(&s))
@@ -281,7 +281,7 @@ pub(super) fn glance(r: &CreativeReport) -> String {
         return String::new();
     }
     let mut out = String::from(
-        r#"<div class="ttable"><table><thead><tr><th>project</th><th>spend</th><th>crm leads</th><th>qualified</th><th>cost / qualified</th><th>missing</th></tr></thead><tbody>"#,
+        r#"<div class="ttable"><table class="ptable"><thead><tr><th>project</th><th>spend</th><th>crm leads</th><th>qualified</th><th>cost / qualified</th><th>missing</th></tr></thead><tbody>"#,
     );
     for p in &r.products {
         let k = &p.kpis;

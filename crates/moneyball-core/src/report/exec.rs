@@ -4,6 +4,7 @@
 //! instead of inflated.
 
 use crate::schema::*;
+use crate::text::count;
 
 /// Priority-ordered generators; each emits at most one line; cap 5.
 pub(super) fn brief(r: &CreativeReport, prior: Option<&CreativeReport>) -> Vec<ExecLine> {
@@ -23,8 +24,8 @@ pub(super) fn brief(r: &CreativeReport, prior: Option<&CreativeReport>) -> Vec<E
         out.push(line(
             "watch",
             format!(
-                "{} lead(s) filled your ad form but never reached the CRM - recoverable, see the red banner below.",
-                uncap
+                "{} filled your ad form but never reached the CRM - recoverable, see the red banner below.",
+                count(uncap, "lead", "leads")
             ),
         ));
     }
@@ -47,16 +48,20 @@ pub(super) fn brief(r: &CreativeReport, prior: Option<&CreativeReport>) -> Vec<E
                     line(
                         "win",
                         format!(
-                            "{} produced {} qualified leads, up {} on the last report.",
-                            ps.product, q, dq
+                            "{} produced {}, up {} on the last report.",
+                            ps.product,
+                            count(q, "qualified lead", "qualified leads"),
+                            dq
                         ),
                     )
                 } else {
                     line(
                         "watch",
                         format!(
-                            "{} fell to {} qualified leads ({} in the last report).",
-                            ps.product, q, prev_q
+                            "{} fell to {} ({} in the last report).",
+                            ps.product,
+                            count(q, "qualified lead", "qualified leads"),
+                            prev_q
                         ),
                     )
                 });
@@ -69,10 +74,13 @@ pub(super) fn brief(r: &CreativeReport, prior: Option<&CreativeReport>) -> Vec<E
                 .map(|(c, prod)| (c.delivery.spend / c.funnel[4].count as f64, c, prod))
                 .min_by(|a, b| a.0.total_cmp(&b.0));
             if let Some((cpq, c, prod)) = winner.filter(|(cpq, ..)| *cpq <= 0.75 * port_cpq) {
-                out.push(line("win", format!(
-                    "Best value: \"{}\" ({}) - {} qualified at Rs {:.0} each vs Rs {:.0} portfolio average.",
-                    c.display_name, prod, c.funnel[4].count, cpq, port_cpq
-                )));
+                out.push(line(
+                    "win",
+                    format!(
+                    "Best value: \"{}\" ({}) - {} qualified at {} each vs {} portfolio average.",
+                    c.display_name, prod, c.funnel[4].count, rs(cpq), rs(port_cpq)
+                ),
+                ));
             }
         }
         // G4 - money leak: big spend, zero qualified.
@@ -92,8 +100,11 @@ pub(super) fn brief(r: &CreativeReport, prior: Option<&CreativeReport>) -> Vec<E
             out.push(line(
                 "watch",
                 format!(
-                    "Watch: \"{}\" ({}) spent Rs {:.0} for {} CRM leads and 0 qualified.",
-                    c.display_name, prod, c.delivery.spend, c.funnel[3].count
+                    "Watch: \"{}\" ({}) spent {} for {} and 0 qualified.",
+                    c.display_name,
+                    prod,
+                    rs(c.delivery.spend),
+                    count(c.funnel[3].count, "CRM lead", "CRM leads")
                 ),
             ));
         }
@@ -108,8 +119,10 @@ pub(super) fn brief(r: &CreativeReport, prior: Option<&CreativeReport>) -> Vec<E
                 out.push(line(
                     "win",
                     format!(
-                        "Cheapest leads: \"{}\" at Rs {:.0} per Meta lead ({} leads).",
-                        c.display_name, cpl, c.funnel[2].count
+                        "Cheapest leads: \"{}\" at {} per Meta lead ({}).",
+                        c.display_name,
+                        rs(cpl),
+                        count(c.funnel[2].count, "lead", "leads")
                     ),
                 ));
             }
@@ -119,26 +132,26 @@ pub(super) fn brief(r: &CreativeReport, prior: Option<&CreativeReport>) -> Vec<E
     // G6 - guaranteed baseline.
     let base = if !crm {
         format!(
-            "Rs {:.0} across {} projects -> {} Meta leads. CRM data missing for this day - run a CRM fetch for the funnel.",
-            p.spend,
-            r.products.len(),
-            p.funnel.m_leads
+            "{} across {} -> {}. CRM data for this day is not in this report yet, so its funnel past Meta leads is hidden.",
+            rs(p.spend),
+            count(r.products.len() as u64, "project", "projects"),
+            count(p.funnel.m_leads, "Meta lead", "Meta leads")
         )
     } else if p.funnel.qualified == 0 {
         format!(
-            "Rs {:.0} across {} projects -> {} CRM leads, none qualified yet.",
-            p.spend,
-            r.products.len(),
-            p.funnel.l_leads
+            "{} across {} -> {}, none qualified yet.",
+            rs(p.spend),
+            count(r.products.len() as u64, "project", "projects"),
+            count(p.funnel.l_leads, "CRM lead", "CRM leads")
         )
     } else {
         format!(
-            "Rs {:.0} across {} projects -> {} CRM leads, {} qualified (Rs {:.0} per qualified).",
-            p.spend,
-            r.products.len(),
-            p.funnel.l_leads,
+            "{} across {} -> {}, {} qualified ({} per qualified).",
+            rs(p.spend),
+            count(r.products.len() as u64, "project", "projects"),
+            count(p.funnel.l_leads, "CRM lead", "CRM leads"),
             p.funnel.qualified,
-            p.cost_per_qualified.unwrap_or(0.0)
+            rs(p.cost_per_qualified.unwrap_or(0.0))
         )
     };
     out.push(line(
@@ -190,16 +203,33 @@ pub fn daily(
 /// with d < report_date and the same window length. Multi-day reports
 /// carry a range suffix in the file name, so every json in the day's
 /// dir is a candidate; the window-length check picks the comparable one.
+/// How far back a report counts as comparable.
+pub(super) const PRIOR_DAYS: i64 = 7;
+
+/// "Rs 96,869": exec lines are plain text (report.json and bots read them).
+fn rs(v: f64) -> String {
+    format!("Rs {}", crate::text::commas(v.round().max(0.0) as u64))
+}
+
 pub(super) fn load_prior(
     reports_dir: &std::path::Path,
     report_date: &str,
     window_days: i64,
 ) -> Option<CreativeReport> {
+    // Only a report from the last week is comparable (decision 5): a
+    // delta against eleven days ago reads as yesterday's change.
+    let cutoff = chrono::NaiveDate::parse_from_str(report_date, "%Y-%m-%d")
+        .ok()
+        .map(|d| {
+            (d - chrono::Duration::days(PRIOR_DAYS))
+                .format("%Y-%m-%d")
+                .to_string()
+        });
     let mut dates: Vec<String> = std::fs::read_dir(reports_dir)
         .ok()?
         .filter_map(|e| e.ok())
         .filter_map(|e| e.file_name().to_str().map(String::from))
-        .filter(|d| d.as_str() < report_date)
+        .filter(|d| d.as_str() < report_date && cutoff.as_deref().is_none_or(|c| d.as_str() >= c))
         .collect();
     dates.sort();
     for d in dates.iter().rev() {
@@ -288,6 +318,10 @@ mod tests {
         assert_eq!(p.window.since, "2026-07-31");
         // No comparable window length: none.
         assert!(load_prior(&tmp, "2026-08-02", 30).is_none());
+        assert!(
+            load_prior(&tmp, "2026-08-09", 1).is_none(),
+            "eight days back is not comparable"
+        );
         std::fs::remove_dir_all(&tmp).ok();
     }
 }
