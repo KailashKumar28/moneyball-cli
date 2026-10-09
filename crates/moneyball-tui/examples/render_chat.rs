@@ -92,10 +92,8 @@ fn main() {
         required_at_best: Some(112520),
         open_debt: vec!["geo_exclusions_present".into(), "higher_intent_form".into()],
     };
-    // We need to create the Brief cell variant. Use a stub BriefView.
-    // The /brief handler in lib.rs pushes ToolResult with format_brief_as_lines
-    // (multi-line), so for the test we mimic that directly by pushing the
-    // multi-line strings as a ToolResult.
+    // The /brief handler pushes a ToolResult with format_brief_as_lines
+    // (multi-line), so mimic that directly with the same strings.
     let _rows = rows;
     let _feasibility = feasibility;
     log.push(Cell::ToolResult(cells::ToolResult {

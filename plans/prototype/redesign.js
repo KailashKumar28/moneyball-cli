@@ -70,7 +70,7 @@ ${tool(OK, 'refresh')}[dim]   for Wed 07 Oct[/]
 
 [bold]       Wed 07 Oct:[/][gray]  spend Rs.101,268  ·  Meta leads 51  ·  CRM leads 42  ·  qualified 7  ·  Rs.14,467 per qualified[/]
 [gray]       report  [/][cyan]${WS}/.moneyball/reports/2026-10-08/Fincity-Daily-07-Oct-2026.html[/]
-[dim]               o open it  ·  /brief or /funnel <product> to dig in[/]
+[dim]               ctrl+o open it  ·  /brief or /funnel <product> to dig in[/]
 [green]       (1m 21s)[/]
 
 [gray]   Want this every morning?  [/][cyan bold]/schedule[/]
@@ -106,7 +106,7 @@ ${bar('[dim]  ·  data [/][gray]Thu 08 Oct[/][dim]  ·  CRM [/][gray]08 Oct[/][d
 [gray]   spend Rs.98,412  ·  Meta leads 47  ·  CRM leads 44  ·  qualified 9  ·  Rs.10,935 per qualified[/]
 [gray]   vs Wed 07 Oct:  qualified [/][green]+2[/][gray]   cost per qualified [/][green]-Rs.3,532[/]
 [gray]   report  [/][cyan]${WS}/.moneyball/reports/2026-10-09/Fincity-Daily-08-Oct-2026.html[/]
-[dim]           o open it  ·  /status for the last 14 mornings[/]
+[dim]           ctrl+o open it  ·  /status for the last 14 mornings[/]
 
 ${COMPOSER()}` },
 

@@ -234,7 +234,7 @@ const FRAMES = [
 		details: { 'How it\'s built': ['The summary reads the new report.json portfolio block; no LLM call (CLOUD_PLAN: the daily push is not an agent run)', '"o" opens the report in the browser'] },
 		pins: [
 			['content', '~Wed 07 Oct:', 'Yesterday', 'Spend, Meta leads, CRM leads, qualified, cost per qualified.'],
-			['interaction', '~o open it', 'Open', 'Opens the HTML; the path is printed whole, wrapped if it must.'],
+			['interaction', '~ctrl+o open it', 'Open', 'Ctrl+O opens the HTML (a bare o would steal the first letter of a question); the path is printed whole, wrapped if it must.'],
 		] },
 	{ s: 'R', scene: 'schedule', title: '/schedule', next: 'y installs it',
 		note: '<b>One confirm installs a morning run on this Mac,</b> with what it writes, runs and logs, and how to remove it.',

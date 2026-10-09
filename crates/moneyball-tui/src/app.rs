@@ -31,6 +31,12 @@ pub struct App {
     pub snap_date: Option<String>,
     /// The CRM health sentence when this snapshot's CRM data isn't fresh.
     pub crm_note: Option<String>,
+    /// How fresh the data on screen is (the context bar and the landing).
+    pub health: Option<moneyball_core::health::Health>,
+    /// The refresh in flight, on its own channel so chat keeps working.
+    pub(crate) refresh: Option<crate::refresh_flow::RefreshJob>,
+    /// The newest daily report, for ctrl+o.
+    pub report_path: Option<std::path::PathBuf>,
     /// First Ctrl+C timestamp - a second within 2s quits (codex/Claude
     /// Code pattern: one stray Ctrl+C never kills the session).
     pub ctrl_c_armed: Option<std::time::Instant>,
@@ -56,12 +62,13 @@ pub struct App {
     /// result cell carries the real name and elapsed time.
     pub running_tool: Option<(String, String, std::time::Instant)>,
     /// Live worker events, drained by the event loop each tick.
-    /// `Some` while a turn or fetch is in flight.
+    /// `Some` while a turn or /report is in flight.
     pub stream: Option<std::sync::mpsc::Receiver<StreamEvent>>,
 }
 
-/// Events sent by background worker threads (agent turns, Meta fetch),
-/// drained by the event loop each tick so the UI never blocks.
+/// Events sent by background worker threads (agent turns, /report),
+/// drained by the event loop each tick so the UI never blocks. A refresh
+/// has its own channel (refresh_flow::RefreshJob).
 pub enum StreamEvent {
     /// Agent-loop event (deltas, tool begin/end, turn end).
     Agent(Ev),
@@ -71,19 +78,6 @@ pub enum StreamEvent {
         ms: u64,
     },
     ReportFailed {
-        err: String,
-        ms: u64,
-    },
-    /// `/refresh` worker: a step started or finished, as its display line.
-    RefreshStep(String),
-    RefreshDone {
-        run: Box<moneyball_core::schema::RunRecord>,
-        ms: u64,
-        /// Started by /brief's self-heal: run the brief once data lands.
-        then_brief: bool,
-    },
-    /// The refresh could not start (no workspace, or one already running).
-    RefreshFailed {
         err: String,
         ms: u64,
     },
@@ -159,12 +153,9 @@ impl App {
         chat.push(chat::Cell::System(chat::cells::System(
             moneyball_core::LOGO.into(),
         )));
-        if cfg.has_workspace() {
-            chat.push(chat::Cell::System(chat::cells::System(
-                "workspace configured. try /brief, /funnel <product>, /ask or anything you want."
-                    .into(),
-            )));
-        } else {
+        // With a workspace, the landing (push_landing) follows once the
+        // snapshot is loaded.
+        if !cfg.has_workspace() {
             chat.push(chat::Cell::System(chat::cells::System(
                 "no workspace yet - run /setup to configure.".into(),
             )));
@@ -180,6 +171,9 @@ impl App {
             brief: None,
             snap_date: None,
             crm_note: None,
+            health: None,
+            refresh: None,
+            report_path: None,
             ctrl_c_armed: None,
             quit: false,
             quit_emoji: String::new(),
@@ -269,6 +263,7 @@ impl App {
                     let r = brief::compute(&snap, &self.cfg, &history);
                     self.crm_note =
                         moneyball_core::crm::status::CrmHealth::of(&self.cfg, &snap).note();
+                    self.health = Some(moneyball_core::health::Health::of(&self.cfg, Some(&snap)));
                     self.snap_date = Some(r::date_of(&snap));
                     self.brief = Some(r);
                     self.status = None;
@@ -279,10 +274,21 @@ impl App {
             // the context bar already shows "no data", so keep the status
             // hint short + actionable instead of dumping the raw error.
             Err(_) => {
-                self.status =
-                    Some("no snapshot yet - /brief works once your fetcher writes data".into());
+                // The bar says "no data" and the landing says what to run.
+                self.health = Some(moneyball_core::health::Health::of(&self.cfg, None));
             }
         }
+    }
+
+    /// The first thing under the logo: how fresh the data is, and
+    /// yesterday's numbers when it is (crate::landing).
+    pub(crate) fn push_landing(&mut self) {
+        let Some(health) = &self.health else {
+            return;
+        };
+        let (paras, report) = crate::landing::landing(&self.cfg, health);
+        self.report_path = report;
+        self.chat.push(chat::Cell::Rich(chat::cells::Rich(paras)));
     }
 }
 

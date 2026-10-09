@@ -8,7 +8,9 @@ mod creative_flow;
 mod crm_flow;
 mod event;
 mod funnel_flow;
+mod landing;
 pub(crate) mod markdown;
+mod refresh_cell;
 mod refresh_flow;
 mod render;
 mod report;
@@ -118,6 +120,7 @@ pub fn run_with_cfg(
     }
     if matches!(app.view, View::Brief) {
         app.load_brief();
+        app.push_landing();
     }
     let mut terminal = init()?;
     let res = event_loop(&mut terminal, &mut app);

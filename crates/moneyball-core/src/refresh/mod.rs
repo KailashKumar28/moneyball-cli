@@ -5,11 +5,17 @@
 //!
 //! Outcome: `failed` when Meta failed (nothing new was written and CRM is
 //! skipped, so it never lands on a different day than Meta); `degraded`
-//! when something is missing (CRM failed, a product's account, the
-//! creatives/leads/adsets capture); `ok` otherwise.
+//! when something is missing (CRM failed or not connected, a product's
+//! account, the creatives/leads/adsets capture, a cancel); `ok` otherwise.
+
+mod show;
 
 use std::collections::BTreeMap;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
 use std::time::Instant;
+
+pub use show::*;
 
 use crate::config::AppConfig;
 use crate::error::Result;
@@ -28,6 +34,9 @@ pub struct Options {
     pub force: bool,
     /// Trailing days to pull, ending yesterday (Meta and CRM alike).
     pub days: u32,
+    /// Set to stop after the step in flight (a Meta pull can't be cut
+    /// mid-request); the steps left are recorded as skipped.
+    pub cancel: Option<Arc<AtomicBool>>,
 }
 
 /// Run every step, telling `on_step` as each starts and finishes, and return the
@@ -88,25 +97,22 @@ pub fn run(
         match fetched {
             Err(e) => {
                 push(&mut run, on_step, failed("meta", started, &e));
-                push(&mut run, on_step, skipped("assets", "skipped: Meta failed"));
+                push(&mut run, on_step, skipped("assets", "Meta failed"));
                 push(
                     &mut run,
                     on_step,
-                    skipped(
-                        "crm",
-                        "skipped, so CRM stays matched to the same day as Meta",
-                    ),
+                    skipped("crm", "so CRM stays matched to the same day as Meta"),
                 );
-                push(&mut run, on_step, skipped("report", "skipped: no new data"));
+                push(&mut run, on_step, skipped("report", "no new data"));
                 return finish(cfg, run, Outcome::Failed);
             }
             Ok(f) => {
                 let ms = elapsed(started);
-                let rows: usize = f
+                let landed: Vec<usize> = f
                     .per_product
                     .iter()
-                    .filter_map(|(_, r)| r.as_ref().ok())
-                    .sum();
+                    .filter_map(|(_, r)| r.as_ref().ok().copied())
+                    .collect();
                 let missing: Vec<String> = f
                     .per_product
                     .iter()
@@ -116,11 +122,13 @@ pub fn run(
                     "meta",
                     ms,
                     [
-                        ("rows", rows as u64),
-                        ("products", f.per_product.len() as u64),
+                        ("rows", landed.iter().sum::<usize>() as u64),
+                        ("products", landed.len() as u64),
                     ],
                 );
                 if !missing.is_empty() {
+                    step.counts
+                        .insert("products_failed".into(), missing.len() as u64);
                     step.status = StepStatus::Partial;
                     step.error_kind = Some("meta_product".into());
                     step.message = Some(format!("no data for {}", missing.join("; ")));
@@ -157,12 +165,19 @@ pub fn run(
     }
 
     // 3. CRM, into this same snapshot (crm fetch anchors to it).
+    let cancelled = |run: &mut RunRecord, on_step: &mut dyn FnMut(Progress), from: usize| {
+        for name in &STEPS[from..] {
+            push(run, on_step, skipped(name, "cancelled"));
+        }
+    };
+    if is_cancelled(opts) {
+        cancelled(&mut run, on_step, 2);
+        return finish(cfg, run, Outcome::Degraded);
+    }
     if !crate::crm::fetch::spec_path(cfg).is_file() {
-        push(
-            &mut run,
-            on_step,
-            skipped("crm", "no CRM connected for this workspace"),
-        );
+        let mut step = skipped("crm", "no CRM connected for this workspace");
+        step.fix = Some("moneyball crm connect".into());
+        push(&mut run, on_step, step);
     } else {
         on_step(Progress::Begin("crm"));
         let started = Instant::now();
@@ -199,20 +214,29 @@ pub fn run(
 
     // 4. Yesterday's report from this snapshot. Without CRM it still goes
     //    out: the verdict gate withholds every verdict CRM data would need.
+    if is_cancelled(opts) {
+        cancelled(&mut run, on_step, 3);
+        return finish(cfg, run, Outcome::Degraded);
+    }
     on_step(Progress::Begin("report"));
     let started = Instant::now();
     match crate::report::generate(cfg, Some(&date), 1) {
         Ok(out) => {
             let creatives: usize = out.report.products.iter().map(|p| p.creatives.len()).sum();
-            push(
-                &mut run,
-                on_step,
-                done(
-                    "report",
-                    elapsed(started),
-                    [("creatives", creatives as u64)],
-                ),
+            let mut step = done(
+                "report",
+                elapsed(started),
+                [("creatives", creatives as u64)],
             );
+            if !out.report.source.crm_present {
+                step.status = StepStatus::Partial;
+                step.error_kind = Some("no_crm".into());
+                step.message = Some(
+                    "written without CRM data: verdicts are withheld and its CRM columns read 0"
+                        .into(),
+                );
+            }
+            push(&mut run, on_step, step);
             run.artifacts
                 .insert("report".into(), out.html_path.display().to_string());
             run.artifacts
@@ -236,17 +260,15 @@ pub fn run(
     )
 }
 
-/// The day a refresh started now fills, for headers ("Wed 07 Oct 2026"):
-/// yesterday, since the snapshot day itself is never in a window.
-pub fn data_day_label() -> String {
-    (chrono::Local::now().date_naive() - chrono::Duration::days(1))
-        .format("%a %d %b %Y")
-        .to_string()
-}
-
 fn push(run: &mut RunRecord, on_step: &mut dyn FnMut(Progress), step: RunStep) {
     on_step(Progress::Done(&step));
     run.steps.push(step);
+}
+
+fn is_cancelled(opts: &Options) -> bool {
+    opts.cancel
+        .as_ref()
+        .is_some_and(|c| c.load(Ordering::SeqCst))
 }
 
 fn finish(cfg: &AppConfig, mut run: RunRecord, outcome: Outcome) -> Result<RunRecord> {
@@ -283,7 +305,7 @@ fn failed(name: &str, started: Instant, e: &crate::error::Error) -> RunStep {
     RunStep {
         status: StepStatus::Failed,
         error_kind: Some(e.kind().into()),
-        message: Some(e.to_string()),
+        message: Some(e.reason()),
         fix: e.fix(),
         ..done(name, elapsed(started), [])
     }
@@ -295,94 +317,4 @@ fn elapsed(started: Instant) -> u64 {
 
 fn now() -> String {
     chrono::Utc::now().format("%Y-%m-%dT%H:%M:%SZ").to_string()
-}
-
-/// One plain ASCII line per step, shared by the shell and the TUI cell;
-/// a failed or partial step carries its whole reason on the next line.
-pub fn step_line(n: usize, s: &RunStep) -> String {
-    let label = step_label(&s.name);
-    let status = match s.status {
-        StepStatus::Done => "done",
-        StepStatus::Partial => "partial",
-        StepStatus::Failed => "failed",
-        StepStatus::Skipped => "skipped",
-    };
-    let counts = s
-        .counts
-        .iter()
-        .map(|(k, v)| format!("{} {}", commas(*v), k))
-        .collect::<Vec<_>>()
-        .join(", ");
-    // A step that went wrong gets its whole reason on the next line; a
-    // reason cut short is exactly the part the user needed.
-    let trouble = matches!(s.status, StepStatus::Failed | StepStatus::Partial);
-    let detail = match (&s.message, counts.is_empty()) {
-        (Some(m), true) if !trouble => m.clone(),
-        (Some(m), false) if !trouble => format!("{}; {}", counts, m),
-        _ => counts,
-    };
-    let time = if s.ms > 0 {
-        format!("{:.1}s", s.ms as f64 / 1000.0)
-    } else {
-        String::new()
-    };
-    // Fixed-width columns first, free text last: the line wraps cleanly
-    // at any width instead of pushing the time onto a line of its own.
-    let line = format!(
-        "  {} {:<20} {:<8} {:>6}  {}",
-        n, label, status, time, detail
-    );
-    let line = line.trim_end().to_string();
-    match (&s.message, trouble) {
-        (Some(m), true) => format!("{}\n      {}", line, m),
-        _ => line,
-    }
-}
-
-/// The line a step shows while it runs; step_line replaces it when done.
-pub fn running_line(n: usize, name: &str) -> String {
-    format!("  {} {:<20} running", n, step_label(name))
-}
-
-fn step_label(name: &str) -> &str {
-    match name {
-        "meta" => "Meta insights",
-        "assets" => "creatives and leads",
-        "crm" => "CRM",
-        "report" => "daily report",
-        other => other,
-    }
-}
-
-fn commas(n: u64) -> String {
-    let s = n.to_string();
-    let mut out = String::new();
-    for (i, c) in s.chars().enumerate() {
-        if i > 0 && (s.len() - i).is_multiple_of(3) {
-            out.push(',');
-        }
-        out.push(c);
-    }
-    out
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn step_line_puts_time_before_detail_and_the_reason_below() {
-        let ok = done("report", 1100, [("creatives", 1234)]);
-        assert_eq!(
-            step_line(4, &ok),
-            "  4 daily report         done       1.1s  1,234 creatives"
-        );
-        let mut crm = done("crm", 900, []);
-        crm.status = StepStatus::Failed;
-        crm.message = Some("CRM rejected the credentials (HTTP 401)".into());
-        assert_eq!(
-            step_line(3, &crm),
-            "  3 CRM                  failed     0.9s\n      CRM rejected the credentials (HTTP 401)"
-        );
-    }
 }

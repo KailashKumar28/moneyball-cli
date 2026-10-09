@@ -144,17 +144,17 @@ Match the frames cell for cell; their Copy for agent lists every styled run.
 - **Bar:** `data <day>  ·  CRM <day>  ·  ● <health>` in place of `● ready`. Labels are DarkGray, values Gray, and health is coloured:
   - Green: fresh.
   - Yellow: stale (2+ days), CRM missing, or partial.
-  - Red: failed, or 7+ days old.
+  - Red: today's refresh failed. (Old data stays yellow: the landing's sentence carries its age.)
   - Cyan: refreshing.
 - **Landing, not fresh:** one notice cell (what is wrong, since when, the fix) with `/refresh` and `/schedule` in Cyan bold.
-- **Landing, fresh:** yesterday's line, the change against the last day within 7, the report's full path, and "o open it".
+- **Landing, fresh:** yesterday's line, the change against the last day within 7, the report's full path, and "ctrl+o open it" (a bare `o` would steal the first letter of a question).
 - **Delete:** `Status::Loading`, `Status::Error` and `widgets::welcome_text` (all unused).
 
 ### B2. `/refresh` (R2, R3, S1 to S3)
 
 - **Worker:** a worker thread with its own channel, not the shared `app.stream` slot, so the chat answers while it runs. Esc cancels after the current step.
 - **Tool cell:** `⎿ ◐ moneyball refresh`, then a step table (number, name, state, counts, time). States: done Green, running Yellow, failed Red, skipped DarkGray.
-- **Done:** the summary line, the full report path (wrapped, never clipped) and "o open it", plus the `/schedule` offer if none is installed.
+- **Done:** the summary line, the full report path (wrapped, never clipped) and "ctrl+o open it", plus the `/schedule` offer if none is installed.
 - **Degraded and failed:** a Yellow or Red first sentence, what was and was not written, and one `fix:` line with the exact command.
 - **`/fetch`:** becomes an alias of `/refresh` (decision 7).
 

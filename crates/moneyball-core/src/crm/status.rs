@@ -110,7 +110,7 @@ pub(super) fn write_contacts(
 }
 
 /// The newest snapshot holding a crm.json.
-fn newest_crm_snapshot(cfg: &AppConfig) -> Option<String> {
+pub(crate) fn newest_crm_snapshot(cfg: &AppConfig) -> Option<String> {
     let snap_root = cfg.snap_dir();
     crate::snapshot::list_dates(&snap_root)
         .unwrap_or_default()

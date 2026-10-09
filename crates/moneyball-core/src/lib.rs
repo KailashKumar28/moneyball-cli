@@ -13,6 +13,7 @@ pub mod debug;
 pub mod error;
 pub mod fetch;
 pub mod funnel;
+pub mod health;
 pub mod llm;
 pub mod logo;
 pub mod meta;

@@ -29,17 +29,11 @@ pub(crate) fn render(f: &mut ratatui::Frame, app: &App) {
 
     // Logo + context bar.
     f.render_widget(Paragraph::new(crate::widgets::logo()), outer[0]);
-    let status = if app.brief.is_some() {
-        crate::widgets::Status::Ready
-    } else if app.cfg.has_workspace() {
-        crate::widgets::Status::NoData
-    } else {
-        crate::widgets::Status::Idle
-    };
     let ctx_line = crate::widgets::context_line(
         &app.cfg.data_root.display().to_string(),
-        app.snap_date.as_deref(),
-        status,
+        app.health.as_ref().filter(|_| app.cfg.has_workspace()),
+        app.refresh.is_some(),
+        outer[1].width,
     );
     f.render_widget(Paragraph::new(ctx_line), outer[1]);
 
@@ -61,7 +55,14 @@ fn render_chat_view(f: &mut ratatui::Frame, area: Rect, app: &App) {
     // matching commands + descriptions BELOW the input line, arrow-
     // navigable, Enter runs the selected entry. Height adapts to the
     // terminal: fixed rows must never squeeze out the body/chrome.
-    let status_h: u16 = if app.status.is_some() { 1 } else { 0 };
+    // While a refresh runs (and nothing else needs the line) the status
+    // row says which step it is on - the cell may have scrolled away.
+    let busy = app.refresh.as_ref().map(|j| j.step);
+    let status_h: u16 = if app.status.is_some() || busy.is_some() {
+        1
+    } else {
+        0
+    };
     let reserved = 3 + status_h; // separator + input + caption + status
                                  // While the palette is open it outranks transcript rows (the user is
                                  // mid-command); keep >=2 body rows and give the palette the rest.
@@ -199,6 +200,8 @@ fn render_chat_view(f: &mut ratatui::Frame, area: Rect, app: &App) {
     // 5. Keybinding caption (no borders) - contextual, codex-style.
     let caption_text = if palette_h > 0 {
         "  \u{2191}\u{2193} choose  \u{00B7}  \u{21B5} run  \u{00B7}  \u{21E5} complete  \u{00B7}  esc clear"
+    } else if busy.is_some() && app.input.is_empty() && !app.turn_active {
+        "  esc cancel refresh (after the current step)  \u{00B7}  other commands still work"
     } else {
         "  \u{21B5} send  \u{00B7}  esc clear input  \u{00B7}  \u{21E5} complete  \u{00B7}  \u{2191}\u{2193} scroll  \u{00B7}  /exit to quit"
     };
@@ -210,15 +213,25 @@ fn render_chat_view(f: &mut ratatui::Frame, area: Rect, app: &App) {
 
     // 6. Status hint (when something notable happened)
     if status_h > 0 {
-        if let Some(msg) = &app.status {
-            f.render_widget(
-                Paragraph::new(Line::from(Span::styled(
-                    format!("  {}", msg),
-                    Style::default().fg(Color::Yellow),
-                ))),
-                chunks[status_idx],
-            );
-        }
+        let line = match (&app.status, busy) {
+            (Some(msg), _) => Line::from(Span::styled(
+                format!("  {}", msg),
+                Style::default().fg(Color::Yellow),
+            )),
+            (None, Some(step)) => Line::from(vec![
+                Span::styled("  \u{25D0}", Style::default().fg(Color::Cyan)),
+                Span::styled(
+                    format!(
+                        " refresh running  \u{00B7}  step {} of {}",
+                        step,
+                        moneyball_core::refresh::STEPS.len()
+                    ),
+                    Style::default().fg(Color::DarkGray),
+                ),
+            ]),
+            (None, None) => Line::from(""),
+        };
+        f.render_widget(Paragraph::new(line), chunks[status_idx]);
     }
 }
 

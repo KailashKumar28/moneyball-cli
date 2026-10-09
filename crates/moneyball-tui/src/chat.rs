@@ -83,12 +83,6 @@ pub mod cells {
     #[derive(Debug, Clone)]
     pub struct System(pub String);
 
-    /// Reserved for a future width-aware brief cell. Currently unused -
-    /// the /brief path pushes a pre-formatted ToolResult. Kept as a struct
-    /// + impl so the cell enum is stable for the future swap.
-    #[derive(Debug, Clone)]
-    pub struct BriefView;
-
     #[derive(Debug, Clone, Copy, PartialEq, Eq)]
     pub enum ToolStatus {
         Pending,
@@ -241,15 +235,13 @@ pub mod cells {
         }
     }
 
-    /// BriefView cell - renders a brief as chat lines adapted to the
-    /// current column width. At wide widths, one product per line (table).
-    /// At narrow widths, three lines per product (name, metrics, KPIs).
-    impl ChatCell for BriefView {
-        fn display_lines(&self, _width: u16) -> Vec<Line<'static>> {
-            // Stub - the live /brief path uses ToolResult with the
-            // multi-line format from format_brief_as_lines. The Brief cell
-            // will swap in once we wire a width-aware brief view.
-            vec![]
+    /// Styled paragraphs that wrap to the width (the landing).
+    #[derive(Debug, Clone)]
+    pub struct Rich(pub Vec<crate::widgets::Para>);
+
+    impl ChatCell for Rich {
+        fn display_lines(&self, width: u16) -> Vec<Line<'static>> {
+            self.0.iter().flat_map(|p| p.lines(width)).collect()
         }
     }
 }
@@ -264,11 +256,9 @@ pub enum Cell {
     ToolCall(cells::ToolCall),
     ToolResult(cells::ToolResult),
     System(cells::System),
-    /// Reserved for a future width-aware brief view cell. Currently
-    /// unused in the production path - the /brief handler pushes a
-    /// pre-formatted ToolResult. Kept as a variant so the cell enum is
-    /// stable and we can swap in a real BriefView implementation later.
-    BriefPlaceholder,
+    Rich(cells::Rich),
+    /// A /refresh run, updated in place as its steps land.
+    Refresh(Box<crate::refresh_cell::RefreshCell>),
 }
 
 impl Cell {
@@ -281,7 +271,8 @@ impl Cell {
             Cell::ToolCall(c) => Box::new(c),
             Cell::ToolResult(c) => Box::new(c),
             Cell::System(c) => Box::new(c),
-            Cell::BriefPlaceholder => Box::new(cells::System(String::new())),
+            Cell::Rich(c) => Box::new(c),
+            Cell::Refresh(c) => c,
         }
     }
 }
@@ -294,7 +285,8 @@ impl ChatCell for Cell {
             Cell::ToolCall(c) => c.display_lines(width),
             Cell::ToolResult(c) => c.display_lines(width),
             Cell::System(c) => c.display_lines(width),
-            Cell::BriefPlaceholder => vec![],
+            Cell::Rich(c) => c.display_lines(width),
+            Cell::Refresh(c) => c.display_lines(width),
         }
     }
     fn desired_height(&self, width: u16) -> u16 {
@@ -304,7 +296,8 @@ impl ChatCell for Cell {
             Cell::ToolCall(c) => c.desired_height(width),
             Cell::ToolResult(c) => c.desired_height(width),
             Cell::System(c) => c.desired_height(width),
-            Cell::BriefPlaceholder => 0,
+            Cell::Rich(c) => c.desired_height(width),
+            Cell::Refresh(c) => c.desired_height(width),
         }
     }
 }
@@ -396,15 +389,6 @@ impl ChatLog {
     }
     pub fn scroll_to_top(&mut self) {
         self.scroll = self.max_scroll.get();
-    }
-
-    /// The newest result cell of `name`, for a tool that reports while it
-    /// runs (lines appended live, its duration set when it ends).
-    pub fn tool_result_mut(&mut self, name: &str) -> Option<&mut cells::ToolResult> {
-        self.cells.iter_mut().rev().find_map(|c| match c {
-            Cell::ToolResult(r) if r.name == name => Some(r),
-            _ => None,
-        })
     }
 
     /// Flip the most recent Running tool cell to Done/Failed - the

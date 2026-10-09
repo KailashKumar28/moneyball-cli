@@ -430,11 +430,9 @@ fn status_error(status: reqwest::StatusCode, bytes: &[u8], secrets: &[String]) -
         };
         Error::CrmAuth {
             message: format!(
-                "CRM rejected the credentials (HTTP {}){} - the stored token has likely \
-                 expired. Store a fresh one with: {}",
+                "CRM rejected the credentials (HTTP {}){} - the stored token has likely expired",
                 status.as_u16(),
-                tail,
-                fix
+                tail
             ),
             fix,
         }

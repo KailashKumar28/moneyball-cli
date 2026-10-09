@@ -28,10 +28,18 @@ bottom after a release-sized batch.)
         (moneyball.run/1) written whatever happens; exit 0/2/1; MB_AGENT
         JSON. Live: the 08 Oct report written, CRM degraded on the expired
         LeadZump token with its exact fix. Typed MetaAuth / CrmAuth errors.
-  - [x] /refresh in the TUI (2026-10-09): each step shows "running", then
-        its result; outcome, fix and report close the cell. /fetch is now an
-        unlisted alias and /brief self-heals through /refresh (fetch_flow.rs
-        deleted: one pull path).
+  - [x] /refresh in the TUI (2026-10-09): a live step table drawn to the
+        board's frames, the verdict, the fix, the day's numbers and the
+        report after it; on its own channel so chat keeps working; Esc
+        stops after the step in flight; ctrl+o opens the report. /fetch is
+        an unlisted alias and /brief self-heals through /refresh.
+  - [x] Data health (2026-10-09): the context bar says the data day, the
+        CRM day and one state (fresh / stale / CRM missing / N of M
+        products / refresh failed) instead of "ready"; the landing says
+        what is wrong and the one command that fixes it, or yesterday's
+        numbers and report when all is well.
+  - [ ] /status: the last 14 data days, missed days as rows (frame R6).
+  - [ ] /schedule: the morning run via launchd, confirmed in-app (R4).
 - [ ] **Daily creative report** (plan: docs/CLOUD_PLAN.md, agreed
       2026-08-07 - report.json is the product, HTML is a renderer;
       reimplements pipeline/creative_report.py, never imports it):

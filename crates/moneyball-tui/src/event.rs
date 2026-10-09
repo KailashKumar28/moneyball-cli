@@ -37,15 +37,15 @@ pub(crate) fn event_loop(t: &mut Tui, app: &mut App) -> Result<()> {
             }
         }
         drain_stream(app);
+        crate::refresh_flow::drain(app);
     }
     Ok(())
 }
 
-/// Drain any pending worker events (LLM stream deltas, refresh steps)
-/// into the app. Runs every tick, so text appears as it arrives
-/// (~10 redraws/sec). The receiver borrow is released before each event
-/// is handled because a refresh can chain into a NEW stream (the
-/// self-healing /brief -> call_agent).
+/// Drain any pending worker events (LLM stream deltas, /report) into the
+/// app. Runs every tick, so text appears as it arrives (~10 redraws/sec).
+/// The receiver borrow is released before each event is handled, since a
+/// handler may start a NEW stream.
 fn drain_stream(app: &mut App) {
     use std::sync::mpsc::TryRecvError;
     loop {
@@ -154,22 +154,6 @@ fn drain_stream(app: &mut App) {
                 crate::creative_flow::on_report_failed(app, err, ms);
                 return;
             }
-            // Steps keep the stream open; Done/Failed close it.
-            Ok(StreamEvent::RefreshStep(line)) => crate::refresh_flow::on_refresh_step(app, line),
-            Ok(StreamEvent::RefreshDone {
-                run,
-                ms,
-                then_brief,
-            }) => {
-                app.stream = None;
-                crate::refresh_flow::on_refresh_done(app, *run, ms, then_brief);
-                return;
-            }
-            Ok(StreamEvent::RefreshFailed { err, ms }) => {
-                app.stream = None;
-                crate::refresh_flow::on_refresh_failed(app, err, ms);
-                return;
-            }
             Err(TryRecvError::Empty) => return,
             Err(TryRecvError::Disconnected) => {
                 // The worker died without a final event (panic in a
@@ -243,6 +227,12 @@ fn handle_paste(app: &mut App, text: String) {
 }
 
 fn handle_key(app: &mut App, k: KeyEvent) {
+    if k.modifiers.contains(KeyModifiers::CONTROL)
+        && k.code == KeyCode::Char('o')
+        && matches!(app.view, View::Brief)
+    {
+        return crate::refresh_flow::open_report(app);
+    }
     if k.modifiers.contains(KeyModifiers::CONTROL) && k.code == KeyCode::Char('c') {
         // Double-press to quit: a single stray Ctrl+C clears the input
         // instead of killing the session (and the wizard) instantly.
@@ -378,12 +368,10 @@ fn handle_esc(app: &mut App) {
         app.status = Some("interrupting...".into());
         return;
     }
-    // Esc during a refresh: the pull cannot be stopped mid-request; say so
-    // honestly instead of pretending (the result is discarded).
+    // Esc during /report: it can't be cut mid-write; say so honestly
+    // instead of pretending (the result is discarded).
     if app.stream.take().is_some() {
         app.chat.finish_streaming();
-        // A running Meta pull can't be cut mid-request; it finishes in the
-        // background (a refresh still writes its run record).
         app.status = Some("stopped waiting - the job finishes in the background".into());
         return;
     }
@@ -393,6 +381,10 @@ fn handle_esc(app: &mut App) {
         app.completions.clear();
         app.completion_idx = None;
         app.status = Some("input cleared".into());
+        return;
+    }
+    // A refresh stops after the step in flight (a Meta pull can't be cut).
+    if crate::refresh_flow::cancel(app) {
         return;
     }
     app.status = Some("esc clears the input. use /exit to leave moneyball.".into());

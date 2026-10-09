@@ -22,6 +22,7 @@ pub(crate) fn run(cfg: &AppConfig, force: bool, days: u32) -> Result<()> {
         trigger: Trigger::Manual,
         force,
         days,
+        cancel: None,
     };
     let agent = cfg.agent;
     let mut n = 0;
@@ -58,7 +59,14 @@ pub(crate) fn run(cfg: &AppConfig, force: bool, days: u32) -> Result<()> {
         println!("outcome: {}", outcome);
         for step in &run.steps {
             if let Some(fix) = &step.fix {
-                println!("fix: {}   then: moneyball refresh", fix);
+                // "/setup" lives inside moneyball; everything else is a shell command.
+                match fix.strip_prefix('/') {
+                    Some(cmd) => println!(
+                        "fix: open moneyball and run /{}   then: moneyball refresh",
+                        cmd
+                    ),
+                    None => println!("fix: {}   then: moneyball refresh", fix),
+                }
             }
         }
         if let Some(report) = run.artifacts.get("report") {

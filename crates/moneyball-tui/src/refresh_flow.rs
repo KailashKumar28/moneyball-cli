@@ -1,131 +1,229 @@
 //! /refresh: the daily refresh inside the TUI. A worker runs
-//! refresh::run and sends an event as each step starts and finishes, so
-//! the cell grows line by line (Meta, creatives and leads, CRM, report)
-//! instead of sitting on a spinner; the end adds the outcome, the fix and
-//! the report. /fetch is its old name, and /brief self-heals through it.
+//! refresh::run on its own channel (not the shared `app.stream` slot), so
+//! the chat still answers while it runs; each step starting and finishing
+//! updates the refresh cell in place, and Esc stops it after the step in
+//! flight. /fetch is its old name, and /brief self-heals through it.
 
-use crate::chat::{cells, Cell};
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::mpsc::{Receiver, TryRecvError};
+use std::sync::Arc;
+
+use crate::chat::Cell;
+use crate::refresh_cell::{End, RefreshCell, Row};
+use crate::widgets::day_numbers;
 use crate::*;
-use moneyball_core::refresh::{self, Options};
-use moneyball_core::schema::{Outcome, RunRecord, StepStatus, Trigger};
+use moneyball_core::refresh::{self, Options, Progress};
+use moneyball_core::schema::{RunRecord, RunStep, Trigger};
+
+/// What the worker tells the event loop.
+pub enum Ev {
+    Begin(&'static str),
+    Done(Box<RunStep>),
+    Finished { run: Box<RunRecord>, ms: u64 },
+    CouldNotStart { err: String },
+}
+
+/// A refresh in flight: its events, its cancel flag, and whether the
+/// brief runs once it lands (/brief's self-heal).
+pub struct RefreshJob {
+    rx: Receiver<Ev>,
+    cancel: Arc<AtomicBool>,
+    then_brief: bool,
+    /// The step running now (1-based), for the composer's status line.
+    pub(crate) step: usize,
+}
+
+const STOPPING: &str = "stopping after the current step...";
 
 pub(crate) fn run_refresh(app: &mut App, force: bool, then_brief: bool) {
-    if app.stream.is_some() {
-        app.status = Some("still working - esc to stop waiting, then resend".into());
+    if app.refresh.is_some() {
+        app.status = Some("a refresh is already running - its steps are above".into());
         return;
     }
-    app.chat.push(Cell::ToolCall(cells::ToolCall {
-        name: "refresh".into(),
-        args: format!("for {}", refresh::data_day_label()),
-        status: cells::ToolStatus::Running,
-    }));
-    app.chat.push(Cell::ToolResult(cells::ToolResult {
-        name: "refresh".into(),
-        output: Vec::new(),
-        success: true,
-        duration_ms: 0,
-    }));
-    let (tx, rx) = std::sync::mpsc::channel::<StreamEvent>();
+    let day = refresh::data_day_label();
+    // "Thu 08 Oct 2026" -> "Thu 08 Oct": the year is noise on screen.
+    let short = day
+        .rsplit_once(' ')
+        .map_or(day.clone(), |(d, _)| d.to_string());
+    app.chat
+        .push(Cell::Refresh(Box::new(RefreshCell::new(short))));
+    let (tx, rx) = std::sync::mpsc::channel::<Ev>();
+    let cancel = Arc::new(AtomicBool::new(false));
     let cfg = app.cfg.clone();
+    let opts = Options {
+        trigger: Trigger::Manual,
+        force,
+        days: 28,
+        cancel: Some(cancel.clone()),
+    };
     std::thread::spawn(move || {
         let started = std::time::Instant::now();
         // The token is resolved at the edge (core never reads it itself).
         let token = moneyball_core::secrets::load_meta_token();
-        let opts = Options {
-            trigger: Trigger::Manual,
-            force,
-            days: 28,
-        };
         let step_tx = tx.clone();
-        let mut n = 0;
         let result = refresh::run(&cfg, token.as_deref(), &opts, &mut |p| {
-            let line = match p {
-                refresh::Progress::Begin(name) => refresh::running_line(n + 1, name),
-                refresh::Progress::Done(step) => {
-                    n += 1;
-                    refresh::step_line(n, step)
-                }
-            };
-            let _ = step_tx.send(StreamEvent::RefreshStep(line));
+            let _ = step_tx.send(match p {
+                Progress::Begin(name) => Ev::Begin(step_name(name)),
+                Progress::Done(step) => Ev::Done(Box::new(step.clone())),
+            });
         });
-        let ms = started.elapsed().as_millis() as u64;
         let _ = tx.send(match result {
-            Ok(run) => StreamEvent::RefreshDone {
+            Ok(run) => Ev::Finished {
                 run: Box::new(run),
-                ms,
-                then_brief,
+                ms: started.elapsed().as_millis() as u64,
             },
-            Err(e) => StreamEvent::RefreshFailed {
-                err: e.to_string(),
-                ms,
-            },
+            Err(e) => Ev::CouldNotStart { err: e.to_string() },
         });
     });
-    app.stream = Some(rx);
-}
-
-pub(crate) fn on_refresh_step(app: &mut App, line: String) {
-    let Some(cell) = app.chat.tool_result_mut("refresh") else {
-        return;
-    };
-    // A finished step replaces its own "running" line.
-    let number = line.split_whitespace().next();
-    if cell
-        .output
-        .last()
-        .is_some_and(|l| l.ends_with("running") && l.split_whitespace().next() == number)
-    {
-        cell.output.pop();
-    }
-    cell.output
-        .extend(line.lines().map(|l| l.trim_start().to_string()));
-}
-
-pub(crate) fn on_refresh_done(app: &mut App, run: RunRecord, ms: u64, then_brief: bool) {
-    app.chat.finalize_tool(run.outcome != Outcome::Failed);
-    let mut tail = vec![String::new()];
-    tail.push(match run.outcome {
-        Outcome::Ok => "outcome: ok".to_string(),
-        Outcome::Failed => {
-            "outcome: failed - nothing new was written; your last good data is untouched".into()
-        }
-        _ => {
-            let missing: Vec<&str> = run
-                .steps
-                .iter()
-                .filter(|s| matches!(s.status, StepStatus::Failed | StepStatus::Partial))
-                .map(|s| s.name.as_str())
-                .collect();
-            format!("outcome: degraded ({})", missing.join(", "))
-        }
+    app.refresh = Some(RefreshJob {
+        rx,
+        cancel,
+        then_brief,
+        step: 1,
     });
-    for fix in run.steps.iter().filter_map(|s| s.fix.as_ref()) {
-        tail.push(format!("fix: {}  (in a shell), then /refresh", fix));
+}
+
+/// Esc with nothing else to stop: finish the step in flight, skip the
+/// rest. False when no refresh is running.
+pub(crate) fn cancel(app: &mut App) -> bool {
+    let Some(job) = &app.refresh else {
+        return false;
+    };
+    job.cancel.store(true, Ordering::SeqCst);
+    app.status = Some(STOPPING.into());
+    true
+}
+
+/// Apply every pending worker event; runs each tick next to drain_stream.
+pub(crate) fn drain(app: &mut App) {
+    loop {
+        let ev = match &app.refresh {
+            Some(job) => job.rx.try_recv(),
+            None => return,
+        };
+        match ev {
+            Ok(Ev::Begin(name)) => {
+                if let Some(job) = &mut app.refresh {
+                    job.step = refresh::STEPS
+                        .iter()
+                        .position(|s| *s == name)
+                        .map_or(1, |i| i + 1);
+                }
+                with_cell(app, |c| c.set(name, Row::Running));
+            }
+            Ok(Ev::Done(step)) => {
+                let name = step.name.clone();
+                with_cell(app, |c| c.set(&name, Row::Done(*step)));
+            }
+            Ok(Ev::Finished { run, ms }) => {
+                let then_brief = app.refresh.take().is_some_and(|j| j.then_brief);
+                return finished(app, *run, ms, then_brief);
+            }
+            Ok(Ev::CouldNotStart { err }) => {
+                app.refresh = None;
+                return with_cell(app, |c| c.end = Some(End::CouldNotStart(err)));
+            }
+            Err(TryRecvError::Empty) => return,
+            Err(TryRecvError::Disconnected) => {
+                // The worker died without its last event (a panic): say so,
+                // never leave the cell spinning.
+                app.refresh = None;
+                return with_cell(app, |c| {
+                    c.end = Some(End::CouldNotStart(
+                        "the refresh stopped unexpectedly; its run record says how far it got"
+                            .into(),
+                    ))
+                });
+            }
+        }
     }
-    if let Some(report) = run.artifacts.get("report") {
-        tail.push(format!("report: {}", report));
+}
+
+fn finished(app: &mut App, run: RunRecord, ms: u64, then_brief: bool) {
+    let last_good = app
+        .health
+        .as_ref()
+        .and_then(|h| h.data_day())
+        .map(|d| d.format("%d %b").to_string());
+    let daily = run
+        .artifacts
+        .contains_key("report")
+        .then(|| moneyball_core::health::daily_report(&app.cfg, &run.date))
+        .flatten();
+    let report = daily.as_ref().map(|(_, html)| html.display().to_string());
+    let numbers = daily.as_ref().map(|(r, _)| day_numbers(r));
+    if let Some((_, html)) = daily {
+        app.report_path = Some(html);
     }
-    if let Some(cell) = app.chat.tool_result_mut("refresh") {
-        cell.duration_ms = ms;
-        cell.output.extend(tail);
+    with_cell(app, |c| {
+        c.end = Some(End::Finished {
+            run: Box::new(run),
+            ms,
+            numbers,
+            report,
+            last_good,
+        })
+    });
+    if app.status.as_deref() == Some(STOPPING) {
+        app.status = None;
     }
     // The bar and the brief read the new snapshot from here on.
     app.load_brief();
-    // Only with a snapshot, so a failed pull never loops back into /brief.
+    // Only with a snapshot, so a failed pull never loops back into /brief;
+    // and never over a chat answer that is still streaming.
     if then_brief && app.brief.is_some() {
-        crate::commands::run_brief(app);
+        if app.stream.is_some() {
+            app.status = Some("the data is in - /brief reads it".into());
+        } else {
+            crate::commands::run_brief(app);
+        }
     }
 }
 
-pub(crate) fn on_refresh_failed(app: &mut App, err: String, ms: u64) {
-    app.chat.finalize_tool(false);
-    if let Some(cell) = app.chat.tool_result_mut("refresh") {
-        cell.duration_ms = ms;
-        cell.output.push(err.clone());
+/// The newest refresh cell (a /clear mid-run leaves none: nothing to draw).
+fn with_cell(app: &mut App, f: impl FnOnce(&mut RefreshCell)) {
+    let cell = app.chat.cells.iter_mut().rev().find_map(|c| match c {
+        Cell::Refresh(r) => Some(r),
+        _ => None,
+    });
+    if let Some(c) = cell {
+        f(c);
     }
-    // Failed tool cells are never the last word (ARCHITECTURE section 5).
-    app.chat.push(Cell::AssistantText(cells::AssistantText {
-        text: format!("the refresh could not start: {}", err),
-        streaming: false,
-    }));
+}
+
+/// Core's step name as the static one the cell keys its rows by.
+fn step_name(name: &str) -> &'static str {
+    refresh::STEPS
+        .iter()
+        .find(|s| **s == name)
+        .copied()
+        .unwrap_or("meta")
+}
+
+/// Ctrl+O: open the newest daily report in the default browser.
+pub(crate) fn open_report(app: &mut App) {
+    let Some(path) = app.report_path.clone() else {
+        app.status = Some("no report yet - /refresh writes one".into());
+        return;
+    };
+    let opener = if cfg!(target_os = "macos") {
+        "open"
+    } else {
+        "xdg-open"
+    };
+    let name = path
+        .file_name()
+        .map_or(String::new(), |n| n.to_string_lossy().into_owned());
+    // `open` hands the file to the browser and returns at once; waiting
+    // for it reaps the child (a bare spawn would leave a zombie behind).
+    let opened = std::process::Command::new(opener)
+        .arg(&path)
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .status();
+    app.status = Some(match opened {
+        Ok(s) if s.success() => format!("opened {}", name),
+        Ok(s) => format!("could not open {} ({})", path.display(), s),
+        Err(e) => format!("could not open {}: {}", path.display(), e),
+    });
 }

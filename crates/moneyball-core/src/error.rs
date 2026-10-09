@@ -39,7 +39,7 @@ pub enum Error {
 
     /// The CRM refused its credentials; `fix` is the one command that
     /// stores fresh ones (it names the spec's real secret).
-    #[error("crm auth: {message}")]
+    #[error("crm auth: {message}. Store a fresh one with: {fix}")]
     CrmAuth { message: String, fix: String },
 
     #[error("secrets: {0}")]
@@ -68,10 +68,23 @@ impl Error {
         }
     }
 
-    /// The one command that fixes it, when one exists today.
+    /// The sentence alone - no "meta auth:" style prefix, no fix - for a
+    /// record that carries the kind and the fix apart (a run step).
+    pub fn reason(&self) -> String {
+        match self {
+            Error::CrmAuth { message, .. } | Error::MetaAuth(message) | Error::Meta(message) => {
+                message.clone()
+            }
+            e => e.to_string(),
+        }
+    }
+
+    /// The one command that fixes it, when one exists today. A leading
+    /// "/" means a command inside moneyball, anything else a shell command.
     pub fn fix(&self) -> Option<String> {
         match self {
             Error::CrmAuth { fix, .. } => Some(fix.clone()),
+            Error::MetaAuth(_) => Some("/setup".into()),
             _ => None,
         }
     }
