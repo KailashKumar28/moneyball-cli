@@ -2,13 +2,14 @@
 //! configured LLM's reading of them. Split from commands.rs (size cap);
 //! the agent's `brief` tool prints the same lines.
 
-use crate::commands::{app_state_block, call_agent};
+use crate::commands::{app_state_block, call_agent, typed_tool_turn};
 use crate::*;
 use moneyball_core::brief;
+use moneyball_core::text::commas;
 
 /// System prompt for the brief assistant. Persona + output contract.
 pub(crate) const BRIEF_SYSTEM_PROMPT: &str = "You are moneyball's portfolio advisor for Meta ads.\n\
-You will be given 7-day per-product numbers (spend, leads, qualified leads, qualified-per-day, Rs/qualified, L->Q %, goal, gap) plus portfolio feasibility math.\n\
+The user ran /brief: the brief tool's result holds the 7-day per-product numbers (spend, leads, qualified leads, qualified-per-day, Rs/qualified, L->Q %, gap to goal) plus portfolio feasibility math. If it carries a staleness warning, open with it.\n\
 Produce a concise commentary that:\n\
   1. Calls out which products are at/over goal and which are under (largest gap first).\n\
   2. Identifies the best and worst Rs/qualified and what that implies for budget reallocation.\n\
@@ -22,25 +23,18 @@ Keep it tight - 5-8 sentences, no preamble, no bullets unless the user asks.";
 pub(crate) fn run_brief(app: &mut App) {
     use crate::chat::{cells, Cell};
     let started = std::time::Instant::now();
-    app.chat.push(Cell::AssistantText(cells::AssistantText {
-        text: "loading portfolio snapshot...".into(),
-        streaming: false,
-    }));
     app.load_brief();
     if let Some(b) = &app.brief {
         let mut out = format_brief_as_lines(b);
-        let mut user_prompt = build_brief_prompt(b);
         if let Some(note) = &app.crm_note {
             out.push(format!("warn: {}", note));
-            user_prompt.push_str(&format!(
-                "\n\nIMPORTANT: {}. Do not diagnose lead quality from l/q/v.",
-                note
-            ));
         }
+        let output = brief_text(b, app.crm_note.as_deref());
         app.chat
             .push_tool("brief", "", out, true, started.elapsed().as_millis() as u64);
         let sys = format!("{}\n\n{}", BRIEF_SYSTEM_PROMPT, app_state_block(app));
-        call_agent(app, &sys, &user_prompt);
+        let turn = typed_tool_turn(app, "/brief", "brief", serde_json::json!({}), output);
+        call_agent(app, &sys, turn);
     } else if moneyball_core::secrets::load_meta_token().is_some() && app.cfg.has_workspace() {
         // No snapshot but we CAN get one ourselves. Agent populates its
         // own data - no dead ends.
@@ -74,84 +68,28 @@ your own pipeline at\n\n    {}/<YYYY-MM-DD>/\n\nand /brief reads whatever it wri
     }
 }
 
-/// Build the user-prompt context from the deterministic brief numbers.
-/// The LLM sees exactly the numbers that appear in the chat tool cell.
-pub(crate) fn build_brief_prompt(b: &brief::ProductRowsAndFeasibility) -> String {
-    let mut s = String::new();
-    s.push_str(&format!(
-        "Snapshot portfolio dated {} (7d window). Goal = qualified leads per day.\n",
-        b.snapshot_date
-    ));
-    if let Some(warn) = brief::staleness_warning(&b.snapshot_date) {
-        s.push_str(&format!(
-            "{}\nOpen the commentary by telling the user this.\n",
-            warn
+/// What the brief tool returns: the lines the cell shows, and the CRM
+/// state the model must not read past.
+pub(crate) fn brief_text(b: &brief::ProductRowsAndFeasibility, crm_note: Option<&str>) -> String {
+    let mut out = format_brief_as_lines(b).join("\n");
+    if let Some(note) = crm_note {
+        out.push_str(&format!(
+            "\nIMPORTANT: {}. Do not diagnose lead quality from l/q/v.",
+            note
         ));
     }
-    s.push('\n');
-    for r in &b.rows {
-        if !b.has_crm {
-            s.push_str(&format!(
-                "- {}: spend Rs.{}/day, m={}, CRM leads and qualified unknown\n",
-                r.product, r.spend_per_day, r.m7d
-            ));
-            continue;
-        }
-        let l_to_q = r
-            .l_to_q
-            .map(|x| format!("{:.1}%", x))
-            .unwrap_or_else(|| "-".into());
-        let rs_per_q = r
-            .rs_per_q
-            .map(|x| format!("Rs.{}", x))
-            .unwrap_or_else(|| "-".into());
-        s.push_str(&format!(
-            "- {}: spend Rs.{}/day, m={}, l={}, q={} ({:.2}/day), {}, L->Q {}, goal={}, gap={:.1}\n",
-            r.product,
-            r.spend_per_day,
-            r.m7d,
-            r.l7d,
-            r.q7d,
-            r.q_per_day,
-            rs_per_q,
-            l_to_q,
-            r.goal,
-            r.gap,
-        ));
-    }
-    let f = &b.feasibility;
-    if !b.has_crm {
-        s.push_str(&format!(
-            "\nNo CRM data in this snapshot: qualified per day, Rs/q and the gap to the \
-             {:.0}/day goal are unknown, not zero.\n\nWrite the commentary.",
-            f.tot_goal_per_day
-        ));
-        return s;
-    }
-    s.push_str(&format!(
-        "\nPortfolio: {:.1} q/day at Rs.{}/day = Rs.{}/q. Goal: {:.0}/day.\n",
-        f.tot_q_per_day, f.tot_spend_per_day, f.cur_rpq, f.tot_goal_per_day
-    ));
-    if let Some(req) = f.required_at_cur {
-        s.push_str(&format!(
-            "To hit goal at current efficiency: Rs.{}/day ({:.1}x today).\n",
-            req,
-            req as f64 / f.tot_spend_per_day.max(1) as f64
-        ));
-    }
-    if let (Some(b), Some(req)) = (f.best_rpq, f.required_at_best) {
-        s.push_str(&format!(
-            "To hit goal at best-observed Rs.{}/q: Rs.{}/day ({:.1}x today).\n",
-            b,
-            req,
-            req as f64 / f.tot_spend_per_day.max(1) as f64
-        ));
-    }
-    if !f.open_debt.is_empty() {
-        s.push_str(&format!("Open setup debt: {}\n", f.open_debt.join(", ")));
-    }
-    s.push_str("\nWrite the commentary.");
-    s
+    out
+}
+
+/// The brief tool's output for a snapshot.
+pub(crate) fn brief_output(
+    cfg: &moneyball_core::AppConfig,
+    snap: &moneyball_core::Snapshot,
+) -> String {
+    let history = brief::load_history(&cfg.history_dir().join("scoreboard.csv"));
+    let b = brief::compute(snap, cfg, &history);
+    let note = moneyball_core::crm::status::CrmHealth::of(cfg, snap).note();
+    brief_text(&b, note.as_deref())
 }
 
 pub(crate) fn format_brief_as_lines(b: &brief::ProductRowsAndFeasibility) -> Vec<String> {
@@ -170,14 +108,15 @@ pub(crate) fn format_brief_as_lines(b: &brief::ProductRowsAndFeasibility) -> Vec
             .unwrap_or_else(|| "-".into());
         let rs_per_q = r
             .rs_per_q
-            .map(|x| format!("Rs.{}/q", x))
+            .map(|x| format!("Rs.{}/q", commas(x)))
             .unwrap_or_else(|| "-".into());
         out.push(format!("  > {}", r.product));
         if !b.has_crm {
             // Unknown, not zero: no CRM data means no leads or qualified.
             out.push(format!(
                 "    spend Rs.{}/d  meta {}  crm -  qual -",
-                r.spend_per_day, r.m7d
+                commas(r.spend_per_day),
+                r.m7d
             ));
             continue;
         }
@@ -185,7 +124,12 @@ pub(crate) fn format_brief_as_lines(b: &brief::ProductRowsAndFeasibility) -> Vec
         // the chat cell (user feedback: "this is not so readable").
         out.push(format!(
             "    spend Rs.{}/d  meta {}  crm {}  qual {} ({:.2}/d)  {}",
-            r.spend_per_day, r.m7d, r.l7d, r.q7d, r.q_per_day, rs_per_q
+            commas(r.spend_per_day),
+            r.m7d,
+            r.l7d,
+            r.q7d,
+            r.q_per_day,
+            rs_per_q
         ));
         out.push(format!(
             "    L->Q {:>5}   gap {:>5}",
@@ -201,20 +145,23 @@ pub(crate) fn format_brief_as_lines(b: &brief::ProductRowsAndFeasibility) -> Vec
     }
     out.push(format!(
         "FEASIBILITY  {:.1} q/day @ Rs.{}/day = Rs.{}/q  -  goal {:.0}/day",
-        f.tot_q_per_day, f.tot_spend_per_day, f.cur_rpq, f.tot_goal_per_day
+        f.tot_q_per_day,
+        commas(f.tot_spend_per_day),
+        commas(f.cur_rpq),
+        f.tot_goal_per_day
     ));
     if let Some(req) = f.required_at_cur {
         out.push(format!(
             "  required @ current:  Rs.{}/day ({:.1}x)",
-            req,
+            commas(req),
             req as f64 / f.tot_spend_per_day.max(1) as f64
         ));
     }
     if let (Some(b), Some(req)) = (f.best_rpq, f.required_at_best) {
         out.push(format!(
             "  required @ best Rs.{}/q: Rs.{}/day ({:.1}x)",
-            b,
-            req,
+            commas(b),
+            commas(req),
             req as f64 / f.tot_spend_per_day.max(1) as f64
         ));
     }

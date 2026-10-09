@@ -215,11 +215,16 @@ bottom after a release-sized batch.)
       split `submit()` and bring commands.rs (~800) / setup/mod.rs
       (~980) / llm.rs back under the 400-line cap; snap_dir() at all
       call sites; module-doc drift (tools.rs done, check others);
-      /brief double-context (short user item + let the loop call the
-      brief tool); remaining P2 hygiene (ASCII strings, busy indicator,
+      remaining P2 hygiene (ASCII strings, busy indicator,
       IST vs Local snapshot dating, query_params support, usage/cost
       parsing, render examples for new cells). Atomic config.json and
       crm.toml writes: done 2026-10-09.
+
+- [x] **/brief and /funnel open as tool rounds** (2026-10-09): the turn
+      is the typed command, the tool call it stands for and that tool's
+      output, so the model never re-calls the tool (it did: the brief
+      printed twice, 6.5s -> 3.8s). One output per tool for both paths;
+      the funnel tool takes `by`; build_brief_prompt is gone.
 
 - [ ] **/ledger**: wire the prediction ledger view (stub today). Append
       predictions to `ledger.jsonl`, show hit-rate over time.

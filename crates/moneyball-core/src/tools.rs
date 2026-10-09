@@ -60,19 +60,25 @@ pub fn brief_tool() -> Tool {
     )
 }
 
-/// `funnel` - the per-adset 7-day performance table for one product.
-/// The description must match what the handler actually returns
-/// (funnel::table), or the model plans around data it never gets.
+/// `funnel` - the 7-day performance table for one product, per adset
+/// unless asked per campaign or ad. The description must match what the
+/// handler actually returns (funnel::table), or the model plans around
+/// data it never gets.
 pub fn funnel_tool() -> Tool {
     Tool::new(
         "funnel",
-        "Return the per-adset 7-day table for ONE product: spend, Meta leads (m), cost per lead, CRM leads (l), qualified (q), visits (v), Rs per qualified, L->Q %, kill-table eligibility (kill=true means spend cleared the kill threshold; never recommend killing rows marked immature or learning), and learning status. Use this when the user asks why a product is not converting, which adsets to scale or kill, or about lead quality within a product.",
+        "Return the 7-day table for ONE product, one row per adset (or per campaign / ad when asked): spend, Meta leads (m), cost per lead, CRM leads (l), qualified (q), visits (v), Rs per qualified, L->Q %, kill-table eligibility (kill=true means spend cleared the kill threshold; never recommend killing rows marked immature or learning), and learning status (adsets only). Use this when the user asks why a product is not converting, which adsets to scale or kill, or about lead quality within a product.",
         json!({
             "type": "object",
             "properties": {
                 "product": {
                     "type": "string",
                     "description": "Product name exactly as it appears in config.json."
+                },
+                "by": {
+                    "type": "string",
+                    "enum": ["campaign", "adset", "ad"],
+                    "description": "One row per campaign, adset (the default) or ad."
                 }
             },
             "required": ["product"]

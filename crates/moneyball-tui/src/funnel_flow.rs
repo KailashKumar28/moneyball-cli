@@ -1,38 +1,61 @@
 //! /funnel flow - product resolution, funnel table cell, and the LLM
 //! commentary hand-off. Split from commands.rs (size cap).
 
-use crate::commands::{app_state_block, call_agent, FUNNEL_SYSTEM_PROMPT};
+use crate::commands::{app_state_block, call_agent, typed_tool_turn, FUNNEL_SYSTEM_PROMPT};
 use crate::*;
+use moneyball_core::funnel::{self, By};
+
+/// A product name as the user or the model wrote it ("Namma Mane",
+/// lowercase) resolved to the configured one.
+pub(crate) fn resolve(cfg: &moneyball_core::AppConfig, name: &str) -> Result<String, String> {
+    let products = cfg
+        .workspace
+        .as_ref()
+        .map(|w| w.products.as_slice())
+        .unwrap_or_default();
+    moneyball_core::product::resolve_product(name, products).map(String::from)
+}
+
+/// What the funnel tool returns: the full table the model reasons from
+/// (ids, kill multiple, maturity) and the pre-computed CPL order.
+pub(crate) fn funnel_output(
+    cfg: &moneyball_core::AppConfig,
+    snap: &moneyball_core::Snapshot,
+    product: &str,
+    by: By,
+) -> String {
+    let rows = funnel::compute(snap, cfg, product, 7, by);
+    let rank = funnel::cpl_ranking_for_model(&rows)
+        .map(|r| format!("\n{}", r))
+        .unwrap_or_default();
+    format!(
+        "FUNNEL {} - by {} - 7d - snapshot {}\n{}{}",
+        product,
+        by.name(),
+        snap.date,
+        funnel::table(&rows),
+        rank
+    )
+}
 
 pub(crate) fn run_funnel(app: &mut App, arg: &str) {
     use crate::chat::cells;
     use crate::chat::Cell;
     let started = std::time::Instant::now();
-    let products: Vec<String> = app
-        .cfg
-        .workspace
-        .as_ref()
-        .map(|w| w.products.iter().map(|p| p.name.clone()).collect())
-        .unwrap_or_default();
-
     // Trailing token may be the level; everything before it is the
     // product (product names contain spaces).
-    let (product, by) = match arg.rsplit_once(' ') {
-        Some((head, lvl)) if ["campaign", "adset", "ad"].contains(&lvl) => {
-            (head.trim().to_string(), lvl.to_string())
-        }
-        _ => (arg.to_string(), "adset".to_string()),
+    let (name, by) = match arg.rsplit_once(' ') {
+        Some((head, lvl)) if ["campaign", "adset", "ad"].contains(&lvl) => (head.trim(), lvl),
+        _ => (arg, "adset"),
     };
-    // Fuzzy resolve: the advisor's shorthand ("Namma Mane") and a
-    // user's lowercase both land on the configured name.
-    let product = match app.cfg.workspace.as_ref() {
-        Some(w) => match moneyball_core::product::resolve_product(&product, &w.products) {
-            Ok(name) => name.to_string(),
-            Err(_) => product,
-        },
-        None => product,
-    };
-    if product.is_empty() || !products.iter().any(|p| p == &product) {
+    let by = By::parse(by).expect("level pre-validated");
+    let Ok(product) = resolve(&app.cfg, name) else {
+        let products: Vec<&str> = app
+            .cfg
+            .workspace
+            .as_ref()
+            .map(|w| w.products.iter().map(|p| p.name.as_str()).collect())
+            .unwrap_or_default();
         app.chat.push(Cell::AssistantText(cells::AssistantText {
             text: format!(
                 "usage: /funnel <product> [campaign|adset|ad]\nconfigured products: {}",
@@ -45,7 +68,7 @@ pub(crate) fn run_funnel(app: &mut App, arg: &str) {
             streaming: false,
         }));
         return;
-    }
+    };
 
     let snap = match app
         .cfg
@@ -61,31 +84,17 @@ pub(crate) fn run_funnel(app: &mut App, arg: &str) {
             return;
         }
     };
-    let level = moneyball_core::funnel::By::parse(&by).expect("level pre-validated");
-    let rows = moneyball_core::funnel::compute(&snap, &app.cfg, &product, 7, level);
+    // The cell shows the view a person reads; the model gets the full
+    // table as the funnel tool's output.
+    let rows = funnel::compute(&snap, &app.cfg, &product, 7, by);
     let mut lines = vec![format!(
         "FUNNEL {} - by {} - 7d - snapshot {}",
-        product, by, snap.date
+        product,
+        by.name(),
+        snap.date
     )];
-    // The cell shows the view a person reads; the model gets the full
-    // table (ids, kill multiple, maturity) it reasons from.
-    let mut full = lines.clone();
-    for (out, text, rank) in [
-        (
-            &mut lines,
-            moneyball_core::funnel::view(&rows),
-            moneyball_core::funnel::cpl_ranking(&rows),
-        ),
-        (
-            &mut full,
-            moneyball_core::funnel::table(&rows),
-            moneyball_core::funnel::cpl_ranking_for_model(&rows),
-        ),
-    ] {
-        out.extend(text.lines().map(String::from));
-        out.extend(rank);
-    }
-    let table_text = full.join("\n");
+    lines.extend(funnel::view(&rows).lines().map(String::from));
+    lines.extend(funnel::cpl_ranking(&rows));
     app.chat.push_tool(
         "funnel",
         arg,
@@ -95,10 +104,8 @@ pub(crate) fn run_funnel(app: &mut App, arg: &str) {
     );
 
     let sys = format!("{}\n\n{}", FUNNEL_SYSTEM_PROMPT, app_state_block(app));
-    let user = format!(
-        "Here is the 7-day per-{} funnel for {} (kill = spend passed the kill table \
-         with <=2 qualified; immature = leads still inside the 72h maturation lag):\n\n{}",
-        by, product, table_text
-    );
-    call_agent(app, &sys, &user);
+    let output = funnel_output(&app.cfg, &snap, &product, by);
+    let args = serde_json::json!({ "product": product, "by": by.name() });
+    let turn = typed_tool_turn(app, &format!("/funnel {}", arg), "funnel", args, output);
+    call_agent(app, &sys, turn);
 }

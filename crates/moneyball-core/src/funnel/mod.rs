@@ -40,6 +40,13 @@ impl By {
             ))),
         }
     }
+    pub fn name(&self) -> &'static str {
+        match self {
+            By::Campaign => "campaign",
+            By::Adset => "adset",
+            By::Ad => "ad",
+        }
+    }
     fn ids<'a>(&self, r: &'a crate::snapshot::AdsDailyRow) -> (&'a str, &'a str) {
         match self {
             By::Campaign => (&r.campaign_id, &r.campaign_name),
@@ -210,14 +217,12 @@ pub fn run(cfg: &AppConfig, product: &str, by: &str, days: u32, date: Option<&st
     };
     let product = product.as_str();
     let rows = compute(&snap, cfg, product, days, by);
-    let by_name = match by {
-        By::Campaign => "campaign",
-        By::Adset => "adset",
-        By::Ad => "ad",
-    };
     println!(
         "FUNNEL {} - by {} - {}d - snapshot {}",
-        product, by_name, days, snap.date
+        product,
+        by.name(),
+        days,
+        snap.date
     );
     // MB_AGENT=1 is a machine reading: the full table, the model's ranking.
     if cfg.agent {

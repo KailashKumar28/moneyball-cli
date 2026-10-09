@@ -3,8 +3,6 @@
 
 use crate::*;
 
-use moneyball_core::brief::{self};
-
 // Two chrono types collide on import name; alias the plain Utc.
 
 // CLAUDE.md hard rule: only commands with real handlers may appear
@@ -284,7 +282,8 @@ You are given a per-entity funnel table (spend, Meta leads m, CRM leads l, quali
 visits v, Rs/qualified, kill flags). Give a per-entity read: SCALE (efficient + sufficient \
 volume), KILL (kill flag true and not immature), or WAIT (immature, learning, or not enough \
 spend). Cite the numbers that justify each call. Never recommend killing an immature or \
-learning entity. 3-8 sentences, no preamble.";
+learning entity. kill = spend passed the kill table with <=2 qualified; immature = leads \
+still inside the 72h maturation lag. 3-8 sentences, no preamble.";
 
 /// Live app state injected into every LLM system prompt so the model
 /// never hallucinates about setup/data (codex + claude code both ground
@@ -345,7 +344,38 @@ names EXACTLY as listed - suggested commands must run verbatim when typed.\n",
 /// the success case, or `None` if the call could not be made (no
 /// provider configured, runtime init failed, etc.). Used by /brief
 /// AND by the free-form chat fallback.
-pub(crate) fn call_agent(app: &mut App, system: &str, user_prompt: &str) {
+/// The turn a typed command opens: what the user typed, then the tool
+/// call it stands for with that tool's output, so the model reads the
+/// numbers as a tool result and never calls the tool again for them.
+pub(crate) fn typed_tool_turn(
+    app: &App,
+    typed: &str,
+    tool: &str,
+    args: serde_json::Value,
+    output: String,
+) -> Vec<moneyball_core::agent::Item> {
+    use moneyball_core::agent::Item;
+    let call_id = format!("typed-{}", app.history.len());
+    vec![
+        Item::User {
+            text: typed.to_string(),
+        },
+        Item::ToolCall {
+            call_id: call_id.clone(),
+            name: tool.to_string(),
+            args,
+        },
+        Item::ToolOutput {
+            call_id,
+            output,
+            is_error: false,
+        },
+    ]
+}
+
+/// Record `turn` (the user's item, and any tool round a typed command
+/// stands for) and run the agent on it.
+pub(crate) fn call_agent(app: &mut App, system: &str, turn: Vec<moneyball_core::agent::Item>) {
     use crate::chat::cells;
     use crate::chat::Cell;
     let (provider_id, model_providers, model) = match app.cfg.workspace.as_ref() {
@@ -385,9 +415,9 @@ pub(crate) fn call_agent(app: &mut App, system: &str, user_prompt: &str) {
             .note("still responding - wait for it to finish (esc interrupts), then resend");
         return;
     }
-    app.record(moneyball_core::agent::Item::User {
-        text: user_prompt.to_string(),
-    });
+    for item in turn {
+        app.record(item);
+    }
     app.chat.push(Cell::AssistantText(cells::AssistantText {
         text: String::new(),
         streaming: true,
@@ -450,51 +480,17 @@ impl SnapshotTools {
 impl moneyball_core::agent::ToolExec for SnapshotTools {
     fn run(&self, name: &str, args: &serde_json::Value) -> Result<String, String> {
         match name {
-            "brief" => {
-                let snap = self.snap()?;
-                let history = brief::load_history(&self.cfg.history_dir().join("scoreboard.csv"));
-                let b = brief::compute(&snap, &self.cfg, &history);
-                let mut out = crate::brief_flow::format_brief_as_lines(&b).join("\n");
-                if let Some(note) =
-                    moneyball_core::crm::status::CrmHealth::of(&self.cfg, &snap).note()
-                {
-                    out.push_str(&format!(
-                        "\nIMPORTANT: {}. Do not diagnose lead quality from l/q/v.",
-                        note
-                    ));
-                }
-                Ok(out)
-            }
+            "brief" => Ok(crate::brief_flow::brief_output(&self.cfg, &self.snap()?)),
             "funnel" => {
-                // Same resolver as typed /funnel and the CLI: the model's
-                // shorthand ("Namma Mane") must resolve like a user's.
-                let products = self
-                    .cfg
-                    .workspace
-                    .as_ref()
-                    .map(|w| w.products.as_slice())
-                    .unwrap_or_default();
-                let product = moneyball_core::product::resolve_product(
-                    args.get("product").and_then(|p| p.as_str()).unwrap_or(""),
-                    products,
-                )?;
-                let snap = self.snap()?;
-                let rows = moneyball_core::funnel::compute(
-                    &snap,
+                let arg = |k: &str| args.get(k).and_then(|v| v.as_str());
+                let by = moneyball_core::funnel::By::parse(arg("by").unwrap_or("adset"))
+                    .map_err(|e| e.reason())?;
+                let product = crate::funnel_flow::resolve(&self.cfg, arg("product").unwrap_or(""))?;
+                Ok(crate::funnel_flow::funnel_output(
                     &self.cfg,
-                    product,
-                    7,
-                    moneyball_core::funnel::By::Adset,
-                );
-                let rank = moneyball_core::funnel::cpl_ranking_for_model(&rows)
-                    .map(|r| format!("\n{}", r))
-                    .unwrap_or_default();
-                Ok(format!(
-                    "FUNNEL {} - by adset - 7d - snapshot {}\n{}{}",
-                    product,
-                    snap.date,
-                    moneyball_core::funnel::table(&rows),
-                    rank
+                    &self.snap()?,
+                    &product,
+                    by,
                 ))
             }
             other => Err(format!(
@@ -516,7 +512,10 @@ fn run_freeform(app: &mut App, question: &str) {
     // The agent loop pulls numbers itself via the brief/funnel tools -
     // no pre-stuffed context, the question goes in verbatim.
     let sys = format!("{}\n\n{}", AGENT_SYSTEM_PROMPT, app_state_block(app));
-    call_agent(app, &sys, question);
+    let turn = vec![moneyball_core::agent::Item::User {
+        text: question.to_string(),
+    }];
+    call_agent(app, &sys, turn);
 }
 
 // ---------- setup-wizard keys ----------
