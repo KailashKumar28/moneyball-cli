@@ -49,8 +49,10 @@ bottom after a release-sized batch.)
         fired live, recorded trigger schedule, removed by /schedule off.
   - [x] /quit mid-refresh asks once (2026-10-09); a command that cannot run
         now answers in the transcript, never leaves its prompt bare.
-  - [ ] Follow-ups: the funnel table is ~150 columns, so at 140 its rows
-        wrap; token expiry for /status ("Meta valid to ...") waits on the
+  - [x] Funnel view (2026-10-09): people get frame S4's table (name, spend,
+        meta, cpl, crm, qual, rs_per_q, one verdict) in ~85 columns; the
+        model keeps the full table with ids and kill flags.
+  - [ ] Token expiry for /status ("Meta valid to ...") waits on the
         connect work.
 - [ ] **Daily creative report** (plan: docs/CLOUD_PLAN.md, agreed
       2026-08-07 - report.json is the product, HTML is a renderer;

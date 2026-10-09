@@ -67,15 +67,25 @@ pub(crate) fn run_funnel(app: &mut App, arg: &str) {
         "FUNNEL {} - by {} - 7d - snapshot {}",
         product, by, snap.date
     )];
-    lines.extend(
-        moneyball_core::funnel::table(&rows)
-            .lines()
-            .map(String::from),
-    );
-    if let Some(rank) = moneyball_core::funnel::cpl_ranking(&rows) {
-        lines.push(rank);
+    // The cell shows the view a person reads; the model gets the full
+    // table (ids, kill multiple, maturity) it reasons from.
+    let mut full = lines.clone();
+    for (out, text, rank) in [
+        (
+            &mut lines,
+            moneyball_core::funnel::view(&rows),
+            moneyball_core::funnel::cpl_ranking(&rows),
+        ),
+        (
+            &mut full,
+            moneyball_core::funnel::table(&rows),
+            moneyball_core::funnel::cpl_ranking_for_model(&rows),
+        ),
+    ] {
+        out.extend(text.lines().map(String::from));
+        out.extend(rank);
     }
-    let table_text = lines.join("\n");
+    let table_text = full.join("\n");
     app.chat.push_tool(
         "funnel",
         arg,

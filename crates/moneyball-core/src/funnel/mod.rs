@@ -12,7 +12,7 @@ use crate::error::{Error, Result};
 use crate::snapshot::Snapshot;
 
 pub mod print;
-pub use print::table;
+pub use print::{table, verdict, view};
 
 /// Spend as a multiple of target Rs/qualified at 0/1/2 qualified leads
 /// before an entity becomes a kill candidate (mb.py KILL_TABLE).
@@ -219,7 +219,7 @@ pub fn run(cfg: &AppConfig, product: &str, by: &str, days: u32, date: Option<&st
         "FUNNEL {} - by {} - {}d - snapshot {}",
         product, by_name, days, snap.date
     );
-    print!("{}", table(&rows));
+    print!("{}", view(&rows));
     if let Some(rank) = cpl_ranking(&rows) {
         println!("{}", rank);
     }
@@ -239,6 +239,20 @@ mod tests;
 /// "mid-pack" against Rs.1,216 "cheapest" - bug mb-20260808T143646Z-rrrr).
 /// None when fewer than two rows have a CPL.
 pub fn cpl_ranking(rows: &[FunnelRow]) -> Option<String> {
+    ranked(rows).map(|r| format!("cheapest Meta lead first: {}", r))
+}
+
+/// The same order for the model, which mis-sorted it when left to itself.
+pub fn cpl_ranking_for_model(rows: &[FunnelRow]) -> Option<String> {
+    ranked(rows).map(|r| {
+        format!(
+            "cpl ranking (cheapest Meta lead first, PRE-COMPUTED - trust this order): {}",
+            r
+        )
+    })
+}
+
+fn ranked(rows: &[FunnelRow]) -> Option<String> {
     let mut with_cpl: Vec<(&FunnelRow, u64)> =
         rows.iter().filter_map(|r| r.cpl.map(|c| (r, c))).collect();
     if with_cpl.len() < 2 {
@@ -247,12 +261,9 @@ pub fn cpl_ranking(rows: &[FunnelRow]) -> Option<String> {
     with_cpl.sort_by_key(|(_, c)| *c);
     let parts: Vec<String> = with_cpl
         .iter()
-        .map(|(r, c)| format!("{} Rs.{}", r.name, c))
+        .map(|(r, c)| format!("{} Rs.{}", r.name, crate::text::commas(*c)))
         .collect();
-    Some(format!(
-        "cpl ranking (cheapest Meta lead first, PRE-COMPUTED - trust this order): {}",
-        parts.join(" < ")
-    ))
+    Some(parts.join(" < "))
 }
 
 #[cfg(test)]
@@ -277,7 +288,7 @@ mod ranking_tests {
         ];
         let r = cpl_ranking(&rows).unwrap();
         assert!(
-            r.contains("Lookalike Rs.721 < NonAdv Rs.1216 < Pincode Rs.2381"),
+            r.contains("Lookalike Rs.721 < NonAdv Rs.1,216 < Pincode Rs.2,381"),
             "{}",
             r
         );

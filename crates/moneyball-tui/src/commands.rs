@@ -507,7 +507,7 @@ impl moneyball_core::agent::ToolExec for SnapshotTools {
                     7,
                     moneyball_core::funnel::By::Adset,
                 );
-                let rank = moneyball_core::funnel::cpl_ranking(&rows)
+                let rank = moneyball_core::funnel::cpl_ranking_for_model(&rows)
                     .map(|r| format!("\n{}", r))
                     .unwrap_or_default();
                 Ok(format!(
