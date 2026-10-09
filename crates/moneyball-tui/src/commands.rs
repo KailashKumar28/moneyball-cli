@@ -60,6 +60,8 @@ pub(crate) fn submit(app: &mut App) {
         return;
     }
     let line = app.input.trim().to_string();
+    // A second /quit confirms; anything else in between disarms it.
+    let quit_armed = std::mem::take(&mut app.quit_armed);
     app.input.clear();
     app.cursor = 0;
     app.completions.clear();
@@ -83,8 +85,15 @@ pub(crate) fn submit(app: &mut App) {
 
     match cmd {
         "/quit" | "/exit" | "/q" => {
-            app.chat
-                .push(Cell::System(cells::System("exiting moneyball.".into())));
+            if app.refresh.is_some() && !quit_armed {
+                app.quit_armed = true;
+                app.chat.note(
+                    "a refresh is still running - /quit again to stop it and leave \
+                     (its run record keeps the steps that finished)",
+                );
+                return;
+            }
+            app.chat.note("exiting moneyball.");
             app.quit = true;
         }
         "/brief" => crate::brief_flow::run_brief(app),
@@ -179,7 +188,8 @@ pub(crate) fn submit(app: &mut App) {
             // history + fresh session file. The old session stays on
             // disk untouched (append-only, resumable via -c or --resume).
             if app.turn_active || app.stream.is_some() {
-                app.status = Some("still responding - esc to interrupt first".into());
+                app.chat
+                    .note("still responding - esc to interrupt first, then /clear");
                 return;
             }
             app.history.clear();
@@ -392,7 +402,8 @@ pub(crate) fn call_agent(app: &mut App, system: &str, user_prompt: &str) {
     // the tool loop on a worker thread. Ev's arrive via the tick drain;
     // the UI never blocks and Esc cancels via the shared flag.
     if app.stream.is_some() {
-        app.status = Some("still responding - wait for it to finish (esc interrupts)".into());
+        app.chat
+            .note("still responding - wait for it to finish (esc interrupts), then resend");
         return;
     }
     app.record(moneyball_core::agent::Item::User {

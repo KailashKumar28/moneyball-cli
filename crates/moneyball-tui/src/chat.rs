@@ -333,6 +333,12 @@ impl ChatLog {
         self.scroll = 0; // auto-pin to bottom on new content
     }
 
+    /// A dim one-line answer under a command that could not run now, so
+    /// its prompt never sits in the transcript unanswered.
+    pub fn note(&mut self, text: impl Into<String>) {
+        self.push(Cell::System(cells::System(text.into())));
+    }
+
     /// Append a streaming delta to the most recent assistant cell, or
     /// create a new one if there's no streaming cell active.
     pub fn append_assistant(&mut self, chunk: &str) {

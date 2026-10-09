@@ -45,6 +45,8 @@ pub struct App {
     /// Code pattern: one stray Ctrl+C never kills the session).
     pub ctrl_c_armed: Option<std::time::Instant>,
     pub quit: bool,
+    /// /quit was asked while a refresh runs; the next /quit leaves.
+    pub(crate) quit_armed: bool,
     pub quit_emoji: String,
     /// Chat-style message log. Every interaction (slash-command, free-form
     /// question, tool output) is appended here. The main TUI body renders
@@ -183,6 +185,7 @@ impl App {
             schedule_ask: None,
             ctrl_c_armed: None,
             quit: false,
+            quit_armed: false,
             quit_emoji: String::new(),
             chat,
             history: Vec::new(),

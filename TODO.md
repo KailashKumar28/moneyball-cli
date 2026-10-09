@@ -47,12 +47,11 @@ bottom after a release-sized batch.)
   - [x] /schedule and moneyball schedule (2026-10-09): the morning refresh as
         a launchd agent, confirmed in-app before anything is written (R4);
         fired live, recorded trigger schedule, removed by /schedule off.
-  - [ ] Follow-ups seen on the way (2026-10-09): /quit while a refresh
-        runs should confirm first (the record keeps the finished steps, the
-        rest is lost); a refused command (/report mid-refresh) leaves its
-        prompt with only a status line under it; the funnel table is ~150
-        columns, so at 140 its rows wrap; token expiry for /status
-        ("Meta valid to ...") waits on the connect work.
+  - [x] /quit mid-refresh asks once (2026-10-09); a command that cannot run
+        now answers in the transcript, never leaves its prompt bare.
+  - [ ] Follow-ups: the funnel table is ~150 columns, so at 140 its rows
+        wrap; token expiry for /status ("Meta valid to ...") waits on the
+        connect work.
 - [ ] **Daily creative report** (plan: docs/CLOUD_PLAN.md, agreed
       2026-08-07 - report.json is the product, HTML is a renderer;
       reimplements pipeline/creative_report.py, never imports it):

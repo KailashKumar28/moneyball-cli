@@ -39,10 +39,10 @@ pub(crate) fn run_refresh(app: &mut App, force: bool, then_brief: bool) {
     if let Some(job) = &mut app.refresh {
         // /brief asking mid-run: let this run bring the brief, not a second one.
         job.then_brief |= then_brief;
-        app.status = Some(if then_brief {
-            "a refresh is already running - the brief follows it".into()
+        app.chat.note(if then_brief {
+            "a refresh is already running - the brief follows it"
         } else {
-            "a refresh is already running - its steps are above".into()
+            "a refresh is already running - its steps are above"
         });
         return;
     }

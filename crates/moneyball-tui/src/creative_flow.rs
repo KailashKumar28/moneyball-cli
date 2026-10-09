@@ -8,12 +8,14 @@ use crate::*;
 
 pub(crate) fn run_report(app: &mut App, arg: &str) {
     if app.stream.is_some() {
-        app.status = Some("still working - esc to interrupt, then resend".into());
+        app.chat
+            .note("still working on the last answer - esc to interrupt, then resend");
         return;
     }
     // A refresh writes today's report itself; two writers would race.
     if app.refresh.is_some() {
-        app.status = Some("a refresh is writing today's report - wait for it".into());
+        app.chat
+            .note("a refresh is writing today's report - it lands in the refresh above");
         return;
     }
     // Optional arg: trailing window in days ("/report 7"); default 1.
