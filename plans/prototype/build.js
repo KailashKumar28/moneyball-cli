@@ -91,6 +91,7 @@ function crate(name) { return `crates/${name}/src`; }
 
 const BUILD_OF = {
 	landing_stale: ['health'], refresh_running: ['refresh'], refresh_done: ['refresh'], schedule: ['schedule'], landing_ok: ['health', 'status'],
+	connect: ['connect'], landing_live: ['health'], status_live: ['status'], schedule_live: ['schedule'],
 	status: ['status'], refresh_degraded: ['refresh', 'tokens'], refresh_failed: ['tokens', 'refresh'], refresh_partial: ['refresh'],
 	funnel_gated: ['verdicts', 'health'], cli_refresh: ['refresh'],
 	// today's frames the redesign changes

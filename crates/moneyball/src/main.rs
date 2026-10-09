@@ -1,5 +1,6 @@
 //! moneyball binary - clap dispatch + session handling.
 
+mod connect_cli;
 mod connect_flow;
 mod crm_cli;
 mod debug_cli;
@@ -110,6 +111,12 @@ enum Cmd {
     },
     /// The last 14 data days: what landed for each and how its refresh went.
     Status,
+    /// Where every source stands (ads, leads, advisor) and its fix;
+    /// `connect crm` connects a CRM.
+    Connect {
+        #[command(subcommand)]
+        what: Option<connect_cli::Connect>,
+    },
     /// Dump a saved session transcript with an invariant audit; file,
     /// review, and archive bug reports (see debug_cli.rs).
     Debug(debug_cli::DebugArgs),
@@ -180,7 +187,7 @@ fn main() -> Result<()> {
         Cmd::Fetch { days } => {
             let strict = AppConfig::resolve(cli.data_root.as_deref(), cli.date.as_deref())?;
             let token = moneyball_core::secrets::load_meta_token().ok_or_else(|| {
-                anyhow::anyhow!("no Meta token in keychain - run /setup to connect Meta")
+                anyhow::anyhow!("no Meta token saved - open moneyball and run /setup meta")
             })?;
             println!("fetching {} days of insights from Meta...", days);
             let report = moneyball_core::fetch::fetch_snapshot(&strict, &token, days)
@@ -240,6 +247,10 @@ fn main() -> Result<()> {
         Cmd::Schedule { at, off, print } => {
             let strict = AppConfig::resolve(cli.data_root.as_deref(), None)?;
             schedule_cli::run(&strict, at.as_deref(), off, print)?;
+        }
+        Cmd::Connect { what } => {
+            let strict = AppConfig::resolve(cli.data_root.as_deref(), None)?;
+            connect_cli::run(&strict, what)?;
         }
         Cmd::Status => {
             let strict = AppConfig::resolve(cli.data_root.as_deref(), None)?;

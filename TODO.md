@@ -60,6 +60,11 @@ bottom after a release-sized batch.)
         keeps CRM keys under each workspace, so two clients on one CRM never
         overwrite each other; the legacy global key still reads as a
         fallback. Secret prompts (crm secret, crm connect) show * only.
+  - [x] One status of every source (2026-10-09, integrations A2 part 1):
+        /connect and moneyball connect show ads, leads and the advisor as
+        connected / refused / missing with each fix (MB_AGENT=1: JSON);
+        /connect replaces /keychain (kept as an unlisted alias); moneyball
+        connect crm runs the guided CRM flow.
   - [ ] Token expiry for /status ("Meta valid to ...") waits on the
         connect work.
 - [ ] **Daily creative report** (plan: docs/CLOUD_PLAN.md, agreed
@@ -190,9 +195,8 @@ bottom after a release-sized batch.)
 
 - [ ] **/ledger**: wire the prediction ledger view (stub today). Append
       predictions to `ledger.jsonl`, show hit-rate over time.
-- [ ] **Scheduled CRM fetch**: document cron/launchd recipe for
-      `moneyball crm fetch` next to the existing `moneyball fetch` one
-      (both write into the same day's snapshot dir).
+- [x] **Scheduled CRM fetch**: superseded (2026-10-09) - /schedule runs
+      `moneyball refresh`, which pulls Meta then CRM into the same day.
 - [ ] **Setup wizard: CRM step**: offer `crm init` + contract pointer at
       the end of /setup instead of leaving CRM discovery to docs.
 - [ ] **MB_AGENT output coverage**: machine-readable JSON for `brief`,

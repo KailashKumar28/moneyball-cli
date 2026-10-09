@@ -8,6 +8,7 @@
 pub mod agent;
 pub mod brief;
 pub mod config;
+pub mod connections;
 pub mod crm;
 pub mod debug;
 pub mod error;

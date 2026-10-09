@@ -5,6 +5,7 @@ mod app;
 mod brief_flow;
 pub mod chat;
 mod commands;
+mod connect_view;
 mod creative_flow;
 mod crm_flow;
 mod event;

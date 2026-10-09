@@ -35,7 +35,10 @@ pub(crate) const COMMANDS: &[(&str, &str)] = &[
     ),
     ("/snapshot", "list or validate snapshots"),
     ("/clear", "start a fresh conversation (new session file)"),
-    ("/keychain", "show which providers have API keys configured"),
+    (
+        "/connect",
+        "where ads, leads and the advisor stand, and each fix",
+    ),
     (
         "/setup",
         "re-run the setup wizard; /setup meta replaces the Meta token",
@@ -231,50 +234,8 @@ pub(crate) fn submit(app: &mut App) {
                 }
             }
         }
-        "/keychain" => {
-            // Diagnostic: report which provider is configured, which
-            // have a keychain entry, and (if so) the first 4 chars of
-            // the key for confirmation. Helps the user figure out
-            // "no API key" errors without opening Keychain Access.
-            let Some(w) = app.cfg.workspace.as_ref() else {
-                app.chat.push(Cell::AssistantText(cells::AssistantText {
-                    text: "no workspace configured - run /setup first.".into(),
-                    streaming: false,
-                }));
-                return;
-            };
-            let mut lines: Vec<String> = Vec::new();
-            let active = w.model_provider.clone().unwrap_or_default();
-            let model = w.model.clone().unwrap_or_default();
-            lines.push(format!(
-                "active: provider={} model={} (read from config.json)",
-                if active.is_empty() {
-                    "(unset)"
-                } else {
-                    &active
-                },
-                if model.is_empty() { "(unset)" } else { &model }
-            ));
-            lines.push(String::new());
-            lines.push("auth.json status (per provider):".to_string());
-            let mut keys: Vec<&str> = w.model_providers.keys().map(|s| s.as_str()).collect();
-            keys.sort();
-            for k in keys {
-                let has = moneyball_core::secrets::load_llm_key(k).is_some();
-                let marker = if has { "OK" } else { "missing" };
-                let active_marker = if k == active { " (active)" } else { "" };
-                lines.push(format!("  - {:<14} {}{}", k, marker, active_marker));
-            }
-            lines.push(String::new());
-            lines.push(
-                "API keys live in ~/.moneyball/auth.json (0600, codex-style), never in config.json. \
-                 To re-enter a key: /setup -> step 4 -> provider -> paste key."
-                    .to_string(),
-            );
-            for l in lines {
-                app.chat.push(Cell::System(cells::System(l)));
-            }
-        }
+        // /keychain is the old name, kept for muscle memory (unlisted).
+        "/connect" | "/keychain" => crate::connect_view::run_connect(app),
         "/help" | "/?" => {
             // Generated from COMMANDS so the three command surfaces
             // (palette, /help, app_state_block) cannot drift.

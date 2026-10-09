@@ -28,6 +28,17 @@ pub fn read(cfg: &AppConfig, date: &str) -> Option<RunRecord> {
     serde_json::from_str(&raw).ok()
 }
 
+/// The newest run record of any day.
+pub fn latest(cfg: &AppConfig) -> Option<RunRecord> {
+    let mut dates: Vec<String> = std::fs::read_dir(cfg.runs_dir())
+        .ok()?
+        .filter_map(|e| e.ok()?.file_name().into_string().ok())
+        .filter_map(|n| n.strip_suffix(".json").map(String::from))
+        .collect();
+    dates.sort();
+    dates.iter().rev().find_map(|d| read(cfg, d))
+}
+
 /// Held for a whole refresh; dropping it releases the lock.
 pub struct RunLock(#[allow(dead_code)] std::fs::File);
 

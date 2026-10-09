@@ -133,21 +133,15 @@ pub(super) fn advance_llm(app: &mut App, s: &mut SetupState) {
             }
             if let Err(e) = moneyball_core::secrets::store_llm_key(&s.llm_provider_id, key) {
                 s.error = Some(format!(
-                    "keychain write failed: {}. \
-On macOS, allow moneyball-cli in Keychain Access (or run /setup again after granting).",
+                    "could not save the key to ~/.moneyball/auth.json: {}",
                     e
                 ));
                 return;
             }
-            // Round-trip verify: macOS Keychain ACLs (or an ad-hoc binary
-            // signature) can make set_password report success while the
-            // item never lands in the user keychain. Reject early so the
-            // user knows to retry.
+            // Read it back: a key that did not land is no key.
             if moneyball_core::secrets::load_llm_key(&s.llm_provider_id).as_deref() != Some(key) {
                 s.error = Some(
-                    "keychain write did not persist (likely macOS denied access). \
-On macOS, re-run /setup and approve the Keychain prompt, or sign the moneyball binary."
-                        .into(),
+                    "the key did not persist - check ~/.moneyball/auth.json is writable".into(),
                 );
                 let _ = moneyball_core::secrets::clear_llm_key(&s.llm_provider_id);
                 return;

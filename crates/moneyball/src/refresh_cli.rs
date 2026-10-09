@@ -63,14 +63,10 @@ pub(crate) fn run(cfg: &AppConfig, force: bool, days: u32, scheduled: bool) -> R
         println!("outcome: {}", outcome);
         for step in &run.steps {
             if let Some(fix) = &step.fix {
-                // "/setup" lives inside moneyball; everything else is a shell command.
-                match fix.strip_prefix('/') {
-                    Some(cmd) => println!(
-                        "fix: open moneyball and run /{}   then: moneyball refresh",
-                        cmd
-                    ),
-                    None => println!("fix: {}   then: moneyball refresh", fix),
-                }
+                println!(
+                    "fix: {}   then: moneyball refresh",
+                    moneyball_core::connections::fix_in_shell(fix)
+                );
             }
         }
         if let Some(report) = run.artifacts.get("report") {
