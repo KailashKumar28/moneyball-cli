@@ -1,4 +1,4 @@
-//! Char-boundary-safe string helpers, and base64.
+//! Char-boundary-safe string helpers, plain-text tables, and base64.
 //!
 //! `&s[..n]` panics on multibyte text - lead names, error bodies, and
 //! currency signs routinely contain it - so `clippy::string_slice` is
@@ -104,9 +104,64 @@ pub fn base64(data: &[u8]) -> String {
     out
 }
 
+/// A plain-text table: header, dashed rule, rows, each line ending "\n".
+/// Widths count chars, as `{:<w$}` pads (names carry dashes like U+2013),
+/// and a column whose every cell is a number right-aligns.
+pub fn table(headers: &[&str], rows: &[Vec<String>]) -> String {
+    let widths: Vec<usize> = (0..headers.len())
+        .map(|i| {
+            rows.iter()
+                .map(|row| row[i].chars().count())
+                .chain(std::iter::once(headers[i].chars().count()))
+                .max()
+                .unwrap_or(0)
+        })
+        .collect();
+    let numeric: Vec<bool> = (0..headers.len())
+        .map(|i| {
+            rows.iter().all(|row| {
+                row[i]
+                    .chars()
+                    .all(|c| c.is_ascii_digit() || matches!(c, ',' | '.' | '-'))
+            })
+        })
+        .collect();
+    let line = |cells: Vec<&str>| {
+        let padded: Vec<String> = cells
+            .iter()
+            .zip(&widths)
+            .zip(&numeric)
+            .map(|((c, w), num)| match num {
+                true => format!("{:>w$}", c),
+                false => format!("{:<w$}", c),
+            })
+            .collect();
+        format!("{}\n", padded.join("  ").trim_end())
+    };
+    let mut out = line(headers.to_vec());
+    out.push_str(&"-".repeat(widths.iter().sum::<usize>() + 2 * widths.len().saturating_sub(1)));
+    out.push('\n');
+    for row in rows {
+        out.push_str(&line(row.iter().map(String::as_str).collect()));
+    }
+    out
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn table_pads_by_chars_and_right_aligns_numbers() {
+        let rows = vec![
+            vec!["Primus \u{2013} K".to_string(), "115,387".to_string()],
+            vec!["Lookalike".to_string(), "-".to_string()],
+        ];
+        assert_eq!(
+            table(&["name", "spend"], &rows),
+            "name          spend\n-------------------\nPrimus \u{2013} K  115,387\nLookalike         -\n"
+        );
+    }
 
     #[test]
     fn base64_matches_known_vectors() {

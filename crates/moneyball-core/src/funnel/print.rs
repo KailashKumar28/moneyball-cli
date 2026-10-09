@@ -110,50 +110,7 @@ fn grid(cols: &[&str], rows: &[FunnelRow], cell: fn(&FunnelRow, &str) -> String)
         .iter()
         .map(|r| cols.iter().map(|c| cell(r, c)).collect())
         .collect();
-    // Widths in chars, as `{:<w$}` pads: names carry dashes like U+2013.
-    let widths: Vec<usize> = (0..cols.len())
-        .map(|i| {
-            cells
-                .iter()
-                .map(|row| row[i].chars().count())
-                .chain(std::iter::once(cols[i].len()))
-                .max()
-                .unwrap_or(0)
-        })
-        .collect();
-    // Numbers right-align, so their digits line up.
-    let numeric: Vec<bool> = (0..cols.len())
-        .map(|i| {
-            cells.iter().all(|row| {
-                row[i]
-                    .chars()
-                    .all(|c| c.is_ascii_digit() || matches!(c, ',' | '.' | '-'))
-            })
-        })
-        .collect();
-    let line = |row: &[String]| {
-        row.iter()
-            .zip(&widths)
-            .zip(&numeric)
-            .map(|((c, w), num)| match num {
-                true => format!("{:>w$}", c),
-                false => format!("{:<w$}", c),
-            })
-            .collect::<Vec<_>>()
-            .join("  ")
-            .trim_end()
-            .to_string()
-    };
-    let header: Vec<String> = cols.iter().map(|c| c.to_string()).collect();
-    let mut out = line(&header);
-    let rule = "-".repeat(widths.iter().sum::<usize>() + 2 * (widths.len() - 1));
-    out.push('\n');
-    out.push_str(&rule);
-    out.push('\n');
-    for row in &cells {
-        out.push_str(&line(row));
-        out.push('\n');
-    }
+    let mut out = crate::text::table(cols, &cells);
     // Every surface prints through here (CLI, TUI cell, the agent's tool),
     // so the reason travels with the withheld verdicts.
     if rows.iter().any(|r| r.kill.is_none()) {
