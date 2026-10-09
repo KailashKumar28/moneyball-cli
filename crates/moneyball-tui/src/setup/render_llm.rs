@@ -1,7 +1,7 @@
 //! The model step's screens: provider list, key paste, model list, and the
 //! custom provider's URL and model. Split from render_steps.rs (size cap).
 
-use super::render_steps::{input_box_close, input_box_open, styled_title};
+use super::render_steps::{input_box_close, input_box_open, input_row, styled_title};
 use super::*;
 use moneyball_core::provider::{built_in_presets, models_for, ModelProviderInfo, WireApi};
 use ratatui::style::{Color, Modifier, Style};
@@ -108,17 +108,8 @@ fn render_llm_paste_key(s: &SetupState) -> Vec<Line<'static>> {
         Line::from("  and never written to disk in plaintext."),
         Line::from(""),
     ];
-    // Cap masked at 48 bullets so the line never overflows the box's
-    // 60-char interior. Anything longer than 48 shows "..." suffix.
-    let masked: String = "\u{2022}".repeat(n.min(48));
-    let suffix: String = if n > 48 { "+".into() } else { String::new() };
     lines.push(input_box_open("api key"));
-    lines.push(Line::from(Span::styled(
-        format!("  \u{2502}  > {}{}\u{2588}", masked, suffix),
-        Style::default()
-            .fg(Color::Cyan)
-            .add_modifier(Modifier::BOLD),
-    )));
+    lines.push(input_row(&"\u{2022}".repeat(n), true));
     lines.push(input_box_close());
     lines.push(Line::from(Span::styled(
         format!("  ({} chars)", n),
@@ -178,18 +169,7 @@ fn render_llm_custom(s: &SetupState) -> Vec<Line<'static>> {
     let field = |title: &str, value: &str, active: bool| {
         vec![
             input_box_open(title),
-            Line::from(Span::styled(
-                format!(
-                    "  \u{2502}  > {}{}",
-                    value,
-                    if active { "\u{2588}" } else { "" }
-                ),
-                Style::default().fg(Color::Cyan).add_modifier(if active {
-                    Modifier::BOLD
-                } else {
-                    Modifier::empty()
-                }),
-            )),
+            input_row(value, active),
             input_box_close(),
         ]
     };

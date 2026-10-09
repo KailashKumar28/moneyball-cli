@@ -256,8 +256,7 @@ pub fn run(
                 step.status = StepStatus::Partial;
                 step.error_kind = Some("no_crm".into());
                 step.message = Some(
-                    "written without CRM data: verdicts are withheld and its CRM columns read 0"
-                        .into(),
+                    "written without CRM data: CRM figures left out, verdicts withheld".into(),
                 );
             }
             push(cfg, &mut run, on_step, step);

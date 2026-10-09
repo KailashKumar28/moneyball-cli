@@ -70,7 +70,7 @@ pub(super) fn advance_meta(app: &mut App, s: &mut SetupState) {
                 return;
             }
             if let Err(e) = validate_token(&raw) {
-                s.error = Some(format!("token rejected: {}", e));
+                s.error = Some(format!("token rejected: {}", e.reason()));
                 return;
             }
             let accounts = match list_ad_accounts(&raw) {
@@ -80,7 +80,7 @@ pub(super) fn advance_meta(app: &mut App, s: &mut SetupState) {
                 }
                 Ok(a) => a,
                 Err(e) => {
-                    s.error = Some(format!("couldn't list ad accounts: {}", e));
+                    s.error = Some(format!("couldn't list ad accounts: {}", e.reason()));
                     return;
                 }
             };

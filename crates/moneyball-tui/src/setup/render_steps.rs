@@ -21,12 +21,22 @@ pub(crate) fn render_setup(f: &mut ratatui::Frame, area: Rect, s: &SetupState) {
 
     lines.extend(render_step_indicator(s));
     lines.push(Line::from(""));
-    lines.extend(render_completed_steps(s));
+    let done = render_completed_steps(s);
+    if !done.is_empty() {
+        lines.extend(done);
+        lines.push(Line::from(""));
+    }
     lines.extend(render_active_step(s));
 
-    // Reserve footer rows: errors get 2 wrapped lines so long messages
-    // (e.g. Meta API errors) don't truncate at the screen edge.
-    let hint_h: u16 = if s.error.is_some() { 3 } else { 1 };
+    // The error wraps under its own text ("  ! " hangs), every line of it
+    // shown above the key hints.
+    let width = area.width.saturating_sub(4) as usize;
+    let error: Vec<String> = s
+        .error
+        .as_deref()
+        .map(|e| moneyball_core::text::wrap_columns(e, width, width))
+        .unwrap_or_default();
+    let hint_h = error.len() as u16 + 1;
     let content_h = area.height.saturating_sub(hint_h).max(3);
     let chunks = Layout::default()
         .direction(Direction::Vertical)
@@ -35,14 +45,16 @@ pub(crate) fn render_setup(f: &mut ratatui::Frame, area: Rect, s: &SetupState) {
 
     f.render_widget(Paragraph::new(lines).wrap(Wrap { trim: false }), chunks[0]);
 
-    // Footer: error (if any) + key hints as plain dim lines.
-    let mut footer_lines = Vec::new();
-    if let Some(e) = &s.error {
-        footer_lines.push(Line::from(Span::styled(
-            format!("  ! {}", e),
-            Style::default().fg(Color::Red),
-        )));
-    }
+    let mut footer_lines: Vec<Line> = error
+        .iter()
+        .enumerate()
+        .map(|(i, l)| {
+            Line::from(Span::styled(
+                format!("  {} {}", if i == 0 { "!" } else { " " }, l),
+                Style::default().fg(Color::Red),
+            ))
+        })
+        .collect();
     footer_lines.push(Line::from(Span::styled(
         "  enter next  \u{00B7}  esc exit setup  \u{00B7}  ctrl+c quit",
         Style::default().fg(Color::DarkGray),
@@ -84,7 +96,6 @@ fn render_step_indicator(s: &SetupState) -> Vec<Line<'static>> {
 /// One-line summaries for completed steps (workspace / token / accounts / products / goals).
 fn render_completed_steps(s: &SetupState) -> Vec<Line<'static>> {
     let mut out: Vec<Line<'static>> = Vec::new();
-    let mut i = 0usize;
     if s.step >= 1 {
         // step 0 (workspace) is completed. Tail-truncate long paths so the
         // one-line summary never wraps (same treatment as the input box).
@@ -97,30 +108,24 @@ fn render_completed_steps(s: &SetupState) -> Vec<Line<'static>> {
             s.workspace_path.clone()
         };
         out.push(Line::from(Span::styled(
-            format!("  \u{2713} 1 \u{00B7} workspace         {}", shown),
+            done_label(1, "workspace", &shown),
             Style::default().fg(Color::Green),
         )));
-        i = 1;
     }
     if s.step >= 2 && s.meta_connected {
         let bullets = "\u{2022}".repeat(s.meta_token_len.min(10));
         let n = s.meta_token_len;
         out.push(Line::from(Span::styled(
-            format!(
-                "  \u{2713} 2 \u{00B7} meta token         {} ({} chars)",
-                bullets, n
-            ),
+            done_label(2, "meta token", &format!("{} ({} chars)", bullets, n)),
             Style::default().fg(Color::Green),
         )));
-        i = 2;
     }
     if s.step >= 3 {
         let n = s.products.len();
         out.push(Line::from(Span::styled(
-            format!("  \u{2713} 3 \u{00B7} products            {} configured", n),
+            done_label(3, "products", &format!("{} configured", n)),
             Style::default().fg(Color::Green),
         )));
-        i = 3;
     }
     if !s.llm_provider_id.is_empty() && !s.llm_model.is_empty() && s.llm_key_len > 0 {
         let provider = s.llm_provider_id.as_str();
@@ -128,15 +133,20 @@ fn render_completed_steps(s: &SetupState) -> Vec<Line<'static>> {
         let n = s.llm_key_len;
         let bullets = "\u{2022}".repeat(n.min(10));
         out.push(Line::from(Span::styled(
-            format!(
-                "  \u{2713} 5 \u{00B7} model               {} \u{00B7} {} ({})",
-                provider, model, bullets
+            done_label(
+                5,
+                "model",
+                &format!("{} \u{00B7} {} ({})", provider, model, bullets),
             ),
             Style::default().fg(Color::Green),
         )));
     }
-    let _ = i;
     out
+}
+
+/// "✓ n · label   value", every value in one column.
+fn done_label(n: usize, label: &str, value: &str) -> String {
+    format!("  \u{2713} {} \u{00B7} {:<12}{}", n, label, value)
 }
 
 /// Active step's content as plain lines. Each step helper returns a `Vec<Line>`
@@ -154,7 +164,7 @@ fn render_active_step(s: &SetupState) -> Vec<Line<'static>> {
 
 pub(super) fn styled_title(text: &str) -> Line<'static> {
     Line::from(Span::styled(
-        text.to_string(),
+        format!("  {}", text),
         Style::default()
             .fg(Color::Cyan)
             .add_modifier(Modifier::BOLD),
@@ -168,16 +178,11 @@ pub(super) fn styled_title(text: &str) -> Line<'static> {
 pub(super) const INPUT_BOX_INNER: usize = 60;
 
 pub(super) fn input_box_open(title: &str) -> Line<'static> {
-    let title_len = title.chars().count();
-    // Open-border width: "  ╭ <space>title<space>──...──<space>╮"
-    // = 2 + 1 + 1 + title_len + 1 + fill + 1 + 1 = 7 + title_len + fill.
-    // Close-border width: "  ╰──...──╯" = 2 + 1 + INPUT_BOX_INNER + 1
-    // = 4 + INPUT_BOX_INNER. To make corners line up, fill must
-    // satisfy 7 + title_len + fill = 4 + INPUT_BOX_INNER, i.e.
-    // fill = INPUT_BOX_INNER - title_len - 3.
-    let fill = INPUT_BOX_INNER.saturating_sub(title_len + 3);
+    // "  ╭ title ───╮" is as wide as the close "  ╰─────╯": 2 + 1 + 1 +
+    // title + 1 + fill + 1 = 2 + 1 + INPUT_BOX_INNER + 1.
+    let fill = INPUT_BOX_INNER.saturating_sub(title.chars().count() + 2);
     Line::from(Span::styled(
-        format!("  \u{256D} {} {} \u{256E}", title, "\u{2500}".repeat(fill),),
+        format!("  \u{256D} {} {}\u{256E}", title, "\u{2500}".repeat(fill)),
         Style::default().fg(Color::Cyan),
     ))
 }
@@ -191,6 +196,41 @@ pub(super) fn input_box_close() -> Line<'static> {
     ))
 }
 
+/// The row inside the box: "> value", the cursor when it is the active
+/// field, and the right border. A value longer than the box shows its
+/// tail - you edit the end.
+pub(super) fn input_row(value: &str, active: bool) -> Line<'static> {
+    // The interior less "  > ", the cursor and the space before the border.
+    const ROOM: usize = INPUT_BOX_INNER - 6;
+    let n = value.chars().count();
+    let shown: String = if n > ROOM {
+        std::iter::once('\u{2026}')
+            .chain(value.chars().skip(n - (ROOM - 1)))
+            .collect()
+    } else {
+        value.to_string()
+    };
+    let border = Style::default().fg(Color::Cyan);
+    let text = if active {
+        border.add_modifier(Modifier::BOLD)
+    } else {
+        border
+    };
+    Line::from(vec![
+        Span::styled("  \u{2502}", border),
+        Span::styled(
+            format!(
+                "  > {}{}{} ",
+                shown,
+                if active { "\u{2588}" } else { " " },
+                " ".repeat(ROOM - shown.chars().count())
+            ),
+            text,
+        ),
+        Span::styled("\u{2502}", border),
+    ])
+}
+
 fn render_step_workspace(s: &SetupState) -> Vec<Line<'static>> {
     let mut lines = vec![
         styled_title("Workspace path"),
@@ -201,22 +241,7 @@ fn render_step_workspace(s: &SetupState) -> Vec<Line<'static>> {
     ];
     // Rounded cyan border around the input field (codex auth.rs pattern).
     lines.push(input_box_open("workspace path"));
-    // Long paths scroll (tail-anchored - you edit the end) instead of
-    // wrapping outside the box like the token field's 48-char clamp.
-    const VISIBLE: usize = 52;
-    let n = s.workspace_path.chars().count();
-    let shown: String = if n > VISIBLE {
-        let tail: String = s.workspace_path.chars().skip(n - (VISIBLE - 1)).collect();
-        format!("\u{2026}{}", tail)
-    } else {
-        s.workspace_path.clone()
-    };
-    lines.push(Line::from(Span::styled(
-        format!("  \u{2502}  > {}\u{2588}", shown),
-        Style::default()
-            .fg(Color::Cyan)
-            .add_modifier(Modifier::BOLD),
-    )));
+    lines.push(input_row(&s.workspace_path, true));
     lines.push(input_box_close());
     lines.push(Line::from(""));
     lines.push(Line::from(Span::styled(
@@ -240,16 +265,7 @@ fn render_step_meta(s: &SetupState) -> Vec<Line<'static>> {
             ];
             // Rounded cyan border around the token input.
             lines.push(input_box_open("meta token"));
-            // Pad masked value to a fixed visual width so the box stays
-            // rectangular even when the token is short.
-            let masked: String = "\u{2022}".repeat(n.min(48));
-            let suffix: String = if n > 48 { "+".into() } else { String::new() };
-            lines.push(Line::from(Span::styled(
-                format!("  \u{2502}  > {}{}\u{2588}", masked, suffix),
-                Style::default()
-                    .fg(Color::Cyan)
-                    .add_modifier(Modifier::BOLD),
-            )));
+            lines.push(input_row(&"\u{2022}".repeat(n), true));
             lines.push(input_box_close());
             lines.push(Line::from(Span::styled(
                 format!("  ({} chars)", n),
@@ -352,12 +368,7 @@ fn render_step_meta(s: &SetupState) -> Vec<Line<'static>> {
             }
             lines.push(Line::from(""));
             lines.push(input_box_open("rename"));
-            lines.push(Line::from(Span::styled(
-                format!("  \u{2502}  > {}\u{2588}", s.meta_rename_input),
-                Style::default()
-                    .fg(Color::Cyan)
-                    .add_modifier(Modifier::BOLD),
-            )));
+            lines.push(input_row(&s.meta_rename_input, true));
             lines.push(input_box_close());
             lines
         }
@@ -421,12 +432,7 @@ fn render_step_goals(s: &SetupState) -> Vec<Line<'static>> {
     }
     lines.push(Line::from(""));
     lines.push(input_box_open("goals"));
-    lines.push(Line::from(Span::styled(
-        format!("  \u{2502}  > {}\u{2588}", s.goals_input),
-        Style::default()
-            .fg(Color::Cyan)
-            .add_modifier(Modifier::BOLD),
-    )));
+    lines.push(input_row(&s.goals_input, true));
     lines.push(input_box_close());
     lines
 }

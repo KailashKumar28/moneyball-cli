@@ -59,50 +59,17 @@ pub fn fetch_and_write(
 }
 
 fn pull_ad(client: &reqwest::blocking::Client, token: &str, ad_id: &str) -> Result<Vec<LeadRow>> {
-    let mut rows = Vec::new();
-    let mut url = format!("{}/{}/leads", super::META_GRAPH_BASE, ad_id);
-    let mut first = true;
-    loop {
-        let req = if first {
-            client.get(&url).query(&[
-                ("access_token", token),
-                ("fields", "id,created_time,field_data"),
-                ("limit", "300"),
-            ])
-        } else {
-            client.get(&url) // paging.next carries everything
-        };
-        let resp = req
-            .send()
-            .map_err(|e| crate::meta::net_err("leads network", e))?;
-        let status = resp.status();
-        let body: Value = resp
-            .json()
-            .map_err(|e| crate::meta::net_err("leads json", e))?;
-        if !status.is_success() {
-            let msg = body
-                .pointer("/error/message")
-                .and_then(|m| m.as_str())
-                .unwrap_or("unknown error");
-            return Err(Error::Meta(format!("Meta {} for leads: {}", status, msg)));
-        }
-        for l in body
-            .get("data")
-            .and_then(|d| d.as_array())
-            .into_iter()
-            .flatten()
-        {
-            rows.push(row_from_lead(ad_id, l));
-        }
-        match body.pointer("/paging/next").and_then(|n| n.as_str()) {
-            Some(next) => {
-                url = next.to_string();
-                first = false;
-            }
-            None => break,
-        }
-    }
-    Ok(rows)
+    let first = client
+        .get(format!("{}/{}/leads", super::META_GRAPH_BASE, ad_id))
+        .query(&[
+            ("access_token", token),
+            ("fields", "id,created_time,field_data"),
+            ("limit", "300"),
+        ]);
+    Ok(crate::meta::get_all(client, first, "leads")?
+        .iter()
+        .map(|l| row_from_lead(ad_id, l))
+        .collect())
 }
 
 /// field_data is `[{name, values: [..]}, ..]`; match by substring like

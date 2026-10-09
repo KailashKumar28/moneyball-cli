@@ -67,33 +67,16 @@ pub fn fetch_and_write(
     let ids: Vec<&str> = ads.keys().map(String::as_str).collect();
     let mut rows: Vec<CreativeRow> = Vec::with_capacity(ids.len());
     for chunk in ids.chunks(IDS_PER_BATCH) {
-        let resp = client
-            .get(format!("{}/", super::META_GRAPH_BASE))
-            .query(&[
-                ("access_token", token),
-                ("ids", &chunk.join(",")),
-                ("fields", AD_FIELDS),
-                // Full-size video/dynamic thumbnails instead of 64px
-                // (python fetch_meta.py parity).
-                ("thumbnail_width", "1080"),
-                ("thumbnail_height", "1080"),
-            ])
-            .send()
-            .map_err(|e| crate::meta::net_err("creatives network", e))?;
-        let status = resp.status();
-        let body: Value = resp
-            .json()
-            .map_err(|e| crate::meta::net_err("creatives json", e))?;
-        if !status.is_success() {
-            let msg = body
-                .pointer("/error/message")
-                .and_then(|m| m.as_str())
-                .unwrap_or("unknown error");
-            return Err(Error::Meta(format!(
-                "Meta {} for creatives: {}",
-                status, msg
-            )));
-        }
+        let req = client.get(format!("{}/", super::META_GRAPH_BASE)).query(&[
+            ("access_token", token),
+            ("ids", &chunk.join(",")),
+            ("fields", AD_FIELDS),
+            // Full-size video/dynamic thumbnails instead of 64px
+            // (python fetch_meta.py parity).
+            ("thumbnail_width", "1080"),
+            ("thumbnail_height", "1080"),
+        ]);
+        let body = crate::meta::get_json(req, "creatives")?;
         let Some(obj) = body.as_object() else {
             return Err(Error::Meta("creatives: response is not an object".into()));
         };
@@ -184,18 +167,14 @@ fn resolve_full_res(
         hashes.dedup();
         for chunk in hashes.chunks(IDS_PER_BATCH) {
             let hashes_json = serde_json::to_string(chunk).unwrap_or_default();
-            let Ok(resp) = client
+            let req = client
                 .get(format!("{}/{}/adimages", super::META_GRAPH_BASE, act))
                 .query(&[
                     ("access_token", token),
                     ("hashes", &hashes_json),
                     ("fields", "hash,url"),
-                ])
-                .send()
-            else {
-                continue;
-            };
-            let Ok(body) = resp.json::<Value>() else {
+                ]);
+            let Ok(body) = crate::meta::get_json(req, "adimages") else {
                 continue;
             };
             for im in body

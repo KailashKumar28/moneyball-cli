@@ -73,11 +73,14 @@ bottom after a release-sized batch.)
         a request body cannot hold `secret:` refs yet (resolve them in
         request_page, secretize body fields like query params) and curl's
         -u is dropped (map to a Basic header); move a legacy shared CRM key
-        under the workspace that uses it, then drop the fallback; one
-        backoff retry on Meta throttling codes (4/17/613/80000s) now that 6
-        calls run at once; list_ad_accounts reads one page of 200; let the
+        under the workspace that uses it, then drop the fallback; let the
         custom provider pick its wire protocol; one "when did this step
         last pull" helper for /connect and /status.
+  - [x] Meta calls share one GET (2026-10-09): a rate limit (4/17/32/613/
+        80000s), a 5xx or is_transient waits 10s and goes once more, unless
+        Meta's usage header says the block lasts minutes - then the error
+        says how many; every paged call (insights, leads, the ad account
+        list, which read one page of 200) follows paging.next.
   - [ ] Token expiry for /status ("Meta valid to ...") waits on the
         connect work.
 - [ ] **Daily creative report** (plan: docs/CLOUD_PLAN.md, agreed

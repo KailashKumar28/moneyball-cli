@@ -63,10 +63,10 @@ pub(super) fn verdict(run: &RunRecord, last_good: Option<&str>, day: &str) -> Op
                     "! The report went out without CRM.".to_string(),
                     // "Complete" only when it is: a 4-of-5 pull sits above.
                     if step(run, "meta").is_some_and(|s| s.status == StepStatus::Done) {
-                        " Meta numbers are complete; verdicts are withheld and its CRM columns \
-                         read 0 - unknown, not zero."
+                        " Meta numbers are complete; it leaves the CRM figures out and \
+                         withholds verdicts."
                     } else {
-                        " Verdicts are withheld and its CRM columns read 0 - unknown, not zero."
+                        " It leaves the CRM figures out and withholds verdicts."
                     }
                     .to_string(),
                 )

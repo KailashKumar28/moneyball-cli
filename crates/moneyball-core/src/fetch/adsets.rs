@@ -10,7 +10,7 @@ use std::path::Path;
 
 use serde_json::Value;
 
-use crate::error::{Error, Result};
+use crate::error::Result;
 
 const IDS_PER_BATCH: usize = 50;
 
@@ -37,26 +37,12 @@ pub fn fetch_and_write(
 
     let mut by_id: BTreeMap<String, Value> = BTreeMap::new();
     for chunk in ids.chunks(IDS_PER_BATCH) {
-        let resp = client
-            .get(format!("{}/", super::META_GRAPH_BASE))
-            .query(&[
-                ("access_token", token),
-                ("ids", &chunk.join(",")),
-                ("fields", ADSET_FIELDS),
-            ])
-            .send()
-            .map_err(|e| crate::meta::net_err("adsets network", e))?;
-        let status = resp.status();
-        let body: Value = resp
-            .json()
-            .map_err(|e| crate::meta::net_err("adsets json", e))?;
-        if !status.is_success() {
-            let msg = body
-                .pointer("/error/message")
-                .and_then(|m| m.as_str())
-                .unwrap_or("unknown error");
-            return Err(Error::Meta(format!("Meta {} for adsets: {}", status, msg)));
-        }
+        let req = client.get(format!("{}/", super::META_GRAPH_BASE)).query(&[
+            ("access_token", token),
+            ("ids", &chunk.join(",")),
+            ("fields", ADSET_FIELDS),
+        ]);
+        let body = crate::meta::get_json(req, "adsets")?;
         if let Some(obj) = body.as_object() {
             for (id, adset) in obj {
                 by_id.insert(id.clone(), adset.clone());

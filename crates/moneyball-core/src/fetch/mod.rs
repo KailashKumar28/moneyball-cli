@@ -23,7 +23,7 @@ use chrono::{Duration, Local};
 use crate::config::AppConfig;
 use crate::error::{Error, Result};
 
-pub(crate) const META_GRAPH_BASE: &str = "https://graph.facebook.com";
+pub(crate) use crate::meta::META_GRAPH_BASE;
 
 /// Per-ad daily fields we request. Matches `snapshot::AdsDailyRow` so the
 /// reader parses every row without loss.
@@ -224,44 +224,17 @@ fn fetch_account_rows(
 ) -> Result<Vec<serde_json::Value>> {
     let act = act_id(account_id);
     let time_range = format!("{{\"since\":\"{}\",\"until\":\"{}\"}}", since, until);
-    let mut url = format!("{}/{}/insights", META_GRAPH_BASE, act);
-    let mut first = true;
-    let mut out: Vec<serde_json::Value> = Vec::new();
-    loop {
-        let resp = if first {
-            client
-                .get(&url)
-                .query(&[
-                    ("access_token", token),
-                    ("level", "ad"),
-                    ("time_increment", "1"),
-                    ("time_range", &time_range),
-                    ("fields", INSIGHT_FIELDS),
-                    ("limit", "500"),
-                ])
-                .send()
-        } else {
-            // paging.next is a complete URL (token included) - follow as-is.
-            client.get(&url).send()
-        }
-        .map_err(|e| crate::meta::net_err("network", e))?;
-        let status = resp.status();
-        let body: serde_json::Value = resp.json().map_err(|e| crate::meta::net_err("json", e))?;
-        if !status.is_success() {
-            return Err(crate::meta::api_error(status, &body, &act));
-        }
-        if let Some(rows) = body.get("data").and_then(|d| d.as_array()) {
-            out.extend(rows.iter().cloned());
-        }
-        match body.pointer("/paging/next").and_then(|n| n.as_str()) {
-            Some(next) => {
-                url = next.to_string();
-                first = false;
-            }
-            None => break,
-        }
-    }
-    Ok(out)
+    let first = client
+        .get(format!("{}/{}/insights", META_GRAPH_BASE, act))
+        .query(&[
+            ("access_token", token),
+            ("level", "ad"),
+            ("time_increment", "1"),
+            ("time_range", &time_range),
+            ("fields", INSIGHT_FIELDS),
+            ("limit", "500"),
+        ]);
+    crate::meta::get_all(client, first, &act)
 }
 
 /// Graph account node id, `act_` prefix normalized.
