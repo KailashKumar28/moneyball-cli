@@ -4,7 +4,7 @@
 
 use std::path::PathBuf;
 
-use chrono::{DateTime, Duration, Local, NaiveDate, Timelike};
+use chrono::{DateTime, Duration, NaiveDate};
 use ratatui::style::{Color, Modifier, Style};
 
 use moneyball_core::health::{daily_report, Health, State};
@@ -190,7 +190,7 @@ fn day_block(
 ) -> Vec<Para> {
     let mut when = h
         .pulled_at
-        .map(|t| refreshed(t, h.today))
+        .map(|t| moneyball_core::status::when(t, h.today))
         .unwrap_or_default();
     if let Some(run) = &h.run {
         let ms = elapsed_ms(run);
@@ -339,17 +339,6 @@ fn crm_behind(h: &Health) -> Option<String> {
             OFF
         )),
         _ => None,
-    }
-}
-
-/// "07:30 this morning", "16:05 today", "yesterday 23:41", "Mon 28 Sep 11:41".
-fn refreshed(t: DateTime<Local>, today: NaiveDate) -> String {
-    let hm = t.format("%H:%M");
-    match (today - t.date_naive()).num_days() {
-        0 if t.hour() < 12 => format!("{} this morning", hm),
-        0 => format!("{} today", hm),
-        1 => format!("yesterday {}", hm),
-        _ => t.format("%a %d %b %H:%M").to_string(),
     }
 }
 

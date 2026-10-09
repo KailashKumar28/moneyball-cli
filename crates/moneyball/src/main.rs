@@ -94,6 +94,8 @@ enum Cmd {
         #[arg(long, default_value_t = 28)]
         days: u32,
     },
+    /// The last 14 data days: what landed for each and how its refresh went.
+    Status,
     /// Dump a saved session transcript with an invariant audit; file,
     /// review, and archive bug reports (see debug_cli.rs).
     Debug(debug_cli::DebugArgs),
@@ -216,6 +218,17 @@ fn main() -> Result<()> {
         Cmd::Refresh { force, days } => {
             let strict = AppConfig::resolve(cli.data_root.as_deref(), None)?;
             refresh_cli::run(&strict, force, days)?;
+        }
+        Cmd::Status => {
+            let strict = AppConfig::resolve(cli.data_root.as_deref(), None)?;
+            let days = moneyball_core::status::days(&strict, 14);
+            if strict.agent {
+                println!("{}", serde_json::to_string(&days)?);
+            } else {
+                for line in moneyball_core::status::lines(&strict, &days) {
+                    println!("{}", line);
+                }
+            }
         }
         Cmd::Debug(args) => debug_cli::run(args, root)?,
         Cmd::Crm { cmd } => crm_cli::run(cmd, &cfg, cli.data_root.as_deref())?,

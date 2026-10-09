@@ -28,6 +28,9 @@ pub enum Progress<'a> {
     Done(&'a RunStep),
 }
 
+/// The Meta step's note when today's pull was reused, not repeated.
+pub const REUSED: &str = "reused this morning's Meta pull (--force pulls it again)";
+
 pub struct Options {
     pub trigger: Trigger,
     /// Pull Meta again even when today's snapshot already has it.
@@ -78,7 +81,7 @@ pub fn run(
             .map(|s| s.ads_daily.len() as u64)
             .unwrap_or(0);
         let mut step = done("meta", 0, [("rows", rows)]);
-        step.message = Some("reused this morning's Meta pull (--force pulls it again)".into());
+        step.message = Some(REUSED.into());
         push(&mut run, on_step, step);
         push(
             &mut run,

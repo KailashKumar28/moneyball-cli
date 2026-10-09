@@ -15,6 +15,7 @@ mod refresh_flow;
 mod render;
 mod report;
 mod setup;
+mod status_view;
 pub mod widgets;
 pub(crate) use app::snapshot_load;
 pub(crate) use app::View;

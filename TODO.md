@@ -38,7 +38,8 @@ bottom after a release-sized batch.)
         products / refresh failed) instead of "ready"; the landing says
         what is wrong and the one command that fixes it, or yesterday's
         numbers and report when all is well.
-  - [ ] /status: the last 14 data days, missed days as rows (frame R6).
+  - [x] /status and moneyball status (2026-10-09): the last 14 data days,
+        missed days as rows, how Meta and the CRM last answered (frame R6).
   - [ ] /schedule: the morning run via launchd, confirmed in-app (R4).
 - [ ] **Daily creative report** (plan: docs/CLOUD_PLAN.md, agreed
       2026-08-07 - report.json is the product, HTML is a renderer;

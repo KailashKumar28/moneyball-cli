@@ -26,6 +26,7 @@ pub mod schema;
 pub mod secrets;
 pub mod session;
 pub mod snapshot;
+pub mod status;
 pub mod text;
 pub mod tools;
 
