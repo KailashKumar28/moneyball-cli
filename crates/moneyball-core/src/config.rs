@@ -154,11 +154,13 @@ impl WorkspaceConfig {
     /// Persist to `<data_root>/.moneyball/config.json` (creates the dir if missing).
     pub fn save(&self, data_root: &Path) -> Result<()> {
         migrate_legacy_layout(data_root);
-        let path = data_root.join(DOT_DIR).join("config.json");
-        std::fs::create_dir_all(path.parent().unwrap())?;
+        let dir = data_root.join(DOT_DIR);
+        std::fs::create_dir_all(&dir)?;
         let pretty = serde_json::to_string_pretty(self)
             .map_err(|e| Error::Config(format!("serialize: {}", e)))?;
-        std::fs::write(&path, pretty)?;
+        // Atomic: a crash mid-write must not leave a half config, which
+        // reads as no workspace at all.
+        crate::secrets::write_private(&dir, "config.json", pretty)?;
         Ok(())
     }
 }

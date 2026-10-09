@@ -90,7 +90,7 @@ fn preset(cfg: &AppConfig, ws: &str, c: &presets::Preset, p: &mut dyn Prompter) 
     if same {
         p.show(&format!("kept {} (its stage map stays)", path.display()));
     } else {
-        std::fs::write(&path, c.render())?;
+        save_spec(&path, c.render())?;
         p.show(&format!("saved {}", path.display()));
     }
     test_and_map_stages(cfg, &path, p)
@@ -155,7 +155,7 @@ fn custom(cfg: &AppConfig, ws: &str, p: &mut dyn Prompter) -> Result<Done> {
         p.show("not saved. connect again, or hand-edit via: moneyball crm init");
         return Ok(Done::NotSaved);
     }
-    std::fs::write(&path, &draft)?;
+    save_spec(&path, draft)?;
     test_and_map_stages(cfg, &path, p)
 }
 
@@ -216,7 +216,7 @@ fn test_and_map_stages(
         }
         if !pairs.is_empty() {
             let text = std::fs::read_to_string(spec)?;
-            std::fs::write(spec, source::add_stage_mappings(&text, &pairs)?)?;
+            save_spec(spec, source::add_stage_mappings(&text, &pairs)?)?;
             p.show("stage map saved - confirming with another pull...");
             let r2 = crm_fetch::fetch_crm(cfg, 28)?;
             for l in r2.check.lines() {
@@ -226,6 +226,16 @@ fn test_and_map_stages(
     }
     p.show("connected. each refresh pulls it with Meta (moneyball refresh, or /refresh).");
     Ok(Done::Connected)
+}
+
+/// crm.toml, atomically: a half-written spec fails every pull after it.
+fn save_spec(path: &std::path::Path, body: String) -> Result<()> {
+    let dir = path.parent().expect("crm.toml sits in .moneyball");
+    let name = path
+        .file_name()
+        .and_then(|n| n.to_str())
+        .unwrap_or("crm.toml");
+    crate::secrets::write_private(dir, name, body).map(drop)
 }
 
 fn names(pairs: &[(String, String)]) -> String {

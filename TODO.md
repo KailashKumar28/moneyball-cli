@@ -218,7 +218,8 @@ bottom after a release-sized batch.)
       /brief double-context (short user item + let the loop call the
       brief tool); remaining P2 hygiene (ASCII strings, busy indicator,
       IST vs Local snapshot dating, query_params support, usage/cost
-      parsing, atomic config writes, render examples for new cells).
+      parsing, render examples for new cells). Atomic config.json and
+      crm.toml writes: done 2026-10-09.
 
 - [ ] **/ledger**: wire the prediction ledger view (stub today). Append
       predictions to `ledger.jsonl`, show hit-rate over time.

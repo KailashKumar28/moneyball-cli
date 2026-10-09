@@ -98,7 +98,9 @@ fn update(change: impl FnOnce(&mut AuthFile)) -> Result<()> {
 }
 
 /// Atomic owner-only (0600) write for anything holding secrets or raw
-/// contact PII (auth.json, leads.json, crm.json, crm_contacts.json). The
+/// contact PII (auth.json, leads.json, crm.json, crm_contacts.json), and
+/// for the workspace files a torn write would break (config.json,
+/// crm.toml). The
 /// temp file is CREATED 0600 (a chmod after writing left a umask-readable
 /// window) and named per process, so two writers never share one.
 pub(crate) fn write_private(dir: &std::path::Path, name: &str, body: String) -> Result<PathBuf> {
