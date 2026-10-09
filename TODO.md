@@ -69,8 +69,9 @@ bottom after a release-sized batch.)
         the flow moved into core behind a Prompter; /connect crm runs it on
         a worker with the composer answering (secrets as *), moneyball
         connect crm in the shell. Every "connect a CRM" fix points there.
-  - [ ] Review follow-ups (2026-10-09, after the second code review):
-        one "when did this step last pull" helper for /connect and /status.
+  - [x] Review follow-ups done (2026-10-09): /connect and /status date a
+        source's last answer with one helper (status::last_answer); a
+        reused pull without its file still reports, undated.
   - [x] Custom model provider protocol (2026-10-09): its URL says it - a
         bare base is Chat Completions (what every OpenAI-compatible server
         speaks; it was Responses, which most do not), a full endpoint

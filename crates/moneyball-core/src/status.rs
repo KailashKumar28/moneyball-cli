@@ -7,7 +7,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::config::AppConfig;
 use crate::refresh::{duration, status_word, step_label};
-use crate::schema::{Outcome, RunRecord, StepStatus, Trigger};
+use crate::schema::{Outcome, RunRecord, RunStep, StepStatus, Trigger};
 
 /// Column widths of the table, shared by the shell and the TUI.
 pub const WIDTHS: [usize; 5] = [13, 7, 7, 7, 10];
@@ -184,6 +184,28 @@ fn local(stamp: &str) -> Option<DateTime<Local>> {
         .map(|t| t.with_timezone(&Local))
 }
 
+/// A run's `name` step that ran, and when its source last answered: a
+/// reused pull asked nothing new, so it dates by the data it reused,
+/// written when the source last answered.
+pub fn last_answer<'a>(
+    cfg: &AppConfig,
+    run: &'a RunRecord,
+    name: &str,
+) -> Option<(&'a RunStep, Option<DateTime<Local>>)> {
+    let s = run
+        .steps
+        .iter()
+        .find(|s| s.name == name && s.status != StepStatus::Skipped)?;
+    let at = if s.reused {
+        let ads = cfg.snap_dir().join(&run.date).join("ads_daily.json");
+        let written = std::fs::metadata(ads).and_then(|m| m.modified());
+        written.ok().map(DateTime::from)
+    } else {
+        local(&run.finished_at)
+    };
+    Some((s, at))
+}
+
 /// "07:30 this morning", "16:05 today", "yesterday 23:41", "Mon 28 Sep 11:41".
 pub fn when(t: DateTime<Local>, today: NaiveDate) -> String {
     let hm = t.format("%H:%M");
@@ -236,24 +258,8 @@ pub fn rows(days: &[Day]) -> Vec<Row<'_>> {
 pub fn footer(cfg: &AppConfig, days: &[Day], shell: bool) -> Vec<(&'static str, String)> {
     let today = Local::now().date_naive();
     let last = |name: &str| {
-        days.iter().find_map(|d| {
-            let r = d.run.as_ref()?;
-            let s = r
-                .steps
-                .iter()
-                .find(|s| s.name == name && s.status != StepStatus::Skipped)?;
-            // A reused pull asked Meta nothing new: date it by the data it
-            // reused, written when Meta last answered.
-            let at = if s.reused {
-                let ads = cfg.snap_dir().join(&r.date).join("ads_daily.json");
-                Some(DateTime::<Local>::from(
-                    std::fs::metadata(ads).ok()?.modified().ok()?,
-                ))
-            } else {
-                local(&r.finished_at)
-            };
-            Some((s.clone(), at))
-        })
+        days.iter()
+            .find_map(|d| last_answer(cfg, d.run.as_ref()?, name))
     };
     let pull = |label: &str, name: &str| match last(name) {
         Some((s, t)) => {

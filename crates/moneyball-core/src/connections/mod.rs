@@ -6,7 +6,7 @@
 
 pub mod crm;
 
-use chrono::{DateTime, Local};
+use chrono::Local;
 use serde::Serialize;
 
 use crate::config::AppConfig;
@@ -199,34 +199,16 @@ fn model_row(cfg: &AppConfig) -> Source {
     source(Group::Advisor, shown, link, detail, fix)
 }
 
-/// The newest pull of `name` (not a skip), and when, in words: a reused
-/// Meta pull is dated by the snapshot it wrote, as /status does.
+/// The newest pull of `name` (not a skip), and when, in words - dated as
+/// /status dates it (status::last_answer).
 fn last_step<'a>(
     cfg: &AppConfig,
     run: Option<&'a RunRecord>,
     name: &str,
 ) -> Option<(&'a RunStep, String)> {
-    let run = run?;
-    let s = run
-        .steps
-        .iter()
-        .find(|s| s.name == name && s.status != StepStatus::Skipped)?;
-    let at: Option<DateTime<Local>> = if s.reused {
-        let ads = cfg.snap_dir().join(&run.date).join("ads_daily.json");
-        std::fs::metadata(ads)
-            .ok()?
-            .modified()
-            .ok()
-            .map(DateTime::from)
-    } else {
-        DateTime::parse_from_rfc3339(&run.finished_at)
-            .ok()
-            .map(|t| t.with_timezone(&Local))
-    };
-    let at = at
-        .map(|t| crate::status::when(t, Local::now().date_naive()))
-        .unwrap_or_default();
-    Some((s, at))
+    let (s, at) = crate::status::last_answer(cfg, run?, name)?;
+    let at = at.map(|t| crate::status::when(t, Local::now().date_naive()));
+    Some((s, at.unwrap_or_default()))
 }
 
 fn source(group: Group, name: String, link: Link, detail: String, fix: &str) -> Source {
