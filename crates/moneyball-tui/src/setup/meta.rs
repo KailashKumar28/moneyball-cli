@@ -188,6 +188,7 @@ fn replace_token(app: &mut App, s: &mut SetupState, token: &str, accounts: &[AdA
     let blind: Vec<String> = s
         .products
         .iter()
+        .map(|(name, acct)| (name, account_id_for_storage(acct)))
         .filter(|(_, acct)| !visible.contains(acct))
         .map(|(name, acct)| format!("{} (act_{})", name, acct))
         .collect();

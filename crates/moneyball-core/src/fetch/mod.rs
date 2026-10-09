@@ -143,7 +143,8 @@ const WORKERS: usize = 6;
 
 /// `f` over every item on up to WORKERS threads, each result at its item's
 /// index - so what gets written reads exactly as a one-at-a-time pass.
-/// None where a worker died (a panic) before reaching that item.
+/// None for every item a worker had taken when it panicked (its finished
+/// results die with it).
 pub(super) fn in_parallel<T: Sync, R: Send>(
     items: &[T],
     f: impl Fn(&T) -> R + Sync,

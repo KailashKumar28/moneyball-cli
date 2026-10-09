@@ -31,7 +31,13 @@ pub(crate) fn run(cfg: &AppConfig, what: Option<Connect>) -> Result<()> {
             Link::Refused => "refused",
             Link::Missing => "missing",
         };
-        println!("{:<9}{:<12}{:<11}{}", s.group, s.name, state, s.detail);
+        println!(
+            "{:<9}{:<12}{:<11}{}",
+            s.group.word(),
+            s.name,
+            state,
+            s.detail
+        );
         if let Some(fix) = &s.fix {
             println!("{:<32}fix: {}", "", connections::fix_in_shell(fix));
         }
@@ -63,6 +69,6 @@ impl connections::Prompter for Shell {
         } else {
             crate::crm_cli::ask(prompt)
         };
-        read.ok()
+        read.ok().flatten()
     }
 }

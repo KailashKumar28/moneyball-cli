@@ -68,7 +68,7 @@ pub(crate) fn run_status(app: &mut App) {
         });
     }
     paras.push(Para::default());
-    for (key, value) in status::footer(&app.cfg, &days) {
+    for (key, value) in status::footer(&app.cfg, &days, false) {
         paras.push(
             Para::new(INDENT, INDENT + 11)
                 .run(format!("{:<11}", key), gray())

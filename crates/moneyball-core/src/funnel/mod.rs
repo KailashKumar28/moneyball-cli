@@ -219,6 +219,14 @@ pub fn run(cfg: &AppConfig, product: &str, by: &str, days: u32, date: Option<&st
         "FUNNEL {} - by {} - {}d - snapshot {}",
         product, by_name, days, snap.date
     );
+    // MB_AGENT=1 is a machine reading: the full table, the model's ranking.
+    if cfg.agent {
+        print!("{}", table(&rows));
+        if let Some(rank) = cpl_ranking_for_model(&rows) {
+            println!("{}", rank);
+        }
+        return Ok(());
+    }
     print!("{}", view(&rows));
     if let Some(rank) = cpl_ranking(&rows) {
         println!("{}", rank);

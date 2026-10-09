@@ -199,10 +199,6 @@ pub fn daily(
     (report.schema == CREATIVE_REPORT_SCHEMA).then_some((report, html))
 }
 
-/// The prior comparable report: latest reports/<d>/creative-report*.json
-/// with d < report_date and the same window length. Multi-day reports
-/// carry a range suffix in the file name, so every json in the day's
-/// dir is a candidate; the window-length check picks the comparable one.
 /// How far back a report counts as comparable.
 pub(super) const PRIOR_DAYS: i64 = 7;
 
@@ -211,6 +207,10 @@ fn rs(v: f64) -> String {
     format!("Rs {}", crate::text::commas(v.round().max(0.0) as u64))
 }
 
+/// The prior comparable report: latest reports/<d>/creative-report*.json
+/// with d < report_date and the same window length. Multi-day reports
+/// carry a range suffix in the file name, so every json in the day's
+/// dir is a candidate; the window-length check picks the comparable one.
 pub(super) fn load_prior(
     reports_dir: &std::path::Path,
     report_date: &str,

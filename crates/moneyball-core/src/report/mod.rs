@@ -12,6 +12,7 @@
 mod card;
 mod exec;
 pub use exec::daily;
+pub use summary::text_summary;
 mod group;
 pub mod html;
 mod img;
@@ -19,6 +20,7 @@ mod provenance;
 mod sections;
 mod segmentation;
 mod specs;
+mod summary;
 mod table;
 mod targeting;
 
@@ -334,64 +336,4 @@ pub fn run(cfg: &AppConfig, date: Option<&str>, window_days: u32) -> Result<()> 
     println!("report written: {}", out.json_path.display());
     println!("open in browser: {}", out.html_path.display());
     Ok(())
-}
-
-/// Plain-text rendering of the aggregate - the CLI output and the dry
-/// run for a future bot renderer (contract goal: a bot needs nothing
-/// beyond report.json).
-pub fn text_summary(r: &CreativeReport) -> String {
-    use std::fmt::Write as _;
-    let mut out = String::new();
-    let f = &r.portfolio.funnel;
-    let _ = writeln!(
-        out,
-        "CREATIVE REPORT  {}  (window {}..{})",
-        r.report_date, r.window.since, r.window.until
-    );
-    let _ = writeln!(
-        out,
-        "portfolio: spend Rs.{:.0}  impr {}  clicks {}  M {}  L {}  Q {}  V {}  B {}{}",
-        r.portfolio.spend,
-        r.portfolio.impressions,
-        r.portfolio.clicks,
-        f.m_leads,
-        f.l_leads,
-        f.qualified,
-        f.visit,
-        f.booking,
-        if r.portfolio.unattributed_l_leads > 0 {
-            format!("  (+{} unattributed L)", r.portfolio.unattributed_l_leads)
-        } else {
-            String::new()
-        }
-    );
-    for p in &r.products {
-        let _ = writeln!(
-            out,
-            "\n{} - {}",
-            p.product,
-            crate::text::count(p.creatives.len() as u64, "creative", "creatives")
-        );
-        for c in p.creatives.iter().take(3) {
-            let fun: Vec<String> = c
-                .funnel
-                .iter()
-                .skip(2)
-                .map(|s| s.count.to_string())
-                .collect();
-            let _ = writeln!(
-                out,
-                "  [{}] {}  spend Rs.{:.0}  M/L/Q/V/B {}  {}",
-                c.status.label,
-                c.display_name,
-                c.delivery.spend,
-                fun.join("/"),
-                if c.image.is_some() { "" } else { "(no image)" }
-            );
-        }
-        if p.creatives.len() > 3 {
-            let _ = writeln!(out, "  ... +{} more", p.creatives.len() - 3);
-        }
-    }
-    out
 }

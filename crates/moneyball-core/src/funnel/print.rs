@@ -66,7 +66,9 @@ pub fn verdict(r: &FunnelRow) -> &'static str {
     match r.kill {
         None => "no CRM",
         Some(_) if !r.sufficient => "wait: low spend",
-        Some(_) if r.immature => "wait: immature",
+        // Leads still maturing can only add qualified: they can overturn
+        // a kill, never a keep.
+        Some(true) if r.immature => "wait: immature",
         Some(_) if r.learning == "LEARNING" => "wait: learning",
         Some(true) => "kill",
         Some(false) => "keep",

@@ -42,15 +42,15 @@ impl CrmHealth {
         match self {
             CrmHealth::Fresh => None,
             CrmHealth::NoSpec => Some(format!(
-                "no CRM connected - {}. Fix: moneyball crm connect",
+                "no CRM connected - {}. Fix: /connect crm (moneyball connect crm in a shell)",
                 UNKNOWN
             )),
             CrmHealth::NoData { last: Some(d) } => Some(format!(
-                "no CRM data in this snapshot (newest CRM pull: snapshot {}) - {}. Fix: moneyball crm fetch",
+                "no CRM data in this snapshot (newest CRM pull: snapshot {}) - {}. Fix: /refresh (moneyball refresh in a shell)",
                 d, UNKNOWN
             )),
             CrmHealth::NoData { last: None } => Some(format!(
-                "no CRM data pulled yet - {}. Fix: moneyball crm fetch",
+                "no CRM data pulled yet - {}. Fix: /refresh (moneyball refresh in a shell)",
                 UNKNOWN
             )),
         }
@@ -300,7 +300,7 @@ mod tests {
         // No crm.toml yet: connect.
         let h = CrmHealth::of(&cfg, &empty);
         assert_eq!(h, CrmHealth::NoSpec);
-        assert!(h.note().unwrap().contains("crm connect"));
+        assert!(h.note().unwrap().contains("/connect crm"));
 
         // Connected, this snapshot empty: fetch, naming the newest pull.
         std::fs::write(mb.join("crm.toml"), "name = \"t\"\n").unwrap();
@@ -313,7 +313,7 @@ mod tests {
         );
         let note = h.note().unwrap();
         assert!(
-            note.contains("crm fetch") && note.contains("2026-08-12"),
+            note.contains("/refresh") && note.contains("2026-08-12"),
             "{}",
             note
         );

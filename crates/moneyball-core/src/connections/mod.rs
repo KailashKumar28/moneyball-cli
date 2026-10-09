@@ -12,12 +12,24 @@ use serde::Serialize;
 use crate::config::AppConfig;
 use crate::schema::{RunRecord, RunStep, StepStatus};
 
+/// What a source is for: the ads (Meta), the leads (the CRM), the
+/// advisor (the model).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "snake_case")]
-pub enum Provider {
-    Meta,
-    Crm,
-    Model,
+pub enum Group {
+    Ads,
+    Leads,
+    Advisor,
+}
+
+impl Group {
+    pub fn word(self) -> &'static str {
+        match self {
+            Group::Ads => "ads",
+            Group::Leads => "leads",
+            Group::Advisor => "advisor",
+        }
+    }
 }
 
 /// A source's state: connected, refused (its last pull was turned away -
@@ -32,9 +44,7 @@ pub enum Link {
 
 #[derive(Debug, Clone, Serialize)]
 pub struct Source {
-    pub provider: Provider,
-    /// "ads", "leads" or "advisor".
-    pub group: &'static str,
+    pub group: Group,
     /// "Meta", the CRM's name, the model provider.
     pub name: String,
     pub link: Link,
@@ -54,7 +64,11 @@ pub trait Prompter {
 
 pub fn status_all(cfg: &AppConfig) -> Vec<Source> {
     let run = crate::runs::latest(cfg);
-    vec![meta(cfg, run.as_ref()), crm(cfg, run.as_ref()), model(cfg)]
+    vec![
+        meta_row(cfg, run.as_ref()),
+        crm_row(cfg, run.as_ref()),
+        model_row(cfg),
+    ]
 }
 
 /// A fix as the shell says it: its own twin when there is one, else
@@ -69,7 +83,7 @@ pub fn fix_in_shell(fix: &str) -> String {
     }
 }
 
-fn meta(cfg: &AppConfig, run: Option<&RunRecord>) -> Source {
+fn meta_row(cfg: &AppConfig, run: Option<&RunRecord>) -> Source {
     let products = cfg.workspace.as_ref().map_or(0, |w| w.products.len());
     let has_token = crate::secrets::load_meta_token().is_some();
     let step = last_step(cfg, run, "meta");
@@ -84,6 +98,15 @@ fn meta(cfg: &AppConfig, run: Option<&RunRecord>) -> Source {
                 s.message.clone().unwrap_or_default()
             ),
             "/setup meta",
+        ),
+        Some((s, at)) if s.status == StepStatus::Failed => (
+            Link::Connected,
+            format!(
+                "last pull failed {}: {}",
+                at,
+                s.message.clone().unwrap_or_default()
+            ),
+            "/refresh",
         ),
         Some((s, at)) => {
             let how = match s.status {
@@ -102,17 +125,16 @@ fn meta(cfg: &AppConfig, run: Option<&RunRecord>) -> Source {
             "",
         ),
     };
-    source(Provider::Meta, "ads", "Meta".into(), link, detail, fix)
+    source(Group::Ads, "Meta".into(), link, detail, fix)
 }
 
-fn crm(cfg: &AppConfig, run: Option<&RunRecord>) -> Source {
+fn crm_row(cfg: &AppConfig, run: Option<&RunRecord>) -> Source {
     let spec = std::fs::read_to_string(crate::crm::fetch::spec_path(cfg))
         .ok()
         .and_then(|raw| crate::crm::source::parse(&raw).ok());
     let Some(spec) = spec else {
         return source(
-            Provider::Crm,
-            "leads",
+            Group::Leads,
             "CRM".into(),
             Link::Missing,
             "no CRM connected".into(),
@@ -157,10 +179,10 @@ fn crm(cfg: &AppConfig, run: Option<&RunRecord>) -> Source {
             String::new(),
         ),
     };
-    source(Provider::Crm, "leads", spec.name, link, detail, &fix)
+    source(Group::Leads, spec.name, link, detail, &fix)
 }
 
-fn model(cfg: &AppConfig) -> Source {
+fn model_row(cfg: &AppConfig) -> Source {
     let w = cfg.workspace.as_ref();
     let provider = w.and_then(|w| w.model_provider.clone()).unwrap_or_default();
     let name = w.and_then(|w| w.model.clone()).unwrap_or_default();
@@ -181,7 +203,7 @@ fn model(cfg: &AppConfig) -> Source {
     } else {
         provider
     };
-    source(Provider::Model, "advisor", shown, link, detail, fix)
+    source(Group::Advisor, shown, link, detail, fix)
 }
 
 /// The newest pull of `name` (not a skip), and when, in words: a reused
@@ -214,16 +236,8 @@ fn last_step<'a>(
     Some((s, at))
 }
 
-fn source(
-    provider: Provider,
-    group: &'static str,
-    name: String,
-    link: Link,
-    detail: String,
-    fix: &str,
-) -> Source {
+fn source(group: Group, name: String, link: Link, detail: String, fix: &str) -> Source {
     Source {
-        provider,
         group,
         name,
         link,

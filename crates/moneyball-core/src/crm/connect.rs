@@ -166,8 +166,8 @@ fn shell_tokens(s: &str) -> Vec<String> {
 
 /// Grab one sample response from the CRM with the supplied auth (its
 /// secret refs resolve against `workspace`'s keys).
-pub fn probe_sample(input: &ConnectInput, workspace: Option<&str>) -> Result<Value> {
-    super::fetch::probe(&input.request_spec(), workspace)
+pub fn probe_sample(input: &ConnectInput, workspace: Option<&str>, quiet: bool) -> Result<Value> {
+    super::fetch::probe(&input.request_spec(), workspace, quiet)
 }
 
 /// Sample bytes shown to the LLM. Enough to see the record shape and a

@@ -232,7 +232,8 @@ pub fn rows(days: &[Day]) -> Vec<Row<'_>> {
 }
 
 /// The footer: how Meta and the CRM last answered, and where records live.
-pub fn footer(cfg: &AppConfig, days: &[Day]) -> Vec<(&'static str, String)> {
+/// `shell`: fixes as the shell says them (connections::fix_in_shell).
+pub fn footer(cfg: &AppConfig, days: &[Day], shell: bool) -> Vec<(&'static str, String)> {
     let today = Local::now().date_naive();
     let last = |name: &str| {
         days.iter().find_map(|d| {
@@ -258,7 +259,14 @@ pub fn footer(cfg: &AppConfig, days: &[Day]) -> Vec<(&'static str, String)> {
         Some((s, t)) => {
             let at = t.map_or(String::new(), |t| format!(" {}", when(t, today)));
             match (&s.status, &s.fix) {
-                (StepStatus::Failed, Some(fix)) => format!("{} failed{} - fix: {}", label, at, fix),
+                (StepStatus::Failed, Some(fix)) => {
+                    let fix = if shell {
+                        crate::connections::fix_in_shell(fix)
+                    } else {
+                        fix.clone()
+                    };
+                    format!("{} failed{} - fix: {}", label, at, fix)
+                }
                 (StepStatus::Failed, None) => format!("{} failed{}", label, at),
                 _ => format!("{} ok{}", label, at),
             }
@@ -319,7 +327,7 @@ pub fn lines(cfg: &AppConfig, days: &[Day]) -> Vec<String> {
         });
     }
     out.push(String::new());
-    for (k, v) in footer(cfg, days) {
+    for (k, v) in footer(cfg, days, true) {
         out.push(format!("{:<11}{}", k, v));
     }
     out

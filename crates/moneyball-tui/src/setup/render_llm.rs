@@ -14,7 +14,7 @@ use ratatui::text::{Line, Span};
 ///        or "custom"
 ///   1 -> paste the API key (masked + char count)
 ///   2 -> pick a curated model from the provider's list
-///   3 -> (custom only) enter the base URL
+///   3 -> (custom only) the base URL, then the model
 ///
 /// Saves the API key to ~/.moneyball/auth.json via `secrets::store_llm_key` on
 /// advance. The provider entry is persisted to config.json alongside the
@@ -62,7 +62,7 @@ fn render_llm_pick_provider(s: &SetupState) -> Vec<Line<'static>> {
         .collect();
     rows.push((
         "custom".to_string(),
-        "  custom - your own URL (any wire protocol)".to_string(),
+        "  custom - your own URL (OpenAI Responses API)".to_string(),
     ));
 
     for (i, (id, text)) in rows.iter().enumerate().skip(start).take(end - start) {
@@ -133,19 +133,12 @@ fn render_llm_paste_key(s: &SetupState) -> Vec<Line<'static>> {
 }
 
 fn render_llm_pick_model(s: &SetupState) -> Vec<Line<'static>> {
-    let preset = if s.llm_provider_id == "custom" {
-        ModelProviderInfo {
-            name: "custom".into(),
-            base_url: s.llm_url.clone(),
-            ..Default::default()
-        }
-    } else {
-        s.llm_provider
-            .clone()
-            .unwrap_or_else(ModelProviderInfo::openai)
-    };
+    // Custom never comes here: it types its model (render_llm_custom).
+    let preset = s
+        .llm_provider
+        .clone()
+        .unwrap_or_else(ModelProviderInfo::openai);
     let models = models_for(&preset);
-    let total = models.len();
     let mut lines = vec![
         styled_title("Model"),
         Line::from(""),
@@ -176,19 +169,6 @@ fn render_llm_pick_model(s: &SetupState) -> Vec<Line<'static>> {
             style,
         )));
     }
-    if total == 1 && models[0] == "custom" {
-        // For custom provider, ask for the model slug via free text.
-        lines.push(Line::from(""));
-        lines.push(input_box_open("model"));
-        lines.push(Line::from(Span::styled(
-            format!("  \u{2502}  > {}\u{2588}", s.llm_model),
-            Style::default()
-                .fg(Color::Cyan)
-                .add_modifier(Modifier::BOLD),
-        )));
-        lines.push(input_box_close());
-        let _ = total; // silence unused
-    }
     lines
 }
 
@@ -216,8 +196,8 @@ fn render_llm_custom(s: &SetupState) -> Vec<Line<'static>> {
     let mut lines = vec![
         styled_title("Custom provider"),
         Line::from(""),
-        Line::from("  The base URL of any OpenAI- or Anthropic-compatible API,"),
-        Line::from("  e.g. http://localhost:11434/v1 - then the model to call there."),
+        Line::from("  The base URL of an OpenAI Responses-compatible API, then the"),
+        Line::from("  model to call there. For Ollama, pick the Ollama preset instead."),
         Line::from(""),
     ];
     lines.extend(field("base URL", &s.llm_url, !s.llm_url_entered));
@@ -225,5 +205,13 @@ fn render_llm_custom(s: &SetupState) -> Vec<Line<'static>> {
         lines.push(Line::from(""));
         lines.extend(field("model", &s.llm_model, true));
     }
+    lines.push(Line::from(Span::styled(
+        if s.llm_url_entered {
+            "  Enter=save  Esc=back to the URL"
+        } else {
+            "  Enter=next  Esc=exit setup"
+        },
+        Style::default().fg(Color::DarkGray),
+    )));
     lines
 }

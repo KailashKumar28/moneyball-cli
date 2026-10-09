@@ -69,6 +69,15 @@ bottom after a release-sized batch.)
         the flow moved into core behind a Prompter; /connect crm runs it on
         a worker with the composer answering (secrets as *), moneyball
         connect crm in the shell. Every "connect a CRM" fix points there.
+  - [ ] Review follow-ups (2026-10-09, after the second code review):
+        a request body cannot hold `secret:` refs yet (resolve them in
+        request_page, secretize body fields like query params) and curl's
+        -u is dropped (map to a Basic header); move a legacy shared CRM key
+        under the workspace that uses it, then drop the fallback; one
+        backoff retry on Meta throttling codes (4/17/613/80000s) now that 6
+        calls run at once; list_ad_accounts reads one page of 200; let the
+        custom provider pick its wire protocol; one "when did this step
+        last pull" helper for /connect and /status.
   - [ ] Token expiry for /status ("Meta valid to ...") waits on the
         connect work.
 - [ ] **Daily creative report** (plan: docs/CLOUD_PLAN.md, agreed

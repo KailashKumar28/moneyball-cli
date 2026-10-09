@@ -304,7 +304,7 @@ fn validate_and_write(
 
 /// `crm connect`'s one-page probe for a sample before any spec exists:
 /// no paging; dates are the trailing 28 days; secrets are `workspace`'s.
-pub fn probe(request: &source::RequestSpec, workspace: Option<&str>) -> Result<Value> {
+pub fn probe(request: &source::RequestSpec, workspace: Option<&str>, agent: bool) -> Result<Value> {
     let client = reqwest::blocking::Client::builder()
         .timeout(std::time::Duration::from_secs(30))
         .build()
@@ -326,7 +326,7 @@ pub fn probe(request: &source::RequestSpec, workspace: Option<&str>) -> Result<V
         &source::PagingSpec::default(),
         &vars,
         &Progress {
-            agent: false,
+            agent,
             label: Some("probe"),
         },
     )

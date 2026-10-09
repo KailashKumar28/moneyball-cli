@@ -31,7 +31,7 @@ pub(crate) fn run_connect(app: &mut App) {
         };
         paras.push(
             Para::new(6, DETAIL_AT)
-                .run(format!("{:<10}", s.group), dim())
+                .run(format!("{:<10}", s.group.word()), dim())
                 .run(format!("{:<12}", s.name), gray())
                 .run(format!("{} {:<11}", OK, word), fg(color))
                 .run(s.detail, gray()),

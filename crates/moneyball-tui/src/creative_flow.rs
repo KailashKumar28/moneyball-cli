@@ -72,7 +72,9 @@ pub(crate) fn on_report_done(
         .map(String::from)
         .collect();
     if !out.report.source.crm_present {
-        lines.push("warn: no CRM data - L/Q/V/B are zeros, not truths.".into());
+        lines.push(
+            "no CRM data - the report hides CRM leads, qualified, visits and bookings.".into(),
+        );
     }
     lines.push(String::new());
     lines.push(format!("open in browser: {}", out.html_path.display()));

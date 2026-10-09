@@ -117,6 +117,11 @@ pub(crate) fn drain(app: &mut App) {
 /// While a question waits: enter answers it, esc cancels the flow. Other
 /// keys type into the composer as usual. True when the key was ours.
 pub(crate) fn on_key(app: &mut App, k: KeyEvent) -> bool {
+    // Never the wizard's keys: /setup open over a waiting question keeps
+    // its own enter and esc.
+    if !matches!(app.view, crate::View::Brief) {
+        return false;
+    }
     let Some(job) = &mut app.connect else {
         return false;
     };
@@ -165,7 +170,21 @@ fn finish(app: &mut App, done: Result<Done, (&'static str, String)>) {
     for l in line.lines() {
         append(app, l.to_string());
     }
-    app.chat.finalize_tool(ok);
+    // Its own cells by name: a chat turn may have started mid-connect.
+    for cell in app.chat.cells.iter_mut().rev() {
+        match cell {
+            Cell::ToolCall(c) if c.name == "connect" && c.status == cells::ToolStatus::Running => {
+                c.status = if ok {
+                    cells::ToolStatus::Done
+                } else {
+                    cells::ToolStatus::Failed
+                };
+                break;
+            }
+            Cell::ToolResult(r) if r.name == "connect" => r.success = ok,
+            _ => {}
+        }
+    }
     // The landing, the bar and /connect read the CRM afresh from here on.
     app.load_brief();
 }

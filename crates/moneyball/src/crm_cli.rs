@@ -119,7 +119,8 @@ pub(crate) fn run(cmd: CrmCmd, cfg: &AppConfig, data_root: Option<&str>) -> Resu
         CrmCmd::Secret { name } => {
             // Where it goes before what it is: no workspace, no prompt.
             let ws = workspace_of(cfg)?;
-            let value = ask_secret(&format!("paste the value for \"{}\" (hidden): ", name))?;
+            let value = ask_secret(&format!("paste the value for \"{}\" (hidden): ", name))?
+                .unwrap_or_default();
             if value.is_empty() {
                 eprintln!("empty value - nothing stored");
                 std::process::exit(1);
@@ -162,30 +163,35 @@ fn run_crm_check(cfg: &AppConfig, file: &std::path::Path) -> Result<bool> {
 /// One prompt -> one trimmed line. On a real terminal this is a
 /// rustyline editor (arrow keys, backspace, paste all behave); piped
 /// stdin (tests, scripts) falls back to a plain line read.
-pub(crate) fn ask(prompt: &str) -> Result<String> {
+pub(crate) fn ask(prompt: &str) -> Result<Option<String>> {
     use std::io::IsTerminal;
     if std::io::stdin().is_terminal() {
         let mut rl = rustyline::DefaultEditor::new()?;
-        return match rl.readline(prompt) {
-            Ok(s) => Ok(s.trim().to_string()),
-            Err(
-                rustyline::error::ReadlineError::Interrupted | rustyline::error::ReadlineError::Eof,
-            ) => Ok(String::new()),
-            Err(e) => Err(e.into()),
-        };
+        return readline(rl.readline(prompt));
     }
     use std::io::Write;
     eprint!("{}", prompt);
     std::io::stderr().flush()?;
     let mut s = String::new();
-    std::io::stdin().read_line(&mut s)?;
-    Ok(s.trim().to_string())
+    // End of input is a cancel, never an empty answer.
+    Ok((std::io::stdin().read_line(&mut s)? > 0).then(|| s.trim().to_string()))
+}
+
+/// Ctrl-C and Ctrl-D cancel (None); an empty line is an empty answer.
+fn readline(r: rustyline::Result<String>) -> Result<Option<String>> {
+    match r {
+        Ok(s) => Ok(Some(s.trim().to_string())),
+        Err(
+            rustyline::error::ReadlineError::Interrupted | rustyline::error::ReadlineError::Eof,
+        ) => Ok(None),
+        Err(e) => Err(e.into()),
+    }
 }
 
 /// `ask` for a secret: on a terminal every character typed or pasted shows
 /// as `*` and nothing enters the line history (rustyline's masking
 /// highlighter); piped stdin has no screen to hide it from.
-pub(crate) fn ask_secret(prompt: &str) -> Result<String> {
+pub(crate) fn ask_secret(prompt: &str) -> Result<Option<String>> {
     use rustyline::config::Configurer;
     use rustyline::highlight::{CmdKind, Highlighter};
     use std::io::IsTerminal;
@@ -215,13 +221,7 @@ pub(crate) fn ask_secret(prompt: &str) -> Result<String> {
     rl.set_helper(Some(Mask));
     rl.set_color_mode(rustyline::ColorMode::Forced);
     rl.set_auto_add_history(false);
-    match rl.readline(prompt) {
-        Ok(s) => Ok(s.trim().to_string()),
-        Err(
-            rustyline::error::ReadlineError::Interrupted | rustyline::error::ReadlineError::Eof,
-        ) => Ok(String::new()),
-        Err(e) => Err(e.into()),
-    }
+    readline(rl.readline(prompt))
 }
 
 fn print_ingest_outcome(r: &moneyball_core::crm::fetch::CrmFetchReport) {

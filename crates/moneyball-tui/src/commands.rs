@@ -206,6 +206,12 @@ pub(crate) fn submit(app: &mut App) {
                     .note("still responding - esc to interrupt first, then /clear");
                 return;
             }
+            // Its answers and result land in its cell: keep it until done.
+            if app.connect.is_some() {
+                app.chat
+                    .note("a CRM connect is running - finish or esc it, then /clear");
+                return;
+            }
             app.history.clear();
             // A refresh still running keeps its cell: its outcome and any
             // fix land there.

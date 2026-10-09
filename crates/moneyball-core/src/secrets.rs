@@ -176,13 +176,17 @@ pub fn load_crm_key(workspace: Option<&str>, name: &str) -> Option<String> {
         .or_else(|| f.crm_keys.get(name).cloned())
 }
 
-/// Remove a workspace's CRM secret. Idempotent.
-pub fn clear_crm_key(workspace: &str, name: &str) -> Result<()> {
-    update(|f| {
-        if let Some(w) = f.workspaces.get_mut(workspace) {
-            w.crm_keys.remove(name);
-        }
-    })
+/// This workspace's own CRM secret, never the legacy shared one: what a
+/// connect may offer to keep (keeping the legacy key would wire this
+/// client to whichever client stored it first).
+pub fn own_crm_key(workspace: &str, name: &str) -> Option<String> {
+    load_file()
+        .ok()?
+        .workspaces
+        .get(workspace)?
+        .crm_keys
+        .get(name)
+        .cloned()
 }
 
 #[cfg(test)]
@@ -220,8 +224,7 @@ mod tests {
             Some("tok-other")
         );
         assert_eq!(load_crm_key(Some("ws-c"), "test_crm"), None);
-        clear_crm_key("ws-b", "test_crm").unwrap();
-        assert_eq!(load_crm_key(Some("ws-b"), "test_crm"), None);
+        assert_eq!(own_crm_key("ws-c", "test_crm"), None);
         // No stray tmp file left behind by the atomic save (the lock file stays).
         let names: Vec<String> = std::fs::read_dir(&dir)
             .unwrap()

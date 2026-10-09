@@ -60,7 +60,7 @@ fn preset(cfg: &AppConfig, ws: &str, c: &presets::Preset, p: &mut dyn Prompter) 
     for s in c.secrets {
         // Re-runs (e.g. after fixing a stage map) keep the stored
         // credential on an empty answer instead of re-demanding it.
-        let stored = crate::secrets::load_crm_key(Some(ws), &c.secret_name(s)).is_some();
+        let stored = crate::secrets::own_crm_key(ws, &c.secret_name(s)).is_some();
         p.show(&format!("{}: {}", s.label, s.help));
         let prompt = if stored {
             format!("{} [enter keeps the stored one]: ", s.label)
@@ -77,8 +77,18 @@ fn preset(cfg: &AppConfig, ws: &str, c: &presets::Preset, p: &mut dyn Prompter) 
         crate::secrets::store_crm_key(ws, &c.secret_name(s), &v)?;
     }
     let path = crm_fetch::spec_path(cfg);
-    std::fs::write(&path, c.render())?;
-    p.show(&format!("saved {}", path.display()));
+    // Reconnecting the same CRM keeps its spec, and the stage map mapped
+    // last time with it; only a first connect (or a different CRM) writes.
+    let same = std::fs::read_to_string(&path)
+        .ok()
+        .and_then(|raw| source::parse(&raw).ok())
+        .is_some_and(|spec| spec.name == c.id);
+    if same {
+        p.show(&format!("kept {} (its stage map stays)", path.display()));
+    } else {
+        std::fs::write(&path, c.render())?;
+        p.show(&format!("saved {}", path.display()));
+    }
     test_and_map_stages(cfg, &path, p)
 }
 
@@ -92,8 +102,37 @@ fn custom(cfg: &AppConfig, ws: &str, p: &mut dyn Prompter) -> Result<Done> {
     }
     p.show("paste the 'list leads' request from your CRM's API docs -");
     p.show("a full curl command (POST bodies fine) or just the URL:");
-    let line = answer!(p, "curl or URL: ", false);
+    // Hidden: a curl from API docs carries the credentials in clear.
+    let line = answer!(p, "curl or URL (hidden): ", true);
     let mut input = connect::ConnectInput::from_curl(name.clone(), &line)?;
+    p.show(&format!(
+        "  {} {} - headers: {} - query: {}",
+        input.method,
+        input.url,
+        names(&input.headers),
+        names(&input.query)
+    ));
+    // A body goes to the model and into crm.toml as written: say so when
+    // it looks like it carries a credential, and let the user stop.
+    let carried = input
+        .body
+        .as_deref()
+        .map(body_credentials)
+        .unwrap_or_default();
+    if !carried.is_empty() {
+        let go = answer!(
+            p,
+            format!(
+                "the request body carries {} - it is sent to the model and saved in crm.toml as is. continue? [y/N]: ",
+                carried.join(", ")
+            ),
+            false
+        );
+        if !go.eq_ignore_ascii_case("y") {
+            p.show("nothing saved - take the credential out of the body, or pick a listed CRM");
+            return Ok(Done::NotSaved);
+        }
+    }
     let secret_name = |k: &str| format!("{}_{}", name, k.to_lowercase().replace('-', "_"));
     for (k, v) in input.headers.iter_mut() {
         let sname = secret_name(k);
@@ -129,7 +168,7 @@ fn custom(cfg: &AppConfig, ws: &str, p: &mut dyn Prompter) -> Result<Done> {
     }
 
     p.show("probing the endpoint for a sample...");
-    let sample = connect::probe_sample(&input, Some(ws))?;
+    let sample = connect::probe_sample(&input, Some(ws), cfg.agent)?;
     let preview = sample.to_string();
     p.show(&format!(
         "sample received ({} bytes): {}...",
@@ -174,8 +213,10 @@ fn test_and_map_stages(
     spec: &std::path::Path,
     p: &mut dyn Prompter,
 ) -> Result<Done> {
-    p.show("running a live test pull (7 days)...");
-    let r = crm_fetch::fetch_crm(cfg, 7)?;
+    // The refresh's window: this pull's crm.json replaces the day's, so a
+    // shorter test window would shrink what /brief and the report read.
+    p.show("running a live test pull (28 days)...");
+    let r = crm_fetch::fetch_crm(cfg, 28)?;
     p.show(&format!(
         "test pull ({}): {} ad-attributed ticket(s) over {} page(s){}",
         r.name,
@@ -224,7 +265,7 @@ fn test_and_map_stages(
             let text = std::fs::read_to_string(spec)?;
             std::fs::write(spec, source::add_stage_mappings(&text, &pairs)?)?;
             p.show("stage map saved - confirming with another pull...");
-            let r2 = crm_fetch::fetch_crm(cfg, 7)?;
+            let r2 = crm_fetch::fetch_crm(cfg, 28)?;
             for l in r2.check.lines() {
                 p.show(&l);
             }
@@ -232,6 +273,45 @@ fn test_and_map_stages(
     }
     p.show("connected. each refresh pulls it with Meta (moneyball refresh, or /refresh).");
     Ok(Done::Connected)
+}
+
+fn names(pairs: &[(String, String)]) -> String {
+    if pairs.is_empty() {
+        return "none".into();
+    }
+    pairs
+        .iter()
+        .map(|(k, _)| k.as_str())
+        .collect::<Vec<_>>()
+        .join(", ")
+}
+
+/// The credential-looking field names in a request body (JSON or form).
+fn body_credentials(body: &str) -> Vec<String> {
+    fn walk(v: &serde_json::Value, out: &mut Vec<String>) {
+        match v {
+            serde_json::Value::Object(m) => {
+                for (k, v) in m {
+                    if looks_credential(k) {
+                        out.push(k.clone());
+                    }
+                    walk(v, out);
+                }
+            }
+            serde_json::Value::Array(a) => a.iter().for_each(|v| walk(v, out)),
+            _ => {}
+        }
+    }
+    let mut out = Vec::new();
+    match serde_json::from_str::<serde_json::Value>(body) {
+        Ok(v) => walk(&v, &mut out),
+        Err(_) => out.extend(
+            body.split('&')
+                .filter_map(|kv| kv.split_once('=').map(|(k, _)| k.to_string()))
+                .filter(|k| looks_credential(k)),
+        ),
+    }
+    out
 }
 
 /// Does this query-param name look like it carries a credential?
@@ -271,6 +351,14 @@ mod tests {
             ),
             agent: true,
         }
+    }
+
+    #[test]
+    fn credentials_in_a_body_are_named() {
+        let json = r#"{"filter": {"stage": "x"}, "auth": {"apiKey": "k", "page": 1}}"#;
+        assert_eq!(body_credentials(json), vec!["auth", "apiKey"]);
+        assert_eq!(body_credentials("q=1&access_token=t"), vec!["access_token"]);
+        assert!(body_credentials(r#"{"page": 1}"#).is_empty());
     }
 
     #[test]

@@ -241,6 +241,11 @@ pub(crate) fn handle_setup_key(app: &mut App, mut state: SetupState, k: KeyEvent
                     state.goals_input.clear();
                     true
                 }
+                // The custom provider's model: back to its URL, not out.
+                4 if state.llm_substep == 3 && state.llm_url_entered => {
+                    state.llm_url_entered = false;
+                    true
+                }
                 _ => false,
             };
             if cleared {

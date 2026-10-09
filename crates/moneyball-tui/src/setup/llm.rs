@@ -16,17 +16,11 @@ pub(super) fn handle_llm_picker_keys(s: &mut SetupState, k: KeyEvent) -> bool {
     let total = match s.llm_substep {
         0 => built_in_presets().len() + 1, // presets + custom
         2 => {
-            let preset = if s.llm_provider_id == "custom" {
-                ModelProviderInfo {
-                    name: "custom".into(),
-                    base_url: s.llm_url.clone(),
-                    ..Default::default()
-                }
-            } else {
-                s.llm_provider
-                    .clone()
-                    .unwrap_or_else(ModelProviderInfo::openai)
-            };
+            // Custom never comes here: it types its model (substep 3).
+            let preset = s
+                .llm_provider
+                .clone()
+                .unwrap_or_else(ModelProviderInfo::openai);
             models_for(&preset).len()
         }
         _ => 0,
@@ -89,7 +83,7 @@ pub(super) fn llm_providers_map(
 
 /// Step 4 (LLM) advance logic. Dispatches on `llm_substep`:
 ///   0 -> provider pick (Enter on highlighted row)
-///   1 -> API key paste -> writes to keychain, advances to model pick
+///   1 -> API key paste -> writes to auth.json, advances to model pick
 ///   2 -> model pick -> persists + transitions to advance_save
 ///   3 -> custom URL/model entry -> save
 pub(super) fn advance_llm(app: &mut App, s: &mut SetupState) {
@@ -125,7 +119,7 @@ pub(super) fn advance_llm(app: &mut App, s: &mut SetupState) {
             s.error = None;
         }
         1 => {
-            // Validate that a key was pasted; write to keychain.
+            // Validate that a key was pasted; write to auth.json.
             let key = s.llm_input.trim();
             if key.is_empty() {
                 s.error = Some("API key is required to continue".into());
@@ -160,30 +154,17 @@ pub(super) fn advance_llm(app: &mut App, s: &mut SetupState) {
         }
         2 => {
             // Pick the highlighted model.
-            let preset = if s.llm_provider_id == "custom" {
-                ModelProviderInfo {
-                    name: "custom".into(),
-                    base_url: s.llm_url.clone(),
-                    ..Default::default()
-                }
-            } else {
-                s.llm_provider
-                    .clone()
-                    .unwrap_or_else(ModelProviderInfo::openai)
-            };
+            // Custom never comes here: it types its model (substep 3).
+            let preset = s
+                .llm_provider
+                .clone()
+                .unwrap_or_else(ModelProviderInfo::openai);
             let models = models_for(&preset);
             if s.llm_highlight >= models.len() {
                 s.error = Some("invalid model selection".into());
                 return;
             }
             s.llm_model = models[s.llm_highlight].to_string();
-            // If user picked the "custom" sentinel, fall through to a free-text
-            // URL substep instead of saving here.
-            if s.llm_model == "custom" && s.llm_provider_id == "custom" {
-                s.llm_model.clear();
-                s.llm_substep = 3;
-                return;
-            }
             advance_save(app, s);
         }
         3 => {
