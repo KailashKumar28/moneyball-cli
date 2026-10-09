@@ -112,11 +112,11 @@ fn grid(cols: &[&str], rows: &[FunnelRow], cell: fn(&FunnelRow, &str) -> String)
         .collect();
     let mut out = crate::text::table(cols, &cells);
     // Every surface prints through here (CLI, TUI cell, the agent's tool),
-    // so the reason travels with the withheld verdicts.
+    // so the reason travels with the withheld verdicts; each adds the CRM
+    // note (crm::status::CrmHealth) that says what fixes it.
     if rows.iter().any(|r| r.kill.is_none()) {
         out.push_str(
-            "kill withheld: this snapshot has no CRM data, so qualified counts are unknown, not zero. \
-             Run a refresh (moneyball refresh, or /refresh in the app), then this again.\n",
+            "kill withheld: this snapshot has no CRM data, so qualified counts are unknown, not zero.\n",
         );
     }
     out

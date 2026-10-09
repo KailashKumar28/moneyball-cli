@@ -56,9 +56,14 @@ impl RequestSpec {
             .headers
             .values()
             .chain(self.query.values())
-            .filter_map(|v| v.trim_matches(['{', '}']).strip_prefix("secret:"))
+            .filter_map(|v| super::refs::secret_name(v))
             .map(String::from)
-            .chain(self.body.as_deref().map(body_refs).unwrap_or_default())
+            .chain(
+                self.body
+                    .as_deref()
+                    .map(super::refs::body_refs)
+                    .unwrap_or_default(),
+            )
             .collect();
         names.sort();
         names.dedup();
@@ -150,54 +155,6 @@ pub fn expand(template: &str, vars: &HashMap<&str, String>) -> String {
         out = out.replace(&format!("{{{}}}", k), v);
     }
     out
-}
-
-/// Resolve a spec value: `secret:<name>` from the workspace's CRM keys in
-/// auth.json, `env:<VAR>` from the environment, anything else literal.
-pub fn resolve_ref(value: &str, workspace: Option<&str>) -> Result<String> {
-    if let Some(name) = value.strip_prefix("secret:") {
-        return crate::secrets::load_crm_key(workspace, name).ok_or_else(|| {
-            Error::Secrets(format!(
-                "no CRM secret \"{}\" - store it with: moneyball crm secret {}",
-                name, name
-            ))
-        });
-    }
-    if let Some(var) = value.strip_prefix("env:") {
-        return std::env::var(var)
-            .map_err(|_| Error::Secrets(format!("env var {} is not set", var)));
-    }
-    Ok(value.to_string())
-}
-
-/// The `{secret:<name>}` refs in a body, in order.
-fn body_refs(body: &str) -> Vec<String> {
-    body.split("{secret:")
-        .skip(1)
-        .filter_map(|rest| rest.split_once('}').map(|(name, _)| name.to_string()))
-        .collect()
-}
-
-/// A body with its `{secret:<name>}` refs filled from the workspace's
-/// keys, each JSON-escaped: a ref sits inside a JSON string.
-pub fn fill_secrets(body: &str, workspace: Option<&str>) -> Result<String> {
-    fill_refs(body, |name| {
-        resolve_ref(&format!("secret:{}", name), workspace)
-    })
-}
-
-fn fill_refs(body: &str, value_of: impl Fn(&str) -> Result<String>) -> Result<String> {
-    let mut out = body.to_string();
-    for name in body_refs(body) {
-        let value = value_of(&name)?;
-        let quoted = serde_json::to_string(&value)?;
-        let escaped = quoted
-            .strip_prefix('"')
-            .and_then(|q| q.strip_suffix('"'))
-            .unwrap_or(&quoted);
-        out = out.replace(&format!("{{secret:{}}}", name), escaped);
-    }
-    Ok(out)
 }
 
 pub use super::transform::{csv_records, organic_contacts, transform};
@@ -321,15 +278,6 @@ delivery = "mx_Delivery_Time"
     }
 
     #[test]
-    fn resolve_ref_env_and_literal() {
-        std::env::set_var("MB_CRM_TEST_KEY", "k-123");
-        assert_eq!(resolve_ref("env:MB_CRM_TEST_KEY", None).unwrap(), "k-123");
-        std::env::remove_var("MB_CRM_TEST_KEY");
-        assert!(resolve_ref("env:MB_CRM_TEST_KEY", None).is_err());
-        assert_eq!(resolve_ref("plain", None).unwrap(), "plain");
-    }
-
-    #[test]
     fn transform_maps_stages_and_stringifies_ids() {
         let recs = vec![serde_json::json!({
             "mx_Ad_Id": 120211,
@@ -365,20 +313,16 @@ delivery = "mx_Delivery_Time"
     }
 
     #[test]
-    fn body_refs_are_named_and_filled_json_escaped() {
+    fn secret_names_cover_headers_and_body_refs() {
         let spec = parse(
             "name = \"x\"\n[request]\nurl = \"https://x\"\n\
              body = '{\"k\": \"{secret:x_key}\", \"from\": \"{from_date}\"}'\n\
+             [request.headers]\na = \"secret:y_key\"\nb = \"{secret:z_key}\"\n\
              [map]\nad_id = \"a\"\nstage = \"s\"\ndelivery = \"d\"\n",
         )
         .unwrap();
-        let request = spec.request.unwrap();
-        assert_eq!(request.secret_names(), vec!["x_key"]);
-        let body = request.body.unwrap();
-        let filled = fill_refs(&body, |_| Ok(r#"pa"ss\"#.into())).unwrap();
-        let v: Value = serde_json::from_str(&filled).unwrap();
-        assert_eq!(v["k"], r#"pa"ss\"#);
-        assert_eq!(v["from"], "{from_date}");
+        let names = spec.request.unwrap().secret_names();
+        assert_eq!(names, vec!["x_key", "y_key", "z_key"]);
     }
 
     #[test]

@@ -19,7 +19,8 @@ pub struct Preset {
     pub id: &'static str,
     pub display: &'static str,
     /// crm.toml template; `{secret:<key>}` placeholders become
-    /// `secret:<preset_id>_<key>` refs at render time.
+    /// `{secret:<preset_id>_<key>}` refs at render time - the one
+    /// spelling that works in a header, a query value and a body.
     pub toml: &'static str,
     pub secrets: &'static [SecretPrompt],
     /// One-line caveat shown before the test run.
@@ -33,7 +34,7 @@ impl Preset {
         for s in self.secrets {
             out = out.replace(
                 &format!("{{secret:{}}}", s.key),
-                &format!("secret:{}_{}", self.id, s.key),
+                &format!("{{secret:{}}}", self.secret_name(s)),
             );
         }
         out
@@ -156,17 +157,20 @@ mod tests {
     fn every_preset_renders_to_a_parseable_spec_with_no_placeholders() {
         for p in catalog() {
             let rendered = p.render();
-            assert!(
-                !rendered.contains("{secret:"),
-                "{}: unresolved placeholder",
-                p.id
-            );
+            for s in p.secrets {
+                assert!(
+                    !rendered.contains(&format!("{{secret:{}}}", s.key)),
+                    "{}: unresolved placeholder {}",
+                    p.id,
+                    s.key
+                );
+            }
             let spec = super::super::source::parse(&rendered)
                 .unwrap_or_else(|e| panic!("{}: {}", p.id, e));
             assert_eq!(spec.name, p.id);
             for s in p.secrets {
                 assert!(
-                    rendered.contains(&format!("secret:{}", p.secret_name(s))),
+                    rendered.contains(&format!("{{secret:{}}}", p.secret_name(s))),
                     "{}: secret ref {} missing",
                     p.id,
                     s.key

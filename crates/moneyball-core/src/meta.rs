@@ -1,10 +1,12 @@
-//! Meta Graph API client (read-only). Used by the wizard to discover
-//! the user's ad accounts when they paste an access token.
+//! Meta Graph API client (read-only): every Graph GET goes through
+//! get_json / get_all, and the wizard's token check and account list
+//! live here.
 //!
 //! Per the project hard contract: moneyball-core NEVER writes to Meta.
 //! This module is read-only and only ever calls graph.facebook.com.
 
-use std::time::Duration;
+use std::sync::Mutex;
+use std::time::{Duration, Instant};
 
 use reqwest::blocking::RequestBuilder;
 use reqwest::StatusCode;
@@ -46,7 +48,8 @@ pub fn validate_token(token: &str) -> Result<()> {
     let req = http_client()?
         .get(format!("{}/me", META_GRAPH_BASE))
         .query(&[("access_token", token), ("fields", "id,name")]);
-    get_json(req, "the token check").map(drop)
+    // The wizard waits on these: enter again is their retry.
+    fetch_json(req, "the token check", None).map(drop)
 }
 
 /// List ad accounts the token can see, every page of them.
@@ -59,7 +62,7 @@ pub fn list_ad_accounts(token: &str) -> Result<Vec<AdAccount>> {
             ("fields", "id,name,account_status"),
             ("limit", "200"),
         ]);
-    get_all(&client, first, "the ad account list")?
+    get_all(&client, first, "the ad account list", None)?
         .into_iter()
         .map(|a| serde_json::from_value(a).map_err(|e| Error::Meta(format!("decode: {}", e))))
         .collect()
@@ -72,27 +75,44 @@ fn http_client() -> Result<reqwest::blocking::Client> {
         .map_err(|e| Error::Meta(format!("client: {}", e)))
 }
 
-/// How long a call Meta turned away as temporary waits before its one
-/// retry.
-const RETRY_WAIT: Duration = Duration::from_secs(10);
+/// How long a pull's call that Meta turned away as temporary waits
+/// before its one retry: six run at once, and a burst can trip a limit
+/// that clears in seconds.
+pub(crate) const PULL: Option<Duration> = Some(Duration::from_secs(10));
 
-/// One Graph GET: its JSON body, or the error every caller reports the
-/// same way. A call Meta turns away as temporary (a rate limit, a 5xx,
-/// is_transient) waits and goes once more - six run at once, and a burst
-/// can trip a limit that clears in seconds - unless Meta says the block
-/// lasts minutes.
+/// When a retry last came back rate-limited. For a while after, a
+/// rate-limited call fails at once: a limit that outlasted one wait
+/// outlasts the next, and every ad's leads call would pay it.
+// ponytail: process-wide; per token if moneyball ever serves many.
+static STILL_LIMITED: Mutex<Option<Instant>> = Mutex::new(None);
+const LIMIT_MEMORY: Duration = Duration::from_secs(300);
+
+/// Status, body (Null when it is not JSON) and the minutes Meta says a
+/// rate limit lasts (0 when it names none).
+type Reply = (StatusCode, Value, u64);
+
+/// One Graph GET in a pull: its JSON body, or the error every caller
+/// reports the same way. A call Meta turns away as temporary (a rate
+/// limit, a 5xx, is_transient) waits and goes once more, unless Meta
+/// says the limit lasts minutes.
 pub(crate) fn get_json(req: RequestBuilder, what: &str) -> Result<Value> {
-    get_json_waiting(req, what, RETRY_WAIT)
+    fetch_json(req, what, PULL)
 }
 
-fn get_json_waiting(req: RequestBuilder, what: &str, wait: Duration) -> Result<Value> {
+/// `retry`: how long to wait before the one retry; None reports the
+/// refusal at once.
+fn fetch_json(req: RequestBuilder, what: &str, retry: Option<Duration>) -> Result<Value> {
     // A GET has no body to stream, so the clone always exists.
     let again = req.try_clone();
     let first = send(req, what)?;
-    let (status, body, regain) = match again {
-        Some(again) if worth_retry(&first) => {
+    let (status, body, regain_minutes) = match (again, retry) {
+        (Some(again), Some(wait)) if worth_retry(&first) => {
             std::thread::sleep(wait);
-            send(again, what)?
+            let reply = send(again, what)?;
+            if meta_error(&reply.1).is_some_and(|e| throttled(e.code)) {
+                *STILL_LIMITED.lock().unwrap_or_else(|p| p.into_inner()) = Some(Instant::now());
+            }
+            reply
         }
         _ => first,
     };
@@ -105,20 +125,22 @@ fn get_json_waiting(req: RequestBuilder, what: &str, wait: Duration) -> Result<V
             body => Ok(body),
         };
     }
-    Err(api_error(status, &body, what, regain))
+    Err(api_error(status, &body, what, regain_minutes))
 }
 
 /// Every `data` row across pages: the first request, then each
-/// paging.next (a complete URL, token included) as it is.
+/// paging.next (a complete URL, token included) as it is. `retry` as in
+/// fetch_json.
 pub(crate) fn get_all(
     client: &reqwest::blocking::Client,
     first: RequestBuilder,
     what: &str,
+    retry: Option<Duration>,
 ) -> Result<Vec<Value>> {
     let mut rows = Vec::new();
     let mut req = first;
     loop {
-        let mut body = get_json(req, what)?;
+        let mut body = fetch_json(req, what, retry)?;
         if let Some(Value::Array(page)) = body.get_mut("data").map(Value::take) {
             rows.extend(page);
         }
@@ -129,17 +151,15 @@ pub(crate) fn get_all(
     }
 }
 
-/// Status, body (Null when it is not JSON) and the minutes Meta says a
-/// rate limit lasts (0 when it names none).
-fn send(req: RequestBuilder, what: &str) -> Result<(StatusCode, Value, u64)> {
+fn send(req: RequestBuilder, what: &str) -> Result<Reply> {
     let resp = req.send().map_err(|e| net_err(what, e))?;
     let status = resp.status();
-    let regain = regain_minutes(resp.headers());
+    let regain_minutes = minutes_to_regain(resp.headers());
     let text = resp.text().map_err(|e| net_err(what, e))?;
     Ok((
         status,
         serde_json::from_str(&text).unwrap_or(Value::Null),
-        regain,
+        regain_minutes,
     ))
 }
 
@@ -149,23 +169,30 @@ fn throttled(code: Option<u32>) -> bool {
     matches!(code, Some(4 | 17 | 32 | 613 | 80000..=80014))
 }
 
-/// A refusal worth one more try: a 5xx, Meta's is_transient, or a rate
-/// limit Meta names no long wait for.
-fn worth_retry((status, body, regain): &(StatusCode, Value, u64)) -> bool {
-    if status.is_success() || *regain > 0 {
+/// A refusal worth one more try: a 5xx or Meta's is_transient, or a rate
+/// limit Meta names no long wait for and that has not just outlasted a
+/// retry.
+fn worth_retry((status, body, regain_minutes): &Reply) -> bool {
+    if status.is_success() {
         return false;
     }
-    status.is_server_error() || envelope(body).is_some_and(|e| e.is_transient || throttled(e.code))
+    match meta_error(body) {
+        Some(e) if throttled(e.code) => {
+            let last = *STILL_LIMITED.lock().unwrap_or_else(|p| p.into_inner());
+            *regain_minutes == 0 && last.is_none_or(|t| t.elapsed() > LIMIT_MEMORY)
+        }
+        e => status.is_server_error() || e.is_some_and(|e| e.is_transient),
+    }
 }
 
-fn envelope(body: &Value) -> Option<ApiError> {
+fn meta_error(body: &Value) -> Option<ApiError> {
     serde_json::from_value::<ErrorEnvelope>(body.clone())
         .ok()
         .map(|e| e.error)
 }
 
 /// The longest wait Meta's business use case header names, in minutes.
-fn regain_minutes(headers: &reqwest::header::HeaderMap) -> u64 {
+fn minutes_to_regain(headers: &reqwest::header::HeaderMap) -> u64 {
     let usage = headers
         .get("x-business-use-case-usage")
         .and_then(|v| v.to_str().ok())
@@ -182,6 +209,19 @@ fn regain_minutes(headers: &reqwest::header::HeaderMap) -> u64 {
         .unwrap_or(0)
 }
 
+/// Meta's sentence with any access token in it masked ("Malformed access
+/// token EAAB..." quotes the token it refused).
+fn without_tokens(message: &str) -> String {
+    message
+        .split(' ')
+        .map(|w| match w.starts_with("EAA") && w.len() > 40 {
+            true => "<token>",
+            false => w,
+        })
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
 /// Transport/body error with the URL stripped: every Meta GET carries
 /// access_token in the query string (paging.next URLs embed it too),
 /// and reqwest's Display appends "for url (...)".
@@ -192,13 +232,12 @@ pub(crate) fn net_err(what: &str, e: reqwest::Error) -> Error {
 /// Every non-success Meta response becomes one of two errors: code 190
 /// (the token expired or was revoked) is MetaAuth, which the refresh and
 /// every screen treat as "connect Meta again"; anything else is Meta with
-/// Meta's own sentence. `what` says which call failed; `regain` is how
-/// many minutes Meta says a rate limit lasts.
-fn api_error(status: StatusCode, body: &Value, what: &str, regain: u64) -> Error {
-    let Some(err) = envelope(body) else {
+/// Meta's own sentence. `what` says which call failed.
+fn api_error(status: StatusCode, body: &Value, what: &str, regain_minutes: u64) -> Error {
+    let Some(err) = meta_error(body) else {
         return Error::Meta(format!("Meta {} for {}", status, what));
     };
-    let (code, message) = (err.code, err.message);
+    let (code, message) = (err.code, without_tokens(&err.message));
     if code == Some(190) {
         return Error::MetaAuth(format!(
             "Meta refused the access token (code 190): it expired or was revoked ({})",
@@ -210,7 +249,7 @@ fn api_error(status: StatusCode, body: &Value, what: &str, regain: u64) -> Error
             "Meta is limiting how often this token can call ({}, code {}): try again {}",
             what,
             c,
-            match regain {
+            match regain_minutes {
                 0 => "in a few minutes".to_string(),
                 m => format!("in about {}", crate::text::count(m, "minute", "minutes")),
             }
@@ -239,133 +278,5 @@ pub fn account_id_for_storage(act_id_or_id: &str) -> String {
 }
 
 #[cfg(test)]
-mod tests {
-    #[test]
-    fn net_err_never_carries_the_token() {
-        // Port 1 on loopback refuses instantly - a real reqwest error.
-        let e = reqwest::blocking::Client::new()
-            .get("http://127.0.0.1:1/x?access_token=SECRET123")
-            .send()
-            .unwrap_err();
-        assert!(
-            e.to_string().contains("SECRET123"),
-            "premise: reqwest leaks the url"
-        );
-        let msg = super::net_err("leads network", e).to_string();
-        assert!(!msg.contains("SECRET123"), "{}", msg);
-    }
-
-    #[test]
-    fn code_190_is_meta_auth_everything_else_meta() {
-        let expired =
-            serde_json::json!({"error": {"message": "Error validating access token", "code": 190}});
-        let e = super::api_error(reqwest::StatusCode::BAD_REQUEST, &expired, "act_1", 0);
-        assert_eq!(e.kind(), "meta_auth", "{}", e);
-        let denied = serde_json::json!({"error": {"message": "(#200) no permission", "code": 200}});
-        let e = super::api_error(reqwest::StatusCode::FORBIDDEN, &denied, "act_1", 0);
-        assert_eq!(e.kind(), "meta");
-        assert!(
-            e.to_string().contains("(code 200)") && !e.to_string().contains("Some("),
-            "{}",
-            e
-        );
-        assert!(
-            e.reason().starts_with("the token can't read act_1:")
-                && e.reason().contains("Business Settings"),
-            "{}",
-            e
-        );
-    }
-
-    /// A loopback server answering one connection per canned reply
-    /// (status line, extra header lines, body); its base URL.
-    fn serve(replies: Vec<(&'static str, &'static str, String)>) -> String {
-        use std::io::{Read, Write};
-        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
-        let base = format!("http://{}", listener.local_addr().unwrap());
-        std::thread::spawn(move || {
-            for (status, headers, body) in replies {
-                let (mut conn, _) = listener.accept().unwrap();
-                let _ = conn.read(&mut [0u8; 4096]);
-                let _ = write!(
-                    conn,
-                    "HTTP/1.1 {}\r\nContent-Type: application/json\r\n{}Content-Length: {}\r\nConnection: close\r\n\r\n{}",
-                    status,
-                    headers,
-                    body.len(),
-                    body
-                );
-            }
-        });
-        base
-    }
-
-    const THROTTLED: &str = r#"{"error":{"message":"User request limit reached","code":17}}"#;
-
-    fn get(base: &str) -> crate::error::Result<serde_json::Value> {
-        let req = reqwest::blocking::Client::new().get(format!("{}/x", base));
-        super::get_json_waiting(req, "leads", std::time::Duration::ZERO)
-    }
-
-    #[test]
-    fn a_throttled_call_goes_once_more() {
-        let base = serve(vec![
-            ("400 Bad Request", "", THROTTLED.into()),
-            ("200 OK", "", r#"{"data":[1]}"#.into()),
-        ]);
-        assert_eq!(get(&base).unwrap()["data"][0], 1);
-        // Twice throttled: the second refusal is the error, in words.
-        let base = serve(vec![("400 Bad Request", "", THROTTLED.into()); 2]);
-        let e = get(&base).unwrap_err().reason();
-        assert!(
-            e.contains("limiting how often this token can call (leads, code 17)")
-                && e.ends_with("try again in a few minutes"),
-            "{}",
-            e
-        );
-    }
-
-    #[test]
-    fn a_rate_limit_meta_says_lasts_minutes_is_not_retried() {
-        // One reply only: a retry would find no server and fail on the network.
-        let base = serve(vec![(
-            "400 Bad Request",
-            "X-Business-Use-Case-Usage: {\"123\":[{\"type\":\"ads_insights\",\"estimated_time_to_regain_access\":19}]}\r\n",
-            r#"{"error":{"message":"too many calls","code":80000}}"#.into(),
-        )]);
-        let e = get(&base).unwrap_err().reason();
-        assert!(e.ends_with("try again in about 19 minutes"), "{}", e);
-    }
-
-    #[test]
-    fn a_refusal_that_is_not_temporary_is_not_retried() {
-        let base = serve(vec![(
-            "400 Bad Request",
-            "",
-            r#"{"error":{"message":"(#100) Invalid parameter","code":100}}"#.into(),
-        )]);
-        let e = get(&base).unwrap_err().reason();
-        assert_eq!(
-            e,
-            "Meta 400 Bad Request for leads: (#100) Invalid parameter (code 100)"
-        );
-        // A gateway page is not JSON: the status says it, once retried.
-        let base = serve(vec![("502 Bad Gateway", "", "<html>".into()); 2]);
-        assert_eq!(
-            get(&base).unwrap_err().reason(),
-            "Meta 502 Bad Gateway for leads"
-        );
-    }
-
-    #[test]
-    fn get_all_follows_every_page() {
-        // The server's own address is only known once it listens, so the
-        // second page is served by a second server.
-        let page2 = serve(vec![("200 OK", "", r#"{"data":[3]}"#.into())]);
-        let body = format!(r#"{{"data":[1,2],"paging":{{"next":"{}/p2"}}}}"#, page2);
-        let page1 = serve(vec![("200 OK", "", body)]);
-        let client = reqwest::blocking::Client::new();
-        let rows = super::get_all(&client, client.get(format!("{}/p1", page1)), "leads").unwrap();
-        assert_eq!(rows, vec![1, 2, 3]);
-    }
-}
+#[path = "meta_tests.rs"]
+mod tests;

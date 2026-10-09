@@ -66,10 +66,12 @@ fn pull_ad(client: &reqwest::blocking::Client, token: &str, ad_id: &str) -> Resu
             ("fields", "id,created_time,field_data"),
             ("limit", "300"),
         ]);
-    Ok(crate::meta::get_all(client, first, "leads")?
-        .iter()
-        .map(|l| row_from_lead(ad_id, l))
-        .collect())
+    Ok(
+        crate::meta::get_all(client, first, "leads", crate::meta::PULL)?
+            .iter()
+            .map(|l| row_from_lead(ad_id, l))
+            .collect(),
+    )
 }
 
 /// field_data is `[{name, values: [..]}, ..]`; match by substring like

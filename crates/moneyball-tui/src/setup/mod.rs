@@ -158,9 +158,10 @@ impl SetupState {
         }
         if let Some(info) = cfg.model_providers.get(s.llm_provider_id.as_str()) {
             s.llm_provider = Some(info.clone());
-            // A saved custom provider re-runs with its URL in the box.
+            // A saved custom provider re-runs with its full endpoint in
+            // the box: the endpoint is what says its protocol.
             if s.llm_provider_id == "custom" {
-                s.llm_url = info.base_url.clone();
+                s.llm_url = moneyball_core::llm::endpoint_for(info);
             }
         }
         // Try the keychain so the collapsed summary shows bullet count.

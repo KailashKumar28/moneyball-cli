@@ -349,18 +349,14 @@ fn request_page(
         "POST" => client.post(&url),
         m => return Err(Error::Config(format!("unsupported method {}", m))),
     };
+    let mut refs = super::refs::Refs::of(workspace);
     for (k, v) in &request.headers {
-        req = req.header(k, source::expand(&source::resolve_ref(v, workspace)?, vars));
+        req = req.header(k, source::expand(&refs.value(v)?, vars));
     }
     let mut query: Vec<(String, String)> = request
         .query
         .iter()
-        .map(|(k, v)| {
-            Ok((
-                k.clone(),
-                source::expand(&source::resolve_ref(v, workspace)?, vars),
-            ))
-        })
+        .map(|(k, v)| Ok((k.clone(), source::expand(&refs.value(v)?, vars))))
         .collect::<Result<_>>()?;
     // Page mode carries its params implicitly - the spec declares the
     // names once in [paging], not again in [request.query].
@@ -372,7 +368,7 @@ fn request_page(
     }
     req = req.query(&query);
     if let Some(body) = &request.body {
-        let body = source::fill_secrets(&source::expand(body, vars), workspace)?;
+        let body = refs.body(&source::expand(body, vars))?;
         req = req.header("Content-Type", "application/json").body(body);
     }
     if !progress.agent {
@@ -406,19 +402,22 @@ fn request_page(
     // Status BEFORE parse: auth failures often carry an empty body, and
     // "response is not JSON: EOF" buries the actual problem (found live
     // 2026-08-08 when the LeadZump token expired).
+    // Masked: a CRM that echoes the request echoes its keys.
     if !status.is_success() {
-        return Err(status_error(status, &bytes, &request.secret_names()));
+        let text = refs.mask(&String::from_utf8_lossy(&bytes));
+        return Err(status_error(status, &text, &request.secret_names()));
     }
-    let body: Value = serde_json::from_slice(&bytes)
+    let mut body: Value = serde_json::from_slice(&bytes)
         .map_err(|e| Error::Config(format!("CRM response is not JSON: {}", e)))?;
+    refs.mask_json(&mut body);
     Ok(body)
 }
 
 /// Non-2xx -> an actionable error. 401/403 name the fix (expired token
 /// is the common case); everything else carries a truncated body
 /// snippet. Bodies may echo request details - never include headers.
-fn status_error(status: reqwest::StatusCode, bytes: &[u8], secrets: &[String]) -> Error {
-    let snippet = crate::text::truncate_marked(String::from_utf8_lossy(bytes).trim(), 200, "...");
+fn status_error(status: reqwest::StatusCode, body: &str, secrets: &[String]) -> Error {
+    let snippet = crate::text::truncate_marked(body.trim(), 200, "...");
     let tail = if snippet.is_empty() {
         String::new()
     } else {
@@ -456,7 +455,7 @@ mod status_tests {
     fn auth_failure_is_actionable_even_with_empty_body() {
         let e = status_error(
             reqwest::StatusCode::UNAUTHORIZED,
-            b"",
+            "",
             &["leadzump_token".into()],
         );
         let msg = e.to_string();
@@ -477,7 +476,7 @@ mod status_tests {
     fn other_statuses_carry_a_truncated_snippet() {
         let e = status_error(
             reqwest::StatusCode::INTERNAL_SERVER_ERROR,
-            "boom".repeat(200).as_bytes(),
+            &"boom".repeat(200),
             &[],
         );
         let msg = e.to_string();

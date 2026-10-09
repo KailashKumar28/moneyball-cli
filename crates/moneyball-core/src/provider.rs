@@ -173,7 +173,7 @@ pub fn models_for(preset: &ModelProviderInfo) -> &'static [&'static str] {
 /// (".../chat/completions", ".../responses", ".../messages") names it and
 /// gives the base; a bare base URL is Chat Completions, the one surface
 /// every OpenAI-compatible server speaks.
-pub fn wire_from_url(url: &str) -> (String, WireApi) {
+pub fn base_and_wire(url: &str) -> (String, WireApi) {
     let url = url.trim().trim_end_matches('/');
     for (endpoint, wire) in [
         ("/chat/completions", WireApi::ChatCompletions),
@@ -225,7 +225,27 @@ mod tests {
                 WireApi::Messages,
             ),
         ] {
-            assert_eq!(wire_from_url(url), (base.to_string(), wire), "{}", url);
+            assert_eq!(base_and_wire(url), (base.to_string(), wire), "{}", url);
+        }
+    }
+
+    #[test]
+    fn a_saved_endpoint_reads_back_as_the_same_provider() {
+        for wire in [
+            WireApi::Responses,
+            WireApi::ChatCompletions,
+            WireApi::Messages,
+        ] {
+            let p = ModelProviderInfo {
+                base_url: "https://x.ai/v1".into(),
+                wire_api: wire,
+                ..Default::default()
+            };
+            let endpoint = crate::llm::endpoint_for(&p);
+            assert_eq!(
+                base_and_wire(&endpoint),
+                ("https://x.ai/v1".to_string(), wire)
+            );
         }
     }
 

@@ -185,7 +185,7 @@ pub(super) fn advance_llm(app: &mut App, s: &mut SetupState) {
             // Refresh the provider entry with the URL the user typed: its
             // endpoint, when given, says the protocol.
             if let Some(p) = s.llm_provider.as_mut() {
-                (p.base_url, p.wire_api) = moneyball_core::provider::wire_from_url(&s.llm_url);
+                (p.base_url, p.wire_api) = moneyball_core::provider::base_and_wire(&s.llm_url);
             }
             advance_save(app, s);
         }

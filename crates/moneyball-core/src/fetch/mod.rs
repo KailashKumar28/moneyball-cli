@@ -23,7 +23,7 @@ use chrono::{Duration, Local};
 use crate::config::AppConfig;
 use crate::error::{Error, Result};
 
-pub(crate) use crate::meta::META_GRAPH_BASE;
+use crate::meta::META_GRAPH_BASE;
 
 /// Per-ad daily fields we request. Matches `snapshot::AdsDailyRow` so the
 /// reader parses every row without loss.
@@ -234,7 +234,7 @@ fn fetch_account_rows(
             ("fields", INSIGHT_FIELDS),
             ("limit", "500"),
         ]);
-    crate::meta::get_all(client, first, &act)
+    crate::meta::get_all(client, first, &act, crate::meta::PULL)
 }
 
 /// Graph account node id, `act_` prefix normalized.

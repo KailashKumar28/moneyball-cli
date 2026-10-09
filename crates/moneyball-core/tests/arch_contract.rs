@@ -42,6 +42,8 @@ fn network_boundary() {
     let root = workspace_root();
     let allowed = [
         "crates/moneyball-core/src/meta.rs",
+        // meta's own tests, against a loopback server.
+        "crates/moneyball-core/src/meta_tests.rs",
         "crates/moneyball-core/src/fetch/mod.rs",
         "crates/moneyball-core/src/fetch/adsets.rs",
         "crates/moneyball-core/src/fetch/creatives.rs",
@@ -142,7 +144,7 @@ fn file_size_ratchet() {
     let frozen: &[(&str, usize)] = &[
         ("crates/moneyball-core/src/agent.rs", 600),
         ("crates/moneyball-core/src/crm/fetch.rs", 490),
-        ("crates/moneyball-core/src/crm/mod.rs", 550),
+        ("crates/moneyball-core/src/crm/mod.rs", 440),
         ("crates/moneyball-core/src/llm.rs", 850),
         ("crates/moneyball-tui/src/chat.rs", 500),
         ("crates/moneyball-tui/src/commands.rs", 750),

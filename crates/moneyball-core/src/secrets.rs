@@ -184,7 +184,10 @@ pub fn load_crm_key(workspace: Option<&str>, name: &str) -> Option<String> {
 /// Copy the legacy shared keys among `names` into `workspace` where it has
 /// none of its own. The caller vouches that this workspace used them.
 /// Writes only when there is something to copy.
-pub fn adopt_legacy_crm_keys(workspace: &str, names: &[String]) -> Result<()> {
+pub(crate) fn adopt_legacy_crm_keys(workspace: &str, names: &[String]) -> Result<()> {
+    if names.is_empty() {
+        return Ok(());
+    }
     let f = load_file()?;
     let own = f.workspaces.get(workspace);
     let adopt: Vec<(String, String)> = names

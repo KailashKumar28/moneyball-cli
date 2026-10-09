@@ -28,13 +28,18 @@ pub(crate) fn funnel_output(
     let rank = funnel::cpl_ranking_for_model(&rows)
         .map(|r| format!("\n{}", r))
         .unwrap_or_default();
+    let crm = moneyball_core::crm::status::CrmHealth::of(cfg, snap)
+        .note()
+        .map(|n| format!("\nIMPORTANT: {}", n))
+        .unwrap_or_default();
     format!(
-        "FUNNEL {} - by {} - 7d - snapshot {}\n{}{}",
+        "FUNNEL {} - by {} - 7d - snapshot {}\n{}{}{}",
         product,
         by.name(),
         snap.date,
         funnel::table(&rows),
-        rank
+        rank,
+        crm
     )
 }
 
@@ -95,6 +100,9 @@ pub(crate) fn run_funnel(app: &mut App, arg: &str) {
     )];
     lines.extend(funnel::view(&rows).lines().map(String::from));
     lines.extend(funnel::cpl_ranking(&rows));
+    if let Some(note) = moneyball_core::crm::status::CrmHealth::of(&app.cfg, &snap).note() {
+        lines.push(format!("warn: {}", note));
+    }
     app.chat.push_tool(
         "funnel",
         arg,

@@ -24,7 +24,8 @@ is exercised headless (sub-commands) and through the TUI.
 
 Network boundary: the read/analysis path (brief, funnel, advisor math)
 never touches the network. Network lives in exactly four core modules:
-`meta.rs` (account discovery), `fetch/` (explicit snapshot pull:
+`meta.rs` (every Graph GET, with its retry; tests in `meta_tests.rs`
+against a loopback server), `fetch/` (explicit snapshot pull:
 `mod.rs` insights + `creatives.rs` per-ad creative identity), `llm.rs`
 (model calls), `crm/fetch.rs` (explicit CRM pull driven by the
 declarative crm.toml spec). Nothing ever writes to Meta or the CRM.

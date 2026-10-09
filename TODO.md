@@ -79,19 +79,31 @@ bottom after a release-sized batch.)
         list moves to claude-opus-5-5 / claude-sonnet-5 / claude-haiku-4-5.
   - [x] No shared CRM key fallback (2026-10-09): a pull reads only the
         workspace's own key; the legacy shared one is copied once into a
-        workspace that has pulled CRM data (it used that key), and never
+        workspace that pulled CRM data before per-client keys shipped
+        (2026-10-09: a CSV import or a later pull is no proof), and never
         reaches a new client. E2E on scratch copies: the new client reads
         "leadzump_token not stored", the old one adopts it.
   - [x] Pasted curl credentials (2026-10-09): -u becomes a Basic header,
         a JSON body's credential fields become {secret:<name>} refs (asked,
         like query params) filled JSON-escaped at request time; a name used
-        twice (query and body both say apiKey) gets its own secret. E2E
-        against a mock CRM: header, query and body each arrived filled.
+        twice (query and body both say apiKey) gets its own secret; a
+        credential that is a number or a list is warned about. Every key a
+        request used is masked back to its ref in what the CRM answers:
+        the error snippet, the sample the model drafts from, the data.
+        E2E against mock CRMs: header, query and body arrived filled, and
+        a 401 echoing them showed secret:<name> only.
   - [x] Meta calls share one GET (2026-10-09): a rate limit (4/17/32/613/
         80000s), a 5xx or is_transient waits 10s and goes once more, unless
         Meta's usage header says the block lasts minutes - then the error
-        says how many; every paged call (insights, leads, the ad account
-        list, which read one page of 200) follows paging.next.
+        says how many; a limit that outlasts a retry stops retries for 5
+        minutes; the setup wizard's calls never wait (enter is the retry);
+        a token Meta quotes back is masked. Every paged call (insights,
+        leads, the ad account list, which read one page of 200) follows
+        paging.next.
+  - [x] The CRM note tells the truth (2026-10-10): when the day's CRM pull
+        failed, every surface (brief, funnel, the agent's tools, crm
+        status) names why and its fix - it said "Fix: /refresh" after a
+        refresh had just failed on an expired key.
   - [ ] Token expiry for /status ("Meta valid to ...") waits on the
         connect work.
 - [ ] **Daily creative report** (plan: docs/CLOUD_PLAN.md, agreed

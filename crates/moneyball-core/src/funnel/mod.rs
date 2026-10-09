@@ -224,17 +224,24 @@ pub fn run(cfg: &AppConfig, product: &str, by: &str, days: u32, date: Option<&st
         days,
         snap.date
     );
+    let crm_note = crate::crm::status::CrmHealth::of(cfg, &snap).note();
     // MB_AGENT=1 is a machine reading: the full table, the model's ranking.
     if cfg.agent {
         print!("{}", table(&rows));
         if let Some(rank) = cpl_ranking_for_model(&rows) {
             println!("{}", rank);
         }
+        if let Some(note) = crm_note {
+            println!("IMPORTANT: {}", note);
+        }
         return Ok(());
     }
     print!("{}", view(&rows));
     if let Some(rank) = cpl_ranking(&rows) {
         println!("{}", rank);
+    }
+    if let Some(note) = crm_note {
+        println!("!! {}", note);
     }
     println!(
         "\nkill = spend >= {}x/{}x/{}x target Rs/qualified with 0/1/2 qualified; immature = leads arrived in trailing {}h",
