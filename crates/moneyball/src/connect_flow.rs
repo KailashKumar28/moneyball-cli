@@ -11,7 +11,7 @@ use anyhow::Result;
 use moneyball_core::crm::{connect, fetch as crm_fetch, presets, source};
 use moneyball_core::AppConfig;
 
-use crate::crm_cli::{ask, print_check_lines};
+use crate::crm_cli::{ask, ask_secret, print_check_lines};
 
 pub fn run(cfg: &AppConfig) -> Result<()> {
     let catalog = presets::catalog();
@@ -33,23 +33,24 @@ pub fn run(cfg: &AppConfig) -> Result<()> {
 
 /// Catalog path: credentials only, then test, then stage mapping.
 fn preset_flow(cfg: &AppConfig, p: &presets::Preset) -> Result<()> {
+    let ws = crate::crm_cli::workspace_of(cfg)?;
     for s in p.secrets {
         // Re-runs (e.g. after fixing a stage map) keep the stored
         // credential on an empty answer instead of re-demanding it.
-        let stored = moneyball_core::secrets::load_crm_key(&p.secret_name(s)).is_some();
+        let stored = moneyball_core::secrets::load_crm_key(Some(ws), &p.secret_name(s)).is_some();
         let prompt = if stored {
             format!("{} ({}) [enter keeps the stored value]: ", s.label, s.help)
         } else {
             format!("{} ({}): ", s.label, s.help)
         };
-        let v = ask(&prompt)?;
+        let v = ask_secret(&prompt)?;
         if v.is_empty() {
             if stored {
                 continue;
             }
             anyhow::bail!("{} is required", s.label);
         }
-        moneyball_core::secrets::store_crm_key(&p.secret_name(s), &v)?;
+        moneyball_core::secrets::store_crm_key(ws, &p.secret_name(s), &v)?;
     }
     let path = crm_fetch::spec_path(cfg);
     std::fs::write(&path, p.render())?;
@@ -61,6 +62,7 @@ fn preset_flow(cfg: &AppConfig, p: &presets::Preset) -> Result<()> {
 /// stored as secrets (the spec on disk only carries refs); the LLM
 /// drafts the field map from a live sample, dry-run gated as before.
 fn custom_flow(cfg: &AppConfig) -> Result<()> {
+    let ws = crate::crm_cli::workspace_of(cfg)?;
     let name = ask("CRM name (e.g. acme-crm): ")?;
     if name.is_empty() {
         anyhow::bail!("a name is required");
@@ -71,7 +73,7 @@ fn custom_flow(cfg: &AppConfig) -> Result<()> {
     let mut input = connect::ConnectInput::from_curl(name.clone(), &line)?;
     for (k, v) in input.headers.iter_mut() {
         let sname = format!("{}_{}", name, k.to_lowercase().replace('-', "_"));
-        moneyball_core::secrets::store_crm_key(&sname, v)?;
+        moneyball_core::secrets::store_crm_key(ws, &sname, v)?;
         *v = format!("secret:{}", sname);
         eprintln!("  header {} stored as secret:{}", k, sname);
     }
@@ -92,14 +94,14 @@ fn custom_flow(cfg: &AppConfig) -> Result<()> {
         };
         if yes {
             let sname = format!("{}_{}", name, k.to_lowercase().replace('-', "_"));
-            moneyball_core::secrets::store_crm_key(&sname, v)?;
+            moneyball_core::secrets::store_crm_key(ws, &sname, v)?;
             *v = format!("secret:{}", sname);
             eprintln!("  query {} stored as secret:{}", k, sname);
         }
     }
 
     eprintln!("probing the endpoint for a sample...");
-    let sample = connect::probe_sample(&input)?;
+    let sample = connect::probe_sample(&input, Some(ws))?;
     let preview = sample.to_string();
     eprintln!(
         "sample received ({} bytes): {}...",

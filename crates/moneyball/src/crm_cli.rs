@@ -40,6 +40,14 @@ pub(crate) enum CrmCmd {
     },
 }
 
+/// The workspace a CRM key belongs to: keys are per client, so storing
+/// one outside a workspace has nowhere to go.
+pub(crate) fn workspace_of(cfg: &AppConfig) -> Result<&str> {
+    cfg.workspace_id().context(
+        "no workspace here - CRM keys belong to a client's workspace; run this in its folder",
+    )
+}
+
 pub(crate) fn run(cmd: CrmCmd, cfg: &AppConfig, data_root: Option<&str>) -> Result<()> {
     match cmd {
         CrmCmd::Status => {
@@ -109,16 +117,18 @@ pub(crate) fn run(cmd: CrmCmd, cfg: &AppConfig, data_root: Option<&str>) -> Resu
             print_ingest_outcome(&r);
         }
         CrmCmd::Secret { name } => {
-            eprintln!("paste the value for \"{}\" and press Enter:", name);
-            let mut value = String::new();
-            std::io::stdin().read_line(&mut value)?;
-            let value = value.trim();
+            // Where it goes before what it is: no workspace, no prompt.
+            let ws = workspace_of(cfg)?;
+            let value = ask_secret(&format!("paste the value for \"{}\" (hidden): ", name))?;
             if value.is_empty() {
                 eprintln!("empty value - nothing stored");
                 std::process::exit(1);
             }
-            moneyball_core::secrets::store_crm_key(&name, value)?;
-            println!("stored CRM secret \"{}\" in ~/.moneyball/auth.json", name);
+            moneyball_core::secrets::store_crm_key(ws, &name, &value)?;
+            println!(
+                "stored CRM secret \"{}\" for this workspace in ~/.moneyball/auth.json",
+                name
+            );
         }
     }
     Ok(())
@@ -170,6 +180,48 @@ pub(crate) fn ask(prompt: &str) -> Result<String> {
     let mut s = String::new();
     std::io::stdin().read_line(&mut s)?;
     Ok(s.trim().to_string())
+}
+
+/// `ask` for a secret: on a terminal every character typed or pasted shows
+/// as `*` and nothing enters the line history (rustyline's masking
+/// highlighter); piped stdin has no screen to hide it from.
+pub(crate) fn ask_secret(prompt: &str) -> Result<String> {
+    use rustyline::config::Configurer;
+    use rustyline::highlight::{CmdKind, Highlighter};
+    use std::io::IsTerminal;
+
+    struct Mask;
+    impl Highlighter for Mask {
+        fn highlight<'l>(&self, line: &'l str, _pos: usize) -> std::borrow::Cow<'l, str> {
+            "*".repeat(line.chars().count()).into()
+        }
+        fn highlight_char(&self, _line: &str, _pos: usize, kind: CmdKind) -> bool {
+            kind != CmdKind::MoveCursor
+        }
+    }
+    impl rustyline::completion::Completer for Mask {
+        type Candidate = String;
+    }
+    impl rustyline::hint::Hinter for Mask {
+        type Hint = String;
+    }
+    impl rustyline::validate::Validator for Mask {}
+    impl rustyline::Helper for Mask {}
+
+    if !std::io::stdin().is_terminal() {
+        return ask(prompt);
+    }
+    let mut rl = rustyline::Editor::<Mask, rustyline::history::DefaultHistory>::new()?;
+    rl.set_helper(Some(Mask));
+    rl.set_color_mode(rustyline::ColorMode::Forced);
+    rl.set_auto_add_history(false);
+    match rl.readline(prompt) {
+        Ok(s) => Ok(s.trim().to_string()),
+        Err(
+            rustyline::error::ReadlineError::Interrupted | rustyline::error::ReadlineError::Eof,
+        ) => Ok(String::new()),
+        Err(e) => Err(e.into()),
+    }
 }
 
 fn print_ingest_outcome(r: &moneyball_core::crm::fetch::CrmFetchReport) {

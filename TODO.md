@@ -56,6 +56,10 @@ bottom after a release-sized batch.)
         wizard opens at the token paste, a new token replaces the saved one
         only if it reads every configured account, products stay. Before,
         /setup jumped to the model step and the token could not be reached.
+  - [x] Per-client CRM keys (2026-10-09, credentials v2 part 1): auth.json
+        keeps CRM keys under each workspace, so two clients on one CRM never
+        overwrite each other; the legacy global key still reads as a
+        fallback. Secret prompts (crm secret, crm connect) show * only.
   - [ ] Token expiry for /status ("Meta valid to ...") waits on the
         connect work.
 - [ ] **Daily creative report** (plan: docs/CLOUD_PLAN.md, agreed

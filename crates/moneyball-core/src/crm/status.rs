@@ -145,7 +145,7 @@ pub fn status_lines(cfg: &AppConfig) -> Result<Vec<String>> {
         .map(|r| r.secret_names())
         .unwrap_or_default()
         .into_iter()
-        .filter(|name| crate::secrets::load_crm_key(name).is_none())
+        .filter(|name| crate::secrets::load_crm_key(cfg.workspace_id(), name).is_none())
         .collect();
     if missing.is_empty() {
         out.push("secret: stored".into());

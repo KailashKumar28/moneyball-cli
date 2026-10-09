@@ -240,6 +240,11 @@ impl AppConfig {
         self.workspace.is_some()
     }
 
+    /// The workspace's id: whose CRM keys and run records these are.
+    pub fn workspace_id(&self) -> Option<&str> {
+        self.workspace.as_ref()?.workspace_id.as_deref()
+    }
+
     /// Workspace root that owns this config's sessions, or None before
     /// a workspace is configured (sessions then fall back to the global
     /// ~/.moneyball/sessions/).
@@ -333,13 +338,13 @@ fn resolve_data_root(cli_arg: Option<&str>) -> Result<PathBuf> {
     // data_root pointer, not a workspace config.
     if let Ok(cwd) = std::env::current_dir() {
         let canon = |p: &Path| p.canonicalize().unwrap_or_else(|_| p.to_path_buf());
-        let is_home = dirs_home().is_some_and(|h| canon(&h) == canon(&cwd));
+        let is_home = home_dir().is_some_and(|h| canon(&h) == canon(&cwd));
         if !is_home && cwd.join(DOT_DIR).join("config.json").is_file() {
             return Ok(cwd);
         }
     }
     // ~/.moneyball/config.json data_root
-    if let Some(home) = dirs_home() {
+    if let Some(home) = home_dir() {
         let gc = home.join(GLOBAL_CONFIG);
         if gc.is_file() {
             if let Ok(raw) = std::fs::read_to_string(&gc) {
@@ -367,7 +372,7 @@ fn resolve_data_root(cli_arg: Option<&str>) -> Result<PathBuf> {
         }
     }
     // Well-known home paths.
-    if let Some(home) = dirs_home() {
+    if let Some(home) = home_dir() {
         for rel in ["DEV/fin_campaign_analysis", "fin_campaign_analysis"] {
             let cand = home.join(rel);
             if cand.is_dir() {
@@ -389,8 +394,4 @@ pub fn home_dir() -> Option<PathBuf> {
     std::env::var_os("HOME")
         .or_else(|| std::env::var_os("USERPROFILE"))
         .map(PathBuf::from)
-}
-
-fn dirs_home() -> Option<PathBuf> {
-    home_dir()
 }

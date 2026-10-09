@@ -151,11 +151,11 @@ pub fn expand(template: &str, vars: &HashMap<&str, String>) -> String {
     out
 }
 
-/// Resolve a spec value: `secret:<name>` from auth.json crm_keys,
-/// `env:<VAR>` from the environment, anything else literal.
-pub fn resolve_ref(value: &str) -> Result<String> {
+/// Resolve a spec value: `secret:<name>` from the workspace's CRM keys in
+/// auth.json, `env:<VAR>` from the environment, anything else literal.
+pub fn resolve_ref(value: &str, workspace: Option<&str>) -> Result<String> {
     if let Some(name) = value.strip_prefix("secret:") {
-        return crate::secrets::load_crm_key(name).ok_or_else(|| {
+        return crate::secrets::load_crm_key(workspace, name).ok_or_else(|| {
             Error::Secrets(format!(
                 "no CRM secret \"{}\" - store it with: moneyball crm secret {}",
                 name, name
@@ -315,10 +315,10 @@ delivery = "mx_Delivery_Time"
     #[test]
     fn resolve_ref_env_and_literal() {
         std::env::set_var("MB_CRM_TEST_KEY", "k-123");
-        assert_eq!(resolve_ref("env:MB_CRM_TEST_KEY").unwrap(), "k-123");
+        assert_eq!(resolve_ref("env:MB_CRM_TEST_KEY", None).unwrap(), "k-123");
         std::env::remove_var("MB_CRM_TEST_KEY");
-        assert!(resolve_ref("env:MB_CRM_TEST_KEY").is_err());
-        assert_eq!(resolve_ref("plain").unwrap(), "plain");
+        assert!(resolve_ref("env:MB_CRM_TEST_KEY", None).is_err());
+        assert_eq!(resolve_ref("plain", None).unwrap(), "plain");
     }
 
     #[test]

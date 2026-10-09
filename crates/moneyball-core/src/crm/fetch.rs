@@ -141,6 +141,7 @@ pub fn fetch_crm(cfg: &AppConfig, days: u32) -> Result<CrmFetchReport> {
         };
         let resp = request_page(
             &client,
+            cfg.workspace_id(),
             request,
             &spec.paging,
             &vars,
@@ -301,10 +302,9 @@ fn validate_and_write(
     })
 }
 
-/// One-page probe used by `crm connect` to grab a sample response before
-/// any spec exists. No paging params; date templates resolve to the
-/// trailing 28 days.
-pub fn probe(request: &source::RequestSpec) -> Result<Value> {
+/// `crm connect`'s one-page probe for a sample before any spec exists:
+/// no paging; dates are the trailing 28 days; secrets are `workspace`'s.
+pub fn probe(request: &source::RequestSpec, workspace: Option<&str>) -> Result<Value> {
     let client = reqwest::blocking::Client::builder()
         .timeout(std::time::Duration::from_secs(30))
         .build()
@@ -321,6 +321,7 @@ pub fn probe(request: &source::RequestSpec) -> Result<Value> {
     ]);
     request_page(
         &client,
+        workspace,
         request,
         &source::PagingSpec::default(),
         &vars,
@@ -334,6 +335,7 @@ pub fn probe(request: &source::RequestSpec) -> Result<Value> {
 /// One HTTP call with refs resolved and templates expanded.
 fn request_page(
     client: &reqwest::blocking::Client,
+    workspace: Option<&str>,
     request: &source::RequestSpec,
     paging: &source::PagingSpec,
     vars: &HashMap<&str, String>,
@@ -347,12 +349,17 @@ fn request_page(
         m => return Err(Error::Config(format!("unsupported method {}", m))),
     };
     for (k, v) in &request.headers {
-        req = req.header(k, source::expand(&source::resolve_ref(v)?, vars));
+        req = req.header(k, source::expand(&source::resolve_ref(v, workspace)?, vars));
     }
     let mut query: Vec<(String, String)> = request
         .query
         .iter()
-        .map(|(k, v)| Ok((k.clone(), source::expand(&source::resolve_ref(v)?, vars))))
+        .map(|(k, v)| {
+            Ok((
+                k.clone(),
+                source::expand(&source::resolve_ref(v, workspace)?, vars),
+            ))
+        })
         .collect::<Result<_>>()?;
     // Page mode carries its params implicitly - the spec declares the
     // names once in [paging], not again in [request.query].

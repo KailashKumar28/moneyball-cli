@@ -10,7 +10,13 @@
 //!
 //! Layout:
 //!   { "meta_access_token": "...", "llm_keys": { "<provider_id>": "..." },
+//!     "workspaces": { "<workspace_id>": { "crm_keys": { "<name>": "..." } } },
 //!     "crm_keys": { "<name>": "..." } }
+//!
+//! Meta and the model are the person's; a CRM key is the client's, so it
+//! lives under its workspace - two clients on the same CRM never share or
+//! overwrite a key. The top-level `crm_keys` is the legacy global store,
+//! still read as a fallback and never written.
 
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -25,6 +31,15 @@ struct AuthFile {
     meta_access_token: Option<String>,
     #[serde(default, skip_serializing_if = "HashMap::is_empty")]
     llm_keys: HashMap<String, String>,
+    #[serde(default, skip_serializing_if = "HashMap::is_empty")]
+    workspaces: HashMap<String, WorkspaceKeys>,
+    /// Legacy, from before per-workspace keys: read, never written.
+    #[serde(default, skip_serializing_if = "HashMap::is_empty")]
+    crm_keys: HashMap<String, String>,
+}
+
+#[derive(Debug, Default, Serialize, Deserialize)]
+struct WorkspaceKeys {
     #[serde(default, skip_serializing_if = "HashMap::is_empty")]
     crm_keys: HashMap<String, String>,
 }
@@ -141,22 +156,32 @@ pub fn clear_llm_key(provider_id: &str) -> Result<()> {
     })
 }
 
-/// Store a CRM secret referenced from crm.toml as `secret:<name>`.
-pub fn store_crm_key(name: &str, value: &str) -> Result<()> {
+/// Store a CRM secret (crm.toml's `secret:<name>`) for one workspace.
+pub fn store_crm_key(workspace: &str, name: &str, value: &str) -> Result<()> {
     update(|f| {
-        f.crm_keys.insert(name.to_string(), value.to_string());
+        f.workspaces
+            .entry(workspace.to_string())
+            .or_default()
+            .crm_keys
+            .insert(name.to_string(), value.to_string());
     })
 }
 
-/// Read a CRM secret. `None` if absent.
-pub fn load_crm_key(name: &str) -> Option<String> {
-    load_file().ok()?.crm_keys.get(name).cloned()
+/// Read a CRM secret: the workspace's own first, then the legacy global
+/// one, so a setup from before per-workspace keys keeps working.
+pub fn load_crm_key(workspace: Option<&str>, name: &str) -> Option<String> {
+    let f = load_file().ok()?;
+    workspace
+        .and_then(|w| f.workspaces.get(w)?.crm_keys.get(name).cloned())
+        .or_else(|| f.crm_keys.get(name).cloned())
 }
 
-/// Remove a CRM secret. Idempotent.
-pub fn clear_crm_key(name: &str) -> Result<()> {
+/// Remove a workspace's CRM secret. Idempotent.
+pub fn clear_crm_key(workspace: &str, name: &str) -> Result<()> {
     update(|f| {
-        f.crm_keys.remove(name);
+        if let Some(w) = f.workspaces.get_mut(workspace) {
+            w.crm_keys.remove(name);
+        }
     })
 }
 
@@ -175,12 +200,28 @@ mod tests {
         std::env::set_var("MONEYBALL_AUTH_PATH", &file);
 
         store_llm_key("test_provider", "sk-test-1234").unwrap();
-        store_crm_key("test_crm", "tok-5678").unwrap();
+        store_crm_key("ws-a", "test_crm", "tok-5678").unwrap();
         assert_eq!(
             load_llm_key("test_provider").as_deref(),
             Some("sk-test-1234")
         );
-        assert_eq!(load_crm_key("test_crm").as_deref(), Some("tok-5678"));
+        assert_eq!(
+            load_crm_key(Some("ws-a"), "test_crm").as_deref(),
+            Some("tok-5678")
+        );
+        // Two clients on the same CRM keep their own key under one name.
+        store_crm_key("ws-b", "test_crm", "tok-other").unwrap();
+        assert_eq!(
+            load_crm_key(Some("ws-a"), "test_crm").as_deref(),
+            Some("tok-5678")
+        );
+        assert_eq!(
+            load_crm_key(Some("ws-b"), "test_crm").as_deref(),
+            Some("tok-other")
+        );
+        assert_eq!(load_crm_key(Some("ws-c"), "test_crm"), None);
+        clear_crm_key("ws-b", "test_crm").unwrap();
+        assert_eq!(load_crm_key(Some("ws-b"), "test_crm"), None);
         // No stray tmp file left behind by the atomic save (the lock file stays).
         let names: Vec<String> = std::fs::read_dir(&dir)
             .unwrap()
