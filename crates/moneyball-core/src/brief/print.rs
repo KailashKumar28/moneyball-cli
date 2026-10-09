@@ -14,6 +14,9 @@ pub fn print_brief(r: &ProductRowsAndFeasibility) {
         println!("{}", warn);
     }
     print!("{}", format_brief_table(&r.rows, r.has_crm));
+    if let Some(order) = cpl_order(&r.rows) {
+        println!("cheapest Meta lead first: {}", order);
+    }
     let f = &r.feasibility;
     println!();
     if !r.has_crm {
@@ -69,6 +72,10 @@ pub fn format_brief_table(rows: &[ProductRow], has_crm: bool) -> String {
         ("product", Box::new(|r| r.product.clone())),
         ("spend_per_day", Box::new(|r| commas(r.spend_per_day))),
         ("m7d", Box::new(|r| r.m7d.to_string())),
+        (
+            "cpl",
+            Box::new(|r| r.cpl.map(commas).unwrap_or_else(|| "-".into())),
+        ),
         ("l7d", crm(|r| r.l7d.to_string())),
         ("q7d", crm(|r| r.q7d.to_string())),
         ("q_per_day", crm(|r| fmt_f64(r.q_per_day, 2))),
@@ -101,4 +108,23 @@ fn fmt_f64(x: f64, decimals: usize) -> String {
     let sign = if scaled < 0 { "-" } else { "" };
     let abs = scaled.unsigned_abs() as f64 / 10f64.powi(decimals as i32);
     format!("{}{}", sign, abs)
+}
+
+/// The products by cost per Meta lead, cheapest first ("A Rs.1,505 <
+/// B Rs.2,207"), for the model to narrate rather than compute; None
+/// with fewer than two to rank.
+pub fn cpl_order(rows: &[ProductRow]) -> Option<String> {
+    let mut ranked: Vec<(&str, u64)> = rows
+        .iter()
+        .filter_map(|r| Some((r.product.as_str(), r.cpl?)))
+        .collect();
+    if ranked.len() < 2 {
+        return None;
+    }
+    ranked.sort_by_key(|(_, c)| *c);
+    let parts: Vec<String> = ranked
+        .iter()
+        .map(|(p, c)| format!("{} Rs.{}", p, crate::text::commas(*c)))
+        .collect();
+    Some(parts.join(" < "))
 }

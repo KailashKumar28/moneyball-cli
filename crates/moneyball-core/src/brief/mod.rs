@@ -8,7 +8,7 @@
 pub mod history;
 pub mod print;
 pub use history::load_history;
-pub use print::{format_brief_table, print_brief};
+pub use print::{cpl_order, format_brief_table, print_brief};
 
 use std::collections::HashMap;
 use std::path::Path;
@@ -29,6 +29,9 @@ pub struct ProductRow {
     pub product: String,
     pub spend_per_day: u64,
     pub m7d: u64,
+    /// Cost per Meta lead over the 7 days, pre-computed: left to divide
+    /// spend per day by a weekly lead count, the model got it 8x wrong.
+    pub cpl: Option<u64>,
     pub l7d: u64,
     pub q7d: u64,
     pub q_per_day: f64,
@@ -196,6 +199,7 @@ fn compute_product(product: &str, snap: &Snapshot, window: &Window, goal: f64) -
         product: product.into(),
         spend_per_day,
         m7d: total_m,
+        cpl: (total_m > 0).then(|| (total_spend / total_m as f64).round() as u64),
         l7d: total_l,
         q7d: total_q,
         q_per_day: round2(qpd),

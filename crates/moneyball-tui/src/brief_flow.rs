@@ -15,6 +15,7 @@ Produce a concise commentary that:\n\
   2. Identifies the best and worst Rs/qualified and what that implies for budget reallocation.\n\
   3. Notes the BEST-OBSERVED Rs/qualified vs current - is the gap from inefficient spend or just volume?\n\
   4. Flags setup-debt items if any (they cost leads).\n\
+Before suggesting a cut or a budget move away from a product, call the diagnose tool for it.\n\
 Keep it tight - 5-8 sentences, no preamble, no bullets unless the user asks.";
 
 /// /brief: the deterministic numbers as a tool cell (so the user sees the
@@ -114,18 +115,20 @@ pub(crate) fn format_brief_as_lines(b: &brief::ProductRowsAndFeasibility) -> Vec
         if !b.has_crm {
             // Unknown, not zero: no CRM data means no leads or qualified.
             out.push(format!(
-                "    spend Rs.{}/d  meta {}  crm -  qual -",
+                "    spend Rs.{}/d  meta {}  cpl {}  crm -  qual -",
                 commas(r.spend_per_day),
-                r.m7d
+                r.m7d,
+                cpl(r)
             ));
             continue;
         }
         // Labeled, not single-letter columns: this text is read raw in
         // the chat cell (user feedback: "this is not so readable").
         out.push(format!(
-            "    spend Rs.{}/d  meta {}  crm {}  qual {} ({:.2}/d)  {}",
+            "    spend Rs.{}/d  meta {}  cpl {}  crm {}  qual {} ({:.2}/d)  {}",
             commas(r.spend_per_day),
             r.m7d,
+            cpl(r),
             r.l7d,
             r.q7d,
             r.q_per_day,
@@ -136,6 +139,9 @@ pub(crate) fn format_brief_as_lines(b: &brief::ProductRowsAndFeasibility) -> Vec
             l_to_q,
             format!("{:.1}", r.gap)
         ));
+    }
+    if let Some(order) = brief::cpl_order(&b.rows) {
+        out.push(format!("  cheapest Meta lead first: {}", order));
     }
     out.push(String::new());
     let f = &b.feasibility;
@@ -172,4 +178,9 @@ pub(crate) fn format_brief_as_lines(b: &brief::ProductRowsAndFeasibility) -> Vec
     };
     out.push(format!("  setup debt: {}{}", f.open_debt.len(), suffix));
     out
+}
+
+/// "Rs.1,505", or "-" with no Meta lead to divide by.
+fn cpl(r: &brief::ProductRow) -> String {
+    r.cpl.map_or("-".into(), |c| format!("Rs.{}", commas(c)))
 }
