@@ -264,11 +264,10 @@ impl RefreshCell {
             );
         }
         if let Some(path) = report {
-            paras.push(
-                Para::new(INDENT, INDENT + 8)
-                    .run("report  ", gray())
-                    .run(path.clone(), fg(Color::Cyan)),
-            );
+            paras.push(Para::new(INDENT, INDENT + 8).run("report  ", gray()).run(
+                crate::widgets::tilde(std::path::Path::new(path)),
+                fg(Color::Cyan),
+            ));
             paras.push(Para::new(INDENT + 8, INDENT + 8).run(
                 format!("ctrl+o open it{}/brief or /funnel <product> to dig in", DOT),
                 dim(),

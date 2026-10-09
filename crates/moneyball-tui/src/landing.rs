@@ -286,7 +286,7 @@ fn day_block(
     out.push(
         Para::new(2, 10)
             .run("report  ", gray())
-            .run(html.display().to_string(), fg(Color::Cyan)),
+            .run(crate::widgets::tilde(html), fg(Color::Cyan)),
     );
     out.push(Para::new(10, 10).run(
         format!("ctrl+o open it{}/status for the last 14 mornings", DOT),

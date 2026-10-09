@@ -190,7 +190,8 @@ pub fn tilde(path: &std::path::Path) -> String {
 /// A paragraph of styled runs that word-wraps to the width it is drawn
 /// at: `indent` columns lead the first line, `hang` the rest. Spaces
 /// inside a line are kept (the "  .  " separators), a word wider than the
-/// line (a path) is split, and an empty paragraph is a blank line.
+/// line (a path) is split - after a "/" when it can - and an empty
+/// paragraph is a blank line.
 #[derive(Debug, Clone, Default)]
 pub struct Para {
     pub runs: Vec<(String, Style)>,
@@ -220,7 +221,11 @@ impl Para {
         let mut fresh = true;
         for (text, style) in &self.runs {
             for tok in tokens(text) {
-                if !fresh && used + tok.trim_end().chars().count() > width {
+                let len = tok.trim_end().chars().count();
+                // A word too wide for any line splits anyway: it starts
+                // here when a fair piece of it fits.
+                let splits_here = self.hang + len > width && width.saturating_sub(used) >= 10;
+                if !fresh && used + len > width && !splits_here {
                     out.push(end_line(&mut cur));
                     cur.push(Span::raw(" ".repeat(self.hang)));
                     used = self.hang;
@@ -233,8 +238,15 @@ impl Para {
                 };
                 // Only a word wider than a whole line gets here unfitted
                 // (its trailing spaces may overhang; a break drops them).
+                // A path breaks after a "/" when one fits.
                 while used + rest.iter().rev().skip_while(|c| **c == ' ').count() > width {
-                    let head: String = rest.drain(..width - used).collect();
+                    let room = width - used;
+                    let cut = rest[..room]
+                        .iter()
+                        .rposition(|c| *c == '/')
+                        .filter(|&p| p > 0)
+                        .map_or(room, |p| p + 1);
+                    let head: String = rest.drain(..cut).collect();
                     cur.push(Span::styled(head, *style));
                     out.push(end_line(&mut cur));
                     cur.push(Span::raw(" ".repeat(self.hang)));
@@ -305,8 +317,17 @@ mod tests {
         let path = Para::new(0, 2).run("report /a/b/c/d/e/f/g/h/i/j/k", gray());
         assert_eq!(
             text(&path.lines(12)),
-            vec!["report", "  /a/b/c/d/e", "  /f/g/h/i/j", "  /k"]
+            vec!["report", "  /a/b/c/d/", "  e/f/g/h/i/", "  j/k"]
         );
+        // Room left on the line: the path starts there.
+        let long = Para::new(0, 2).run("report /aa/bb/cc/dd/ee/ff/gg/hh/ii/jj/kk/ll", gray());
+        assert_eq!(
+            text(&long.lines(30)),
+            vec!["report /aa/bb/cc/dd/ee/ff/gg/", "  hh/ii/jj/kk/ll"]
+        );
+        // No "/" to break after: the word splits where the line ends.
+        let word = Para::new(0, 0).run("abcdefghijklmn", gray());
+        assert_eq!(text(&word.lines(10)), vec!["abcdefghij", "klmn"]);
         assert_eq!(text(&Para::new(6, 6).lines(40)), vec![""]);
     }
 }
