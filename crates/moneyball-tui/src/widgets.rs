@@ -65,7 +65,7 @@ pub fn context_line(
         }
         Some(h) => {
             if let (Some(day), Some(age)) = (h.data_day(), h.age_days()) {
-                let (value, style) = if age >= STALE_DAYS {
+                let (value, style) = if age >= STALE_DAYS && h.state != State::Pinned {
                     (
                         format!("{}, pulled {} days ago", day.format("%d %b"), age),
                         fg(Color::Yellow),
@@ -94,6 +94,7 @@ pub fn context_line(
             } else {
                 let color = match h.state {
                     State::Fresh => Color::Green,
+                    State::Pinned => Color::Gray,
                     State::Failed => Color::Red,
                     State::NoData => Color::DarkGray,
                     _ => Color::Yellow,

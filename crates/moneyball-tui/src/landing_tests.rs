@@ -29,6 +29,7 @@ fn health(state: State, snap: Option<&str>) -> Health {
         run: None,
         refreshed_at: None,
         failed_today: None,
+        newest_snap_date: Some(d("2026-10-09")),
         state,
     }
 }
@@ -69,6 +70,13 @@ fn each_state_ends_with_the_command_that_fixes_it() {
     let failed = text(&landing(&cfg, &health(State::Failed, None), false).0);
     assert!(failed.contains("Today's refresh failed"));
     assert!(!failed.contains("last good data"));
+
+    let pinned = text(&landing(&cfg, &health(State::Pinned, Some("2026-08-12")), false).0);
+    assert!(pinned.contains("Viewing Tue 11 Aug (--date). The newest data is Thu 08 Oct."));
+    assert!(
+        !pinned.contains("/refresh   "),
+        "a chosen day asks for nothing"
+    );
 
     let fresh = landing(&cfg, &health(State::Fresh, Some("2026-10-09")), false).0;
     assert!(

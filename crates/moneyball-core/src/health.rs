@@ -18,6 +18,8 @@ pub enum State {
     /// so a first refresh that fails shows its fix, not "no data yet".
     Failed,
     NoData,
+    /// A past day chosen with --date: its age is the point, not a fault.
+    Pinned,
     /// The newest data is STALE_DAYS or more old.
     Stale,
     /// The snapshot on screen has no CRM data.
@@ -43,6 +45,8 @@ pub struct Health {
     pub refreshed_at: Option<DateTime<Local>>,
     /// Today's run, when it failed.
     pub failed_today: Option<RunRecord>,
+    /// With --date: the newest snapshot there is, beside the one pinned.
+    pub newest_snap_date: Option<NaiveDate>,
     pub state: State,
 }
 
@@ -66,6 +70,10 @@ impl Health {
             });
         let failed_today = crate::runs::read(cfg, &today.format("%Y-%m-%d").to_string())
             .filter(|r| r.outcome == Outcome::Failed);
+        let newest_snap_date = cfg.date.as_ref().and_then(|_| {
+            let latest = cfg.snap_for(None).ok()?;
+            day(latest.file_name()?.to_str()?)
+        });
         Health {
             today,
             snap_date,
@@ -76,11 +84,13 @@ impl Health {
                 snap_date,
                 crm_snap_date,
                 failed_today.is_some(),
+                cfg.date.is_some(),
                 run.as_ref(),
             ),
             run,
             refreshed_at,
             failed_today,
+            newest_snap_date,
         }
     }
 
@@ -101,6 +111,7 @@ impl Health {
     pub fn label(&self) -> String {
         match self.state {
             State::NoData => "no data".into(),
+            State::Pinned => "pinned (--date)".into(),
             State::Failed => "refresh failed".into(),
             State::Stale => "stale".into(),
             State::CrmMissing => "CRM missing".into(),
@@ -115,6 +126,7 @@ fn state(
     snap_date: Option<NaiveDate>,
     crm_snap_date: Option<NaiveDate>,
     failed_today: bool,
+    pinned: bool,
     run: Option<&RunRecord>,
 ) -> State {
     if failed_today {
@@ -123,6 +135,9 @@ fn state(
     let Some(snap) = snap_date else {
         return State::NoData;
     };
+    if pinned {
+        return State::Pinned;
+    }
     if (today - snap).num_days() >= STALE_DAYS {
         return State::Stale;
     }
@@ -156,24 +171,29 @@ mod tests {
     fn the_most_urgent_state_wins() {
         let today = d("2026-10-09").unwrap();
         let fresh = d("2026-10-09");
-        assert_eq!(state(today, None, None, false, None), State::NoData);
+        assert_eq!(state(today, None, None, false, false, None), State::NoData);
         assert_eq!(
-            state(today, None, None, true, None),
+            state(today, None, None, true, false, None),
             State::Failed,
             "a first refresh that failed shows its fix, not 'no data'"
         );
-        assert_eq!(state(today, fresh, fresh, true, None), State::Failed);
+        assert_eq!(state(today, fresh, fresh, true, false, None), State::Failed);
         assert_eq!(
-            state(today, d("2026-10-07"), d("2026-08-12"), false, None),
+            state(today, d("2026-10-07"), d("2026-08-12"), false, false, None),
             State::Stale,
             "two days old is stale, whatever CRM says"
         );
         assert_eq!(
-            state(today, d("2026-10-08"), fresh, false, None),
+            state(today, d("2026-10-08"), fresh, false, false, None),
             State::CrmMissing,
             "a day old is fine for Meta, but CRM must be in that snapshot"
         );
-        assert_eq!(state(today, fresh, fresh, false, None), State::Fresh);
+        assert_eq!(state(today, fresh, fresh, false, false, None), State::Fresh);
+        assert_eq!(
+            state(today, d("2026-08-12"), d("2026-08-12"), false, true, None),
+            State::Pinned,
+            "a day picked with --date is not stale"
+        );
 
         let run = RunRecord {
             schema: RUN_SCHEMA.into(),
@@ -196,7 +216,7 @@ mod tests {
             artifacts: Default::default(),
         };
         assert_eq!(
-            state(today, fresh, fresh, false, Some(&run)),
+            state(today, fresh, fresh, false, false, Some(&run)),
             State::Partial { have: 4, of: 5 }
         );
     }

@@ -35,7 +35,7 @@ pub(crate) fn landing(
     // States whose day still has numbers worth showing under the story.
     let whole_day = matches!(
         h.state,
-        State::Fresh | State::Partial { .. } | State::CrmMissing
+        State::Fresh | State::Partial { .. } | State::CrmMissing | State::Pinned
     );
     // Without numbers below, the fix and the next command stand apart.
     if !whole_day {
@@ -161,6 +161,22 @@ fn story(h: &Health, day: &str, scheduled: bool) -> (Vec<Para>, Vec<String>) {
                 Color::Yellow,
             ));
         }
+        State::Pinned => {
+            let newest = h
+                .newest_snap_date
+                .filter(|n| Some(*n) != h.snap_date)
+                .and_then(|n| n.pred_opt())
+                .map(|n| format!(" The newest data is {}.", n.format(DAY)))
+                .unwrap_or_default();
+            out.push(
+                Para::new(2, 4)
+                    .run(
+                        format!("Viewing {} (--date).", day),
+                        Style::default().add_modifier(Modifier::BOLD),
+                    )
+                    .run(newest, gray()),
+            );
+        }
         State::Fresh => {}
     }
     (out, fixes)
@@ -170,7 +186,7 @@ fn story(h: &Health, day: &str, scheduled: bool) -> (Vec<Para>, Vec<String>) {
 /// /schedule beneath it when nothing refreshes on its own.
 fn next_command(h: &Health, after_fix: bool, offer_schedule: bool) -> Vec<Para> {
     let (cmd, does) = match h.state {
-        State::Fresh => return Vec::new(),
+        State::Fresh | State::Pinned => return Vec::new(),
         State::Partial { .. } => ("/refresh --force", "pulls Meta again for every product"),
         State::CrmMissing if h.age_days() == Some(0) => (
             "/refresh",
