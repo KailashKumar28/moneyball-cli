@@ -1,0 +1,146 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "RunRecord",
+  "description": "One refresh run (`moneyball.run/<major>`), written even when it fails.",
+  "type": "object",
+  "properties": {
+    "artifacts": {
+      "description": "Files the run wrote, by role (\"snapshot\", \"report\", ...).",
+      "type": "object",
+      "additionalProperties": {
+        "type": "string"
+      },
+      "default": {}
+    },
+    "date": {
+      "description": "The snapshot date the run filled (YYYY-MM-DD); the data covers the\nday before.",
+      "type": "string"
+    },
+    "finished_at": {
+      "description": "RFC3339 UTC; empty while running.",
+      "type": "string",
+      "default": ""
+    },
+    "outcome": {
+      "$ref": "#/$defs/Outcome"
+    },
+    "schema": {
+      "type": "string"
+    },
+    "started_at": {
+      "description": "RFC3339 UTC.",
+      "type": "string"
+    },
+    "steps": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/RunStep"
+      }
+    },
+    "trigger": {
+      "$ref": "#/$defs/Trigger"
+    },
+    "workspace_id": {
+      "description": "The workspace's stable id (config.json), the tenant key.",
+      "type": "string"
+    }
+  },
+  "required": [
+    "schema",
+    "workspace_id",
+    "date",
+    "trigger",
+    "started_at",
+    "outcome",
+    "steps"
+  ],
+  "$defs": {
+    "Outcome": {
+      "description": "`failed`: nothing new was written (Meta failed). `degraded`: written,\nbut something is missing (CRM failed, or a product). `ok`: complete.",
+      "type": "string",
+      "enum": [
+        "running",
+        "ok",
+        "degraded",
+        "failed"
+      ]
+    },
+    "RunStep": {
+      "type": "object",
+      "properties": {
+        "counts": {
+          "description": "What the step moved: rows, leads, tickets, pages, ...",
+          "type": "object",
+          "additionalProperties": {
+            "type": "integer",
+            "format": "uint64",
+            "minimum": 0
+          },
+          "default": {}
+        },
+        "error_kind": {
+          "description": "Machine-readable failure kind (`meta_auth`, `crm_auth`, ...).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "fix": {
+          "description": "The one command that fixes it.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "message": {
+          "description": "One plain sentence, scrubbed of secrets.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "ms": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "name": {
+          "description": "`meta`, `assets`, `crm`, `report`.",
+          "type": "string"
+        },
+        "status": {
+          "$ref": "#/$defs/StepStatus"
+        }
+      },
+      "required": [
+        "name",
+        "status",
+        "ms"
+      ]
+    },
+    "StepStatus": {
+      "oneOf": [
+        {
+          "type": "string",
+          "enum": [
+            "done",
+            "failed",
+            "skipped"
+          ]
+        },
+        {
+          "description": "Done for some products, not all.",
+          "type": "string",
+          "const": "partial"
+        }
+      ]
+    },
+    "Trigger": {
+      "type": "string",
+      "enum": [
+        "schedule",
+        "manual"
+      ]
+    }
+  }
+}

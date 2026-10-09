@@ -19,6 +19,7 @@ pub mod meta;
 pub mod product;
 pub mod provider;
 pub mod report;
+pub mod runs;
 pub mod schema;
 pub mod secrets;
 pub mod session;

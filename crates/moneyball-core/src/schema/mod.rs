@@ -17,14 +17,17 @@
 
 mod artifacts;
 mod report;
+mod run;
 
 pub use artifacts::*;
 pub use report::*;
+pub use run::*;
 
 pub const CREATIVES_SCHEMA: &str = "moneyball.creatives/1";
 pub const CREATIVE_REPORT_SCHEMA: &str = "moneyball.creative_report/1";
 pub const LEADS_SCHEMA: &str = "moneyball.leads/1";
 pub const CRM_CONTACTS_SCHEMA: &str = "moneyball.crm_contacts/1";
+pub const RUN_SCHEMA: &str = "moneyball.run/1";
 
 #[cfg(test)]
 mod tests {
