@@ -31,12 +31,17 @@ pub fn fetch_and_write(
 
     let mut rows: Vec<LeadRow> = Vec::new();
     let (mut failed, mut first_err) = (0usize, None::<String>);
-    for ad_id in &ad_ids {
-        match pull_ad(client, token, ad_id) {
+    // Lifetime leads per ad, not a time_created window: a duplicate is
+    // judged against the person's earlier submissions, which may predate it.
+    let pulled = super::in_parallel(&ad_ids, |ad| {
+        pull_ad(client, token, ad).map_err(|e| e.reason())
+    });
+    for leads in pulled {
+        match leads.unwrap_or_else(|| Err("a leads worker stopped unexpectedly".into())) {
             Ok(mut r) => rows.append(&mut r),
             Err(e) => {
                 failed += 1;
-                first_err.get_or_insert(e.to_string());
+                first_err.get_or_insert(e);
             }
         }
     }
@@ -53,8 +58,6 @@ pub fn fetch_and_write(
     Ok((file.rows.len(), warn))
 }
 
-// ponytail: sequential per-ad GETs, lifetime leads per ad; batch or add
-// a time_created filter if /fetch time on 200+ ads starts to hurt.
 fn pull_ad(client: &reqwest::blocking::Client, token: &str, ad_id: &str) -> Result<Vec<LeadRow>> {
     let mut rows = Vec::new();
     let mut url = format!("{}/{}/leads", super::META_GRAPH_BASE, ad_id);

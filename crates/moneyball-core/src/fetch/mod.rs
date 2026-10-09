@@ -137,16 +137,61 @@ pub fn fetch_snapshot(cfg: &AppConfig, token: &str, days: u32) -> Result<FetchRe
 
 type PerProduct = Vec<(String, std::result::Result<usize, String>)>;
 
+/// Calls made at once against Meta. One at a time, a refresh waited on
+/// round trips (leads were 24s of a 39s pull); Meta takes a handful.
+const WORKERS: usize = 6;
+
+/// `f` over every item on up to WORKERS threads, each result at its item's
+/// index - so what gets written reads exactly as a one-at-a-time pass.
+/// None where a worker died (a panic) before reaching that item.
+pub(super) fn in_parallel<T: Sync, R: Send>(
+    items: &[T],
+    f: impl Fn(&T) -> R + Sync,
+) -> Vec<Option<R>> {
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    let next = AtomicUsize::new(0);
+    let done: Vec<(usize, R)> = std::thread::scope(|scope| {
+        let workers: Vec<_> = (0..WORKERS.min(items.len()))
+            .map(|_| {
+                scope.spawn(|| {
+                    let mut mine = Vec::new();
+                    loop {
+                        let i = next.fetch_add(1, Ordering::Relaxed);
+                        let Some(item) = items.get(i) else { break };
+                        mine.push((i, f(item)));
+                    }
+                    mine
+                })
+            })
+            .collect();
+        workers
+            .into_iter()
+            .flat_map(|w| w.join().unwrap_or_default())
+            .collect()
+    });
+    let mut out: Vec<Option<R>> = items.iter().map(|_| None).collect();
+    for (i, r) in done {
+        out[i] = Some(r);
+    }
+    out
+}
+
 /// Every product's rows, tagged with `_product`. One account failing marks
 /// that product with its error and the others still land; only when every
 /// account fails (an expired token, no network) does the fetch fail.
 fn collect_products(
     products: &[crate::config::Product],
-    mut fetch_account: impl FnMut(&str) -> Result<Vec<serde_json::Value>>,
+    fetch_account: impl Fn(&str) -> Result<Vec<serde_json::Value>> + Sync,
 ) -> Result<(Vec<serde_json::Value>, PerProduct)> {
     let (mut all, mut per, mut first_err) = (Vec::new(), Vec::new(), None);
-    for p in products {
-        match fetch_account(&p.ad_account) {
+    let pulled = in_parallel(products, |p| fetch_account(&p.ad_account));
+    for (p, rows) in products.iter().zip(pulled) {
+        let rows = rows.unwrap_or_else(|| {
+            Err(Error::Meta(
+                "the pull for this account stopped unexpectedly".into(),
+            ))
+        });
+        match rows {
             Ok(rows) => {
                 per.push((p.name.clone(), Ok(rows.len())));
                 for mut r in rows {
@@ -252,6 +297,17 @@ mod collect_tests {
             name: name.into(),
             ad_account: account.into(),
         }
+    }
+
+    #[test]
+    fn in_parallel_returns_results_in_item_order() {
+        let items: Vec<u64> = (0..20).collect();
+        let out = in_parallel(&items, |i| {
+            // Later items finish first: order must still be the items'.
+            std::thread::sleep(std::time::Duration::from_millis(20 - i));
+            i * 2
+        });
+        assert_eq!(out, items.iter().map(|i| Some(i * 2)).collect::<Vec<_>>());
     }
 
     #[test]

@@ -170,10 +170,12 @@ bottom after a release-sized batch.)
       of live leads (18:30-24:00 UTC) bucketed to the wrong day.
       Segmentation now converts to IST before dating, like python.
 
-- [ ] **Leads pull cost**: `fetch/leads.rs` does one sequential GET
-      per ad and pulls each ad's lifetime leads. Add a `time_created`
-      filter (validate live first) or batch once /fetch on 200+ ads
-      starts to hurt. Marked `ponytail:` in code.
+- [x] **Leads pull cost** (2026-10-09): measured - leads were 24s of a
+      39s pull, insights 8-14s, one GET at a time. fetch::in_parallel runs
+      the per-ad leads and the per-account insights 6 at a time, results in
+      item order: the real refresh's Meta step went 64-75s -> 18s with
+      identical ads_daily and leads.json. Lifetime leads kept (a duplicate
+      needs the person's earlier submissions), no time_created window.
 
 - [ ] **Audit package G remainder** (structure P1/P2s from the 2026-07
       architecture audit): move `connect_flow.rs` orchestration into
