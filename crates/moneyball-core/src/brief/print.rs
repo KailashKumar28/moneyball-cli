@@ -12,9 +12,14 @@ pub fn print_brief(r: &ProductRowsAndFeasibility) {
     if let Some(warn) = staleness_warning(&r.snapshot_date) {
         println!("{}", warn);
     }
-    println!("{}", format_brief_table(&r.rows));
+    println!("{}", format_brief_table(&r.rows, r.has_crm));
     let f = &r.feasibility;
     println!();
+    if !r.has_crm {
+        println!("FEASIBILITY  needs qualified leads, and this snapshot has no CRM data");
+        print_debt(&f.open_debt);
+        return;
+    }
     println!(
         "FEASIBILITY  portfolio {:.1} q/day at Rs.{}/day = Rs.{}/qualified - goal {:.0}/day",
         f.tot_q_per_day,
@@ -37,13 +42,16 @@ pub fn print_brief(r: &ProductRowsAndFeasibility) {
             req as f64 / f.tot_spend_per_day.max(1) as f64
         );
     }
-    let n = f.open_debt.len();
-    let suffix = if f.open_debt.is_empty() {
+    print_debt(&f.open_debt);
+}
+
+fn print_debt(debt: &[String]) {
+    let suffix = if debt.is_empty() {
         String::new()
     } else {
-        format!(" ({})", f.open_debt.join(", "))
+        format!(" ({})", debt.join(", "))
     };
-    println!("  open setup debt: {}{}", n, suffix);
+    println!("  open setup debt: {}{}", debt.len(), suffix);
 }
 
 fn comma(n: i64) -> String {
@@ -70,14 +78,18 @@ fn comma(n: i64) -> String {
 type BriefCell = Box<dyn Fn(&ProductRow) -> String>;
 type BriefSpec<'a> = (&'a str, BriefCell);
 
-pub fn format_brief_table(rows: &[ProductRow]) -> String {
+/// Without CRM data the CRM-derived columns print "-": unknown, not zero.
+pub fn format_brief_table(rows: &[ProductRow], has_crm: bool) -> String {
+    let crm = move |f: fn(&ProductRow) -> String| -> BriefCell {
+        Box::new(move |r| if has_crm { f(r) } else { "-".into() })
+    };
     let cols: Vec<BriefSpec<'_>> = vec![
         ("product", Box::new(|r| r.product.clone())),
         ("spend_per_day", Box::new(|r| r.spend_per_day.to_string())),
         ("m7d", Box::new(|r| r.m7d.to_string())),
-        ("l7d", Box::new(|r| r.l7d.to_string())),
-        ("q7d", Box::new(|r| r.q7d.to_string())),
-        ("q_per_day", Box::new(|r| fmt_f64(r.q_per_day, 2))),
+        ("l7d", crm(|r| r.l7d.to_string())),
+        ("q7d", crm(|r| r.q7d.to_string())),
+        ("q_per_day", crm(|r| fmt_f64(r.q_per_day, 2))),
         (
             "rs_per_q",
             Box::new(|r| {
@@ -95,7 +107,7 @@ pub fn format_brief_table(rows: &[ProductRow]) -> String {
             }),
         ),
         ("goal", Box::new(|r| fmt_f64(r.goal, 0))),
-        ("gap", Box::new(|r| fmt_f64(r.gap, 1))),
+        ("gap", crm(|r| fmt_f64(r.gap, 1))),
         ("q_last7_by_day", Box::new(|r| r.trend.clone())),
     ];
     let headers: Vec<&str> = cols.iter().map(|(h, _)| *h).collect();
@@ -125,7 +137,9 @@ pub fn format_brief_table(rows: &[ProductRow]) -> String {
                 .enumerate()
                 .map(|(i, c)| c.pad_to_width(widths[i]))
                 .collect::<Vec<_>>()
-                .join("  "),
+                .join("  ")
+                .trim_end()
+                .to_string(),
         );
     }
     lines.join("\n")

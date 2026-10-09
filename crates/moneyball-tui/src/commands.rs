@@ -605,6 +605,13 @@ pub(crate) fn build_brief_prompt(b: &brief::ProductRowsAndFeasibility) -> String
     }
     s.push('\n');
     for r in &b.rows {
+        if !b.has_crm {
+            s.push_str(&format!(
+                "- {}: spend Rs.{}/day, m={}, CRM leads and qualified unknown\n",
+                r.product, r.spend_per_day, r.m7d
+            ));
+            continue;
+        }
         let l_to_q = r
             .l_to_q
             .map(|x| format!("{:.1}%", x))
@@ -628,6 +635,14 @@ pub(crate) fn build_brief_prompt(b: &brief::ProductRowsAndFeasibility) -> String
         ));
     }
     let f = &b.feasibility;
+    if !b.has_crm {
+        s.push_str(&format!(
+            "\nNo CRM data in this snapshot: qualified per day, Rs/q and the gap to the \
+             {:.0}/day goal are unknown, not zero.\n\nWrite the commentary.",
+            f.tot_goal_per_day
+        ));
+        return s;
+    }
     s.push_str(&format!(
         "\nPortfolio: {:.1} q/day at Rs.{}/day = Rs.{}/q. Goal: {:.0}/day.\n",
         f.tot_q_per_day, f.tot_spend_per_day, f.cur_rpq, f.tot_goal_per_day
@@ -673,6 +688,14 @@ pub(crate) fn format_brief_as_lines(b: &brief::ProductRowsAndFeasibility) -> Vec
             .map(|x| format!("Rs.{}/q", x))
             .unwrap_or_else(|| "-".into());
         out.push(format!("  > {}", r.product));
+        if !b.has_crm {
+            // Unknown, not zero: no CRM data means no leads or qualified.
+            out.push(format!(
+                "    spend Rs.{}/d  meta {}  crm -  qual -",
+                r.spend_per_day, r.m7d
+            ));
+            continue;
+        }
         // Labeled, not single-letter columns: this text is read raw in
         // the chat cell (user feedback: "this is not so readable").
         out.push(format!(
@@ -687,6 +710,10 @@ pub(crate) fn format_brief_as_lines(b: &brief::ProductRowsAndFeasibility) -> Vec
     }
     out.push(String::new());
     let f = &b.feasibility;
+    if !b.has_crm {
+        out.push("FEASIBILITY  needs qualified leads, and this snapshot has no CRM data".into());
+        return out;
+    }
     out.push(format!(
         "FEASIBILITY  {:.1} q/day @ Rs.{}/day = Rs.{}/q  -  goal {:.0}/day",
         f.tot_q_per_day, f.tot_spend_per_day, f.cur_rpq, f.tot_goal_per_day

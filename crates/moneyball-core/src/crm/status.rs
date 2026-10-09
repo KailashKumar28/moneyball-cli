@@ -37,21 +37,21 @@ impl CrmHealth {
 
     /// The one sentence for a state that isn't fresh; None when fresh.
     pub fn note(&self) -> Option<String> {
-        const ZEROS: &str =
-            "CRM leads and qualified read 0 and are NOT real zeros; verdicts are withheld";
+        const UNKNOWN: &str =
+            "CRM leads and qualified are unknown, not zero, and verdicts are withheld";
         match self {
             CrmHealth::Fresh => None,
             CrmHealth::NoSpec => Some(format!(
                 "no CRM connected - {}. Fix: moneyball crm connect",
-                ZEROS
+                UNKNOWN
             )),
             CrmHealth::NoData { last: Some(d) } => Some(format!(
                 "no CRM data in this snapshot (newest CRM pull: snapshot {}) - {}. Fix: moneyball crm fetch",
-                d, ZEROS
+                d, UNKNOWN
             )),
             CrmHealth::NoData { last: None } => Some(format!(
                 "no CRM data pulled yet - {}. Fix: moneyball crm fetch",
-                ZEROS
+                UNKNOWN
             )),
         }
     }

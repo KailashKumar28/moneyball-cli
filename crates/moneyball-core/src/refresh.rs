@@ -326,13 +326,11 @@ pub fn step_line(n: usize, s: &RunStep) -> String {
     } else {
         String::new()
     };
+    // Fixed-width columns first, free text last: the line wraps cleanly
+    // at any width instead of pushing the time onto a line of its own.
     let line = format!(
-        "  {} {:<20} {:<8} {:<70} {}",
-        n,
-        label,
-        status,
-        crate::text::truncate_marked(&detail, 70, "..."),
-        time
+        "  {} {:<20} {:<8} {:>6}  {}",
+        n, label, status, time, detail
     );
     let line = line.trim_end().to_string();
     match (&s.message, trouble) {
@@ -366,4 +364,25 @@ fn commas(n: u64) -> String {
         out.push(c);
     }
     out
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn step_line_puts_time_before_detail_and_the_reason_below() {
+        let ok = done("report", 1100, [("creatives", 1234)]);
+        assert_eq!(
+            step_line(4, &ok),
+            "  4 daily report         done       1.1s  1,234 creatives"
+        );
+        let mut crm = done("crm", 900, []);
+        crm.status = StepStatus::Failed;
+        crm.message = Some("CRM rejected the credentials (HTTP 401)".into());
+        assert_eq!(
+            step_line(3, &crm),
+            "  3 CRM                  failed     0.9s\n      CRM rejected the credentials (HTTP 401)"
+        );
+    }
 }

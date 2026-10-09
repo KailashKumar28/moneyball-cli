@@ -103,6 +103,7 @@ pub fn compute(
         rows,
         feasibility,
         snapshot_date: snap.date.clone(),
+        has_crm: !crate::crm::is_empty(&snap.crm),
     }
 }
 
@@ -324,6 +325,9 @@ pub struct ProductRowsAndFeasibility {
     /// Date of the snapshot this was computed from (YYYY-MM-DD). Every
     /// surface shows it - numbers without their as-of date mislead.
     pub snapshot_date: String,
+    /// False when the snapshot has no CRM data: leads, qualified, Rs/q and
+    /// gap are then unknown, and every printer shows "-", never 0.
+    pub has_crm: bool,
 }
 
 /// Warning line when the snapshot is old enough to mislead (2+ days).

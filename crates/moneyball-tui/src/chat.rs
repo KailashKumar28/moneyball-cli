@@ -188,18 +188,22 @@ pub mod cells {
             let mut out = Vec::new();
             let indent = "      ";
             let max_w = width.saturating_sub(indent.len() as u16).max(20) as usize;
+            let style = Style::default().fg(if self.success {
+                Color::Gray
+            } else {
+                Color::Red
+            });
             for ln in &self.output {
-                // Tool output is pre-formatted (aligned tables); never word-wrap
-                // it - word-wrapping collapses runs of spaces and destroys column
-                // alignment. Clip to the panel width instead, keeping whitespace.
-                out.push(Line::from(Span::styled(
-                    format!("{}{}", indent, clip(ln, max_w)),
-                    Style::default().fg(if self.success {
-                        Color::Gray
-                    } else {
-                        Color::Red
-                    }),
-                )));
+                // Tool output is pre-formatted (aligned tables): wrap it by
+                // columns, keeping its spaces, and indent the overflow.
+                let pieces = moneyball_core::text::wrap_columns(ln, max_w, max_w - 2);
+                for (i, piece) in pieces.into_iter().enumerate() {
+                    let lead = if i == 0 { indent } else { "        " };
+                    out.push(Line::from(Span::styled(
+                        format!("{}{}", lead, piece),
+                        style,
+                    )));
+                }
             }
             // 0 means "not measured" (replayed sessions) - print no
             // duration rather than a fabricated "(0ms)".
@@ -456,17 +460,6 @@ impl ChatLog {
 }
 
 // ---------- helpers ----------
-
-/// Clip a pre-formatted line to `width` columns, preserving internal whitespace
-/// (word-wrapping would collapse space runs). Adds an ellipsis when cut.
-fn clip(s: &str, width: usize) -> String {
-    if width == 0 || s.chars().count() <= width {
-        return s.to_string();
-    }
-    let mut out: String = s.chars().take(width.saturating_sub(1)).collect();
-    out.push('\u{2026}');
-    out
-}
 
 fn fmt_duration(ms: u64) -> String {
     if ms < 1000 {
