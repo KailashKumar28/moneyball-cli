@@ -70,12 +70,15 @@ bottom after a release-sized batch.)
         a worker with the composer answering (secrets as *), moneyball
         connect crm in the shell. Every "connect a CRM" fix points there.
   - [ ] Review follow-ups (2026-10-09, after the second code review):
-        a request body cannot hold `secret:` refs yet (resolve them in
-        request_page, secretize body fields like query params) and curl's
-        -u is dropped (map to a Basic header); move a legacy shared CRM key
+        move a legacy shared CRM key
         under the workspace that uses it, then drop the fallback; let the
         custom provider pick its wire protocol; one "when did this step
         last pull" helper for /connect and /status.
+  - [x] Pasted curl credentials (2026-10-09): -u becomes a Basic header,
+        a JSON body's credential fields become {secret:<name>} refs (asked,
+        like query params) filled JSON-escaped at request time; a name used
+        twice (query and body both say apiKey) gets its own secret. E2E
+        against a mock CRM: header, query and body each arrived filled.
   - [x] Meta calls share one GET (2026-10-09): a rate limit (4/17/32/613/
         80000s), a 5xx or is_transient waits 10s and goes once more, unless
         Meta's usage header says the block lasts minutes - then the error

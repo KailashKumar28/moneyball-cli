@@ -26,10 +26,14 @@ macro_rules! answer {
     ($p:expr, $prompt:expr, $secret:expr) => {
         match $p.ask(&$prompt, $secret) {
             Some(a) => a,
-            None => return Ok(Done::Cancelled),
+            // Into: Done in the flow, Some(Done) in its steps.
+            None => return Ok(Done::Cancelled.into()),
         }
     };
 }
+
+// After answer!: the steps use it.
+mod request;
 
 pub fn connect(cfg: &AppConfig, p: &mut dyn Prompter) -> Result<Done> {
     let ws = cfg.workspace_id().ok_or_else(|| {
@@ -112,59 +116,8 @@ fn custom(cfg: &AppConfig, ws: &str, p: &mut dyn Prompter) -> Result<Done> {
         names(&input.headers),
         names(&input.query)
     ));
-    // A body goes to the model and into crm.toml as written: say so when
-    // it looks like it carries a credential, and let the user stop.
-    let carried = input
-        .body
-        .as_deref()
-        .map(body_credentials)
-        .unwrap_or_default();
-    if !carried.is_empty() {
-        let go = answer!(
-            p,
-            format!(
-                "the request body carries {} - it is sent to the model and saved in crm.toml as is. continue? [y/N]: ",
-                carried.join(", ")
-            ),
-            false
-        );
-        if !go.eq_ignore_ascii_case("y") {
-            p.show("nothing saved - take the credential out of the body, or pick a listed CRM");
-            return Ok(Done::NotSaved);
-        }
-    }
-    let secret_name = |k: &str| format!("{}_{}", name, k.to_lowercase().replace('-', "_"));
-    for (k, v) in input.headers.iter_mut() {
-        let sname = secret_name(k);
-        crate::secrets::store_crm_key(ws, &sname, v)?;
-        *v = format!("secret:{}", sname);
-        p.show(&format!("  header {} stored as secret:{}", k, sname));
-    }
-    // Query params carry credentials in many CRMs (LeadSquared puts
-    // accessKey/secretKey there). Secretize per param - dates and flags
-    // must stay literal so the model can turn them into templates.
-    for (k, v) in input.query.iter_mut() {
-        let looks_secret = looks_credential(k);
-        let hint = if looks_secret { "[Y/n]" } else { "[y/N]" };
-        let a = answer!(
-            p,
-            format!(
-                "query param \"{}\" - store its value as a secret? {}: ",
-                k, hint
-            ),
-            false
-        );
-        let yes = if a.is_empty() {
-            looks_secret
-        } else {
-            a.eq_ignore_ascii_case("y")
-        };
-        if yes {
-            let sname = secret_name(k);
-            crate::secrets::store_crm_key(ws, &sname, v)?;
-            *v = format!("secret:{}", sname);
-            p.show(&format!("  query {} stored as secret:{}", k, sname));
-        }
+    if let Some(done) = request::secretize(ws, &name, &mut input, p)? {
+        return Ok(done);
     }
 
     p.show("probing the endpoint for a sample...");
@@ -286,43 +239,6 @@ fn names(pairs: &[(String, String)]) -> String {
         .join(", ")
 }
 
-/// The credential-looking field names in a request body (JSON or form).
-fn body_credentials(body: &str) -> Vec<String> {
-    fn walk(v: &serde_json::Value, out: &mut Vec<String>) {
-        match v {
-            serde_json::Value::Object(m) => {
-                for (k, v) in m {
-                    if looks_credential(k) {
-                        out.push(k.clone());
-                    }
-                    walk(v, out);
-                }
-            }
-            serde_json::Value::Array(a) => a.iter().for_each(|v| walk(v, out)),
-            _ => {}
-        }
-    }
-    let mut out = Vec::new();
-    match serde_json::from_str::<serde_json::Value>(body) {
-        Ok(v) => walk(&v, &mut out),
-        Err(_) => out.extend(
-            body.split('&')
-                .filter_map(|kv| kv.split_once('=').map(|(k, _)| k.to_string()))
-                .filter(|k| looks_credential(k)),
-        ),
-    }
-    out
-}
-
-/// Does this query-param name look like it carries a credential?
-/// Drives only the DEFAULT of the store-as-secret prompt above.
-fn looks_credential(key: &str) -> bool {
-    let k = key.to_lowercase();
-    ["key", "token", "secret", "auth", "sig", "pass", "pwd"]
-        .iter()
-        .any(|n| k.contains(n))
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -351,14 +267,6 @@ mod tests {
             ),
             agent: true,
         }
-    }
-
-    #[test]
-    fn credentials_in_a_body_are_named() {
-        let json = r#"{"filter": {"stage": "x"}, "auth": {"apiKey": "k", "page": 1}}"#;
-        assert_eq!(body_credentials(json), vec!["auth", "apiKey"]);
-        assert_eq!(body_credentials("q=1&access_token=t"), vec!["access_token"]);
-        assert!(body_credentials(r#"{"page": 1}"#).is_empty());
     }
 
     #[test]

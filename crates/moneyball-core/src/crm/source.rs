@@ -49,8 +49,8 @@ pub struct RequestSpec {
 
 impl RequestSpec {
     /// The secret names the request references (`secret:<name>` in a
-    /// header or query value): what the user must store, and what an auth
-    /// error must name.
+    /// header or query value, `{secret:<name>}` in the body): what the
+    /// user must store, and what an auth error must name.
     pub fn secret_names(&self) -> Vec<String> {
         let mut names: Vec<String> = self
             .headers
@@ -58,6 +58,7 @@ impl RequestSpec {
             .chain(self.query.values())
             .filter_map(|v| v.trim_matches(['{', '}']).strip_prefix("secret:"))
             .map(String::from)
+            .chain(self.body.as_deref().map(body_refs).unwrap_or_default())
             .collect();
         names.sort();
         names.dedup();
@@ -169,31 +170,37 @@ pub fn resolve_ref(value: &str, workspace: Option<&str>) -> Result<String> {
     Ok(value.to_string())
 }
 
-/// Pull the record array out of a response via the spec's `root` path.
-pub use super::transform::{organic_contacts, transform};
+/// The `{secret:<name>}` refs in a body, in order.
+fn body_refs(body: &str) -> Vec<String> {
+    body.split("{secret:")
+        .skip(1)
+        .filter_map(|rest| rest.split_once('}').map(|(name, _)| name.to_string()))
+        .collect()
+}
 
-/// CSV rows as records: header row names the fields, every value is a
-/// string (parse_epoch and the validator handle coercion downstream).
-/// For CSV, the spec's map paths are simply column names.
-pub fn csv_records(raw: &str) -> Result<Vec<Value>> {
-    let mut rdr = csv::ReaderBuilder::new()
-        .has_headers(true)
-        .from_reader(raw.as_bytes());
-    let headers = rdr
-        .headers()
-        .map_err(|e| Error::Config(format!("csv: {}", e)))?
-        .clone();
-    let mut out = Vec::new();
-    for row in rdr.records() {
-        let row = row.map_err(|e| Error::Config(format!("csv: {}", e)))?;
-        let mut rec = serde_json::Map::new();
-        for (h, v) in headers.iter().zip(row.iter()) {
-            rec.insert(h.to_string(), Value::String(v.to_string()));
-        }
-        out.push(Value::Object(rec));
+/// A body with its `{secret:<name>}` refs filled from the workspace's
+/// keys, each JSON-escaped: a ref sits inside a JSON string.
+pub fn fill_secrets(body: &str, workspace: Option<&str>) -> Result<String> {
+    fill_refs(body, |name| {
+        resolve_ref(&format!("secret:{}", name), workspace)
+    })
+}
+
+fn fill_refs(body: &str, value_of: impl Fn(&str) -> Result<String>) -> Result<String> {
+    let mut out = body.to_string();
+    for name in body_refs(body) {
+        let value = value_of(&name)?;
+        let quoted = serde_json::to_string(&value)?;
+        let escaped = quoted
+            .strip_prefix('"')
+            .and_then(|q| q.strip_suffix('"'))
+            .unwrap_or(&quoted);
+        out = out.replace(&format!("{{secret:{}}}", name), escaped);
     }
     Ok(out)
 }
+
+pub use super::transform::{csv_records, organic_contacts, transform};
 
 /// Add stage mappings to a spec's [map.stage_map], preserving existing
 /// entries (parse -> insert -> re-serialize; returns a valid spec).
@@ -248,6 +255,7 @@ fn type_name(v: &Value) -> &'static str {
     }
 }
 
+/// Pull the record array out of a response via the spec's `root` path.
 pub fn records<'a>(resp: &'a Value, root: &str) -> Result<&'a Vec<Value>> {
     let node = if root.is_empty() {
         resp
@@ -357,12 +365,20 @@ delivery = "mx_Delivery_Time"
     }
 
     #[test]
-    fn csv_records_use_header_names() {
-        let raw = "Ad Id,Stage,Delivered\n111,Site Visit,2026-07-15T09:30:00+05:30\n";
-        let recs = csv_records(raw).unwrap();
-        assert_eq!(recs.len(), 1);
-        assert_eq!(recs[0]["Ad Id"], "111");
-        assert_eq!(recs[0]["Stage"], "Site Visit");
+    fn body_refs_are_named_and_filled_json_escaped() {
+        let spec = parse(
+            "name = \"x\"\n[request]\nurl = \"https://x\"\n\
+             body = '{\"k\": \"{secret:x_key}\", \"from\": \"{from_date}\"}'\n\
+             [map]\nad_id = \"a\"\nstage = \"s\"\ndelivery = \"d\"\n",
+        )
+        .unwrap();
+        let request = spec.request.unwrap();
+        assert_eq!(request.secret_names(), vec!["x_key"]);
+        let body = request.body.unwrap();
+        let filled = fill_refs(&body, |_| Ok(r#"pa"ss\"#.into())).unwrap();
+        let v: Value = serde_json::from_str(&filled).unwrap();
+        assert_eq!(v["k"], r#"pa"ss\"#);
+        assert_eq!(v["from"], "{from_date}");
     }
 
     #[test]

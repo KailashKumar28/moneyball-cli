@@ -371,9 +371,8 @@ fn request_page(
     }
     req = req.query(&query);
     if let Some(body) = &request.body {
-        req = req
-            .header("Content-Type", "application/json")
-            .body(source::expand(body, vars));
+        let body = source::fill_secrets(&source::expand(body, vars), workspace)?;
+        req = req.header("Content-Type", "application/json").body(body);
     }
     if !progress.agent {
         if let Some(label) = progress.label {

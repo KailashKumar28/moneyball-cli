@@ -160,7 +160,7 @@ fn render_card(out: &mut String, rank: usize, pslug: &str, c: &CreativeCard, his
             format!(
                 r#"<img src="data:{};base64,{}" alt="" loading="lazy">"#,
                 mime,
-                super::img::b64(&payload)
+                crate::text::base64(&payload)
             )
         })
         .unwrap_or_else(|| r#"<div class="noimg">no preview</div>"#.into());
@@ -345,13 +345,6 @@ pub(super) fn rupees(v: f64) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn b64_matches_known_vectors() {
-        assert_eq!(super::super::img::b64(b""), "");
-        assert_eq!(super::super::img::b64(b"f"), "Zg==");
-        assert_eq!(super::super::img::b64(b"foobar"), "Zm9vYmFy");
-    }
 
     #[test]
     fn commas_slug_esc_rupees() {

@@ -1,4 +1,4 @@
-//! Char-boundary-safe string helpers.
+//! Char-boundary-safe string helpers, and base64.
 //!
 //! `&s[..n]` panics on multibyte text - lead names, error bodies, and
 //! currency signs routinely contain it - so `clippy::string_slice` is
@@ -77,9 +77,44 @@ pub fn wrap_columns(s: &str, width: usize, rest: usize) -> Vec<String> {
     out
 }
 
+/// Dependency-free base64 (standard alphabet, padded).
+pub fn base64(data: &[u8]) -> String {
+    const T: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    let mut out = String::with_capacity(data.len().div_ceil(3) * 4);
+    for chunk in data.chunks(3) {
+        let b = [
+            chunk[0],
+            *chunk.get(1).unwrap_or(&0),
+            *chunk.get(2).unwrap_or(&0),
+        ];
+        let n = (b[0] as u32) << 16 | (b[1] as u32) << 8 | b[2] as u32;
+        out.push(T[(n >> 18) as usize & 63] as char);
+        out.push(T[(n >> 12) as usize & 63] as char);
+        out.push(if chunk.len() > 1 {
+            T[(n >> 6) as usize & 63] as char
+        } else {
+            '='
+        });
+        out.push(if chunk.len() > 2 {
+            T[n as usize & 63] as char
+        } else {
+            '='
+        });
+    }
+    out
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn base64_matches_known_vectors() {
+        assert_eq!(base64(b""), "");
+        assert_eq!(base64(b"f"), "Zg==");
+        assert_eq!(base64(b"foobar"), "Zm9vYmFy");
+        assert_eq!(base64(b"user:pa ss"), "dXNlcjpwYSBzcw==");
+    }
 
     #[test]
     fn wraps_without_losing_or_collapsing() {

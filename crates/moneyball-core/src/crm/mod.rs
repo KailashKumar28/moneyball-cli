@@ -7,6 +7,7 @@
 //! precise errors until its export conforms.
 
 pub mod connect;
+mod curl;
 pub mod fetch;
 pub mod paging;
 pub mod presets;

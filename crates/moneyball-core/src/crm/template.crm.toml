@@ -1,7 +1,8 @@
 # moneyball CRM source spec - executed by `moneyball crm fetch`.
 # Docs: `moneyball crm contract` explains the target crm.json shape.
 # Secrets NEVER go in this file: use "secret:<name>" (stored via
-# `moneyball crm secret <name>`) or "env:<VAR>".
+# `moneyball crm secret <name>`) or "env:<VAR>"; inside a body, a JSON
+# string value of "{secret:<name>}".
 #
 # The example values below are for LeadSquared; replace with your CRM.
 

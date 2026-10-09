@@ -1,9 +1,11 @@
-//! Record -> ticket transform + organic-contact extraction. Split
-//! from source.rs (size cap); pure over parsed specs and raw records.
+//! Record -> ticket transform, organic-contact extraction and CSV rows as
+//! records. Split from source.rs (size cap); pure over parsed specs and
+//! raw records.
 
 use serde_json::Value;
 
 use super::source::{get_path, scalar_string, MapSpec};
+use crate::error::{Error, Result};
 
 /// Transform raw CRM records into contract tickets. Records with NO ad
 /// id are dropped and counted (second return): every real CRM holds
@@ -88,4 +90,41 @@ pub fn organic_contacts(records: &[Value], map: &MapSpec) -> Vec<crate::schema::
                 .then_some(crate::schema::ContactRow { phone, email })
         })
         .collect()
+}
+
+/// CSV rows as records: header row names the fields, every value is a
+/// string (parse_epoch and the validator handle coercion downstream).
+/// For CSV, the spec's map paths are simply column names.
+pub fn csv_records(raw: &str) -> Result<Vec<Value>> {
+    let mut rdr = csv::ReaderBuilder::new()
+        .has_headers(true)
+        .from_reader(raw.as_bytes());
+    let headers = rdr
+        .headers()
+        .map_err(|e| Error::Config(format!("csv: {}", e)))?
+        .clone();
+    let mut out = Vec::new();
+    for row in rdr.records() {
+        let row = row.map_err(|e| Error::Config(format!("csv: {}", e)))?;
+        let mut rec = serde_json::Map::new();
+        for (h, v) in headers.iter().zip(row.iter()) {
+            rec.insert(h.to_string(), Value::String(v.to_string()));
+        }
+        out.push(Value::Object(rec));
+    }
+    Ok(out)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn csv_records_use_header_names() {
+        let raw = "Ad Id,Stage,Delivered\n111,Site Visit,2026-07-15T09:30:00+05:30\n";
+        let recs = csv_records(raw).unwrap();
+        assert_eq!(recs.len(), 1);
+        assert_eq!(recs[0]["Ad Id"], "111");
+        assert_eq!(recs[0]["Stage"], "Site Visit");
+    }
 }
