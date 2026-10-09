@@ -78,7 +78,11 @@ pub fn verdict(r: &FunnelRow) -> &'static str {
 fn view_cell(r: &FunnelRow, col: &str) -> String {
     // Without CRM the CRM columns are unknown, never 0.
     let crm = |v: u64| r.kill.map_or("-".into(), |_| v.to_string());
+    let money = |v: Option<u64>| v.map_or("-".into(), crate::text::commas);
     match col {
+        "spend" => money(Some(r.spend)),
+        "cpl" => money(r.cpl),
+        "rs_per_q" => money(r.rs_per_q),
         "meta" => r.m.to_string(),
         "crm" => crm(r.l),
         "qual" => crm(r.q),
@@ -117,10 +121,24 @@ fn grid(cols: &[&str], rows: &[FunnelRow], cell: fn(&FunnelRow, &str) -> String)
                 .unwrap_or(0)
         })
         .collect();
+    // Numbers right-align, so their digits line up.
+    let numeric: Vec<bool> = (0..cols.len())
+        .map(|i| {
+            cells.iter().all(|row| {
+                row[i]
+                    .chars()
+                    .all(|c| c.is_ascii_digit() || matches!(c, ',' | '.' | '-'))
+            })
+        })
+        .collect();
     let line = |row: &[String]| {
         row.iter()
             .zip(&widths)
-            .map(|(c, w)| format!("{:<w$}", c))
+            .zip(&numeric)
+            .map(|((c, w), num)| match num {
+                true => format!("{:>w$}", c),
+                false => format!("{:<w$}", c),
+            })
             .collect::<Vec<_>>()
             .join("  ")
             .trim_end()
