@@ -75,6 +75,7 @@ pub fn fetch_crm(cfg: &AppConfig, days: u32) -> Result<CrmFetchReport> {
                 .into(),
         )
     })?;
+    super::status::adopt_legacy_keys(cfg, request);
     // Anchor to the snapshot the data will join (today's if its ads are in,
     // else the newest with ads), decided BEFORE any network call: CRM must
     // cover that snapshot's days, not the days around whenever this ran.

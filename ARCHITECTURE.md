@@ -40,7 +40,7 @@ and HOME/cwd reads live only in config.rs (also arch-enforced).
   in the workspace (sessions fall back to `~/.moneyball/sessions/` only
   before a workspace is configured); `~/.moneyball/auth.json` (0600) for
   secrets - Meta and model keys per person, CRM keys per workspace
-  (`workspaces.<id>.crm_keys`, legacy global `crm_keys` read as a fallback) and `~/.moneyball/bug-reports/` for user-filed bug reports -
+  (`workspaces.<id>.crm_keys`; the legacy global `crm_keys` is never read for a pull, only copied once into a workspace that has pulled CRM data) and `~/.moneyball/bug-reports/` for user-filed bug reports -
   codex-style dotfile, not the OS keychain (keychain ACLs break for
   locally built binaries). Secrets never appear in config.json,
   crm.toml, or logs - crm.toml references them as `secret:<name>` /

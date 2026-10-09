@@ -64,7 +64,7 @@ fn preset(cfg: &AppConfig, ws: &str, c: &presets::Preset, p: &mut dyn Prompter) 
     for s in c.secrets {
         // Re-runs (e.g. after fixing a stage map) keep the stored
         // credential on an empty answer instead of re-demanding it.
-        let stored = crate::secrets::own_crm_key(ws, &c.secret_name(s)).is_some();
+        let stored = crate::secrets::load_crm_key(Some(ws), &c.secret_name(s)).is_some();
         p.show(&format!("{}: {}", s.label, s.help));
         let prompt = if stored {
             format!("{} [enter keeps the stored one]: ", s.label)

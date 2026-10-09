@@ -141,14 +141,7 @@ fn crm_row(cfg: &AppConfig, run: Option<&RunRecord>) -> Source {
             "/connect crm",
         );
     };
-    let unstored: Vec<String> = spec
-        .request
-        .as_ref()
-        .map(|r| r.secret_names())
-        .unwrap_or_default()
-        .into_iter()
-        .filter(|n| crate::secrets::load_crm_key(cfg.workspace_id(), n).is_none())
-        .collect();
+    let unstored = crate::crm::status::unstored_secrets(cfg, spec.request.as_ref());
     let (link, detail, fix) = match last_step(cfg, run, "crm") {
         _ if !unstored.is_empty() => (
             Link::Missing,

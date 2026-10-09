@@ -15,8 +15,9 @@
 //!
 //! Meta and the model are the person's; a CRM key is the client's, so it
 //! lives under its workspace - two clients on the same CRM never share or
-//! overwrite a key. The top-level `crm_keys` is the legacy global store,
-//! still read as a fallback and never written.
+//! overwrite a key. The top-level `crm_keys` is the legacy global store:
+//! never read for a pull, never written, only copied into a workspace that
+//! used it (crm::status::adopt_legacy_keys).
 
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -33,7 +34,7 @@ struct AuthFile {
     llm_keys: HashMap<String, String>,
     #[serde(default, skip_serializing_if = "HashMap::is_empty")]
     workspaces: HashMap<String, WorkspaceKeys>,
-    /// Legacy, from before per-workspace keys: read, never written.
+    /// Legacy, from before per-workspace keys: copied, never written.
     #[serde(default, skip_serializing_if = "HashMap::is_empty")]
     crm_keys: HashMap<String, String>,
 }
@@ -167,26 +168,37 @@ pub fn store_crm_key(workspace: &str, name: &str, value: &str) -> Result<()> {
     })
 }
 
-/// Read a CRM secret: the workspace's own first, then the legacy global
-/// one, so a setup from before per-workspace keys keeps working.
+/// Read this workspace's CRM secret (none without a workspace).
 pub fn load_crm_key(workspace: Option<&str>, name: &str) -> Option<String> {
-    let f = load_file().ok()?;
-    workspace
-        .and_then(|w| f.workspaces.get(w)?.crm_keys.get(name).cloned())
-        .or_else(|| f.crm_keys.get(name).cloned())
-}
-
-/// This workspace's own CRM secret, never the legacy shared one: what a
-/// connect may offer to keep (keeping the legacy key would wire this
-/// client to whichever client stored it first).
-pub fn own_crm_key(workspace: &str, name: &str) -> Option<String> {
     load_file()
         .ok()?
         .workspaces
-        .get(workspace)?
+        .get(workspace?)?
         .crm_keys
         .get(name)
         .cloned()
+}
+
+/// Copy the legacy shared keys among `names` into `workspace` where it has
+/// none of its own. The caller vouches that this workspace used them.
+/// Writes only when there is something to copy.
+pub fn adopt_legacy_crm_keys(workspace: &str, names: &[String]) -> Result<()> {
+    let f = load_file()?;
+    let own = f.workspaces.get(workspace);
+    let adopt: Vec<(String, String)> = names
+        .iter()
+        .filter(|n| own.is_none_or(|w| !w.crm_keys.contains_key(*n)))
+        .filter_map(|n| Some((n.clone(), f.crm_keys.get(n)?.clone())))
+        .collect();
+    if adopt.is_empty() {
+        return Ok(());
+    }
+    update(|f| {
+        let w = f.workspaces.entry(workspace.to_string()).or_default();
+        for (n, v) in adopt {
+            w.crm_keys.entry(n).or_insert(v);
+        }
+    })
 }
 
 #[cfg(test)]
@@ -224,7 +236,28 @@ mod tests {
             Some("tok-other")
         );
         assert_eq!(load_crm_key(Some("ws-c"), "test_crm"), None);
-        assert_eq!(own_crm_key("ws-c", "test_crm"), None);
+        assert_eq!(load_crm_key(None, "test_crm"), None);
+
+        // A legacy shared key is never read; adopting copies it to one
+        // workspace and leaves a workspace's own key alone.
+        update(|f| {
+            f.crm_keys.insert("old_crm".into(), "tok-legacy".into());
+            f.crm_keys.insert("test_crm".into(), "tok-legacy".into());
+        })
+        .unwrap();
+        assert_eq!(load_crm_key(Some("ws-d"), "old_crm"), None);
+        let names = ["old_crm".to_string(), "test_crm".to_string()];
+        adopt_legacy_crm_keys("ws-d", &names).unwrap();
+        adopt_legacy_crm_keys("ws-a", &names).unwrap();
+        assert_eq!(
+            load_crm_key(Some("ws-d"), "old_crm").as_deref(),
+            Some("tok-legacy")
+        );
+        assert_eq!(
+            load_crm_key(Some("ws-a"), "test_crm").as_deref(),
+            Some("tok-5678")
+        );
+        assert_eq!(load_crm_key(Some("ws-e"), "old_crm"), None);
         // No stray tmp file left behind by the atomic save (the lock file stays).
         let names: Vec<String> = std::fs::read_dir(&dir)
             .unwrap()

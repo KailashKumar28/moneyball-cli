@@ -70,10 +70,13 @@ bottom after a release-sized batch.)
         a worker with the composer answering (secrets as *), moneyball
         connect crm in the shell. Every "connect a CRM" fix points there.
   - [ ] Review follow-ups (2026-10-09, after the second code review):
-        move a legacy shared CRM key
-        under the workspace that uses it, then drop the fallback; let the
-        custom provider pick its wire protocol; one "when did this step
-        last pull" helper for /connect and /status.
+        let the custom provider pick its wire protocol; one "when did this
+        step last pull" helper for /connect and /status.
+  - [x] No shared CRM key fallback (2026-10-09): a pull reads only the
+        workspace's own key; the legacy shared one is copied once into a
+        workspace that has pulled CRM data (it used that key), and never
+        reaches a new client. E2E on scratch copies: the new client reads
+        "leadzump_token not stored", the old one adopts it.
   - [x] Pasted curl credentials (2026-10-09): -u becomes a Basic header,
         a JSON body's credential fields become {secret:<name>} refs (asked,
         like query params) filled JSON-escaped at request time; a name used

@@ -4,6 +4,7 @@
 //! in this snapshot" whether crm.json never existed, sits in an older
 //! snapshot, or the token expired weeks ago (live QA 2026-08-08).
 
+use super::source::RequestSpec;
 use crate::config::AppConfig;
 use crate::error::Result;
 use crate::snapshot::Snapshot;
@@ -119,6 +120,30 @@ pub(crate) fn newest_crm_snapshot(cfg: &AppConfig) -> Option<String> {
         .find(|d| snap_root.join(d).join("crm.json").is_file())
 }
 
+/// Before per-client keys, CRM keys sat in one shared store. A workspace
+/// that has pulled CRM data used them, so it gets its own copy; one that
+/// never has (a new client) never reads the shared store - that would
+/// wire it to another client's CRM.
+pub(crate) fn adopt_legacy_keys(cfg: &AppConfig, request: &RequestSpec) {
+    if let (Some(ws), Some(_)) = (cfg.workspace_id(), newest_crm_snapshot(cfg)) {
+        // A failed copy only leaves the key to be stored again.
+        let _ = crate::secrets::adopt_legacy_crm_keys(ws, &request.secret_names());
+    }
+}
+
+/// The secrets the request names that this workspace has no key for.
+pub(crate) fn unstored_secrets(cfg: &AppConfig, request: Option<&RequestSpec>) -> Vec<String> {
+    let Some(request) = request else {
+        return Vec::new();
+    };
+    adopt_legacy_keys(cfg, request);
+    request
+        .secret_names()
+        .into_iter()
+        .filter(|n| crate::secrets::load_crm_key(cfg.workspace_id(), n).is_none())
+        .collect()
+}
+
 /// Human-readable status lines + the single most useful next command.
 /// Same lines feed the CLI printout and the TUI tool cell.
 pub fn status_lines(cfg: &AppConfig) -> Result<Vec<String>> {
@@ -139,14 +164,7 @@ pub fn status_lines(cfg: &AppConfig) -> Result<Vec<String>> {
     out.push(format!("spec:   crm.toml ({})", spec.name));
 
     // 2. Secrets the spec references - present in the store?
-    let missing: Vec<String> = spec
-        .request
-        .as_ref()
-        .map(|r| r.secret_names())
-        .unwrap_or_default()
-        .into_iter()
-        .filter(|name| crate::secrets::load_crm_key(cfg.workspace_id(), name).is_none())
-        .collect();
+    let missing = unstored_secrets(cfg, spec.request.as_ref());
     if missing.is_empty() {
         out.push("secret: stored".into());
     } else {
