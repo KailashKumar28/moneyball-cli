@@ -31,7 +31,7 @@ pub(crate) fn diagnose_output(
 
 pub(crate) fn run_diagnose(app: &mut App, arg: &str) {
     let started = std::time::Instant::now();
-    let Ok(product) = crate::funnel_flow::resolve(&app.cfg, arg) else {
+    let Ok(product) = moneyball_core::product::resolve_configured(&app.cfg, arg) else {
         let products: Vec<&str> = app
             .cfg
             .workspace
@@ -40,11 +40,7 @@ pub(crate) fn run_diagnose(app: &mut App, arg: &str) {
             .unwrap_or_default();
         app.chat.note(format!(
             "usage: /diagnose <product>   configured products: {}",
-            if products.is_empty() {
-                "(none - run /setup)".to_string()
-            } else {
-                products.join(", ")
-            }
+            products.join(", ")
         ));
         return;
     };
@@ -60,13 +56,9 @@ pub(crate) fn run_diagnose(app: &mut App, arg: &str) {
             return;
         }
     };
-    let mut lines: Vec<String> = diagnose::text(&diagnose::compute(&snap, &app.cfg, &product))
-        .lines()
-        .map(String::from)
-        .collect();
-    if let Some(note) = moneyball_core::crm::status::CrmHealth::of(&app.cfg, &snap).note() {
-        lines.push(format!("warn: {}", note));
-    }
+    // The cell shows exactly what the advisor reads.
+    let output = diagnose_output(&app.cfg, &snap, &product);
+    let lines = output.lines().map(String::from).collect();
     app.chat.push_tool(
         "diagnose",
         arg,
@@ -75,7 +67,6 @@ pub(crate) fn run_diagnose(app: &mut App, arg: &str) {
         started.elapsed().as_millis() as u64,
     );
     let sys = format!("{}\n\n{}", DIAGNOSE_SYSTEM_PROMPT, app_state_block(app));
-    let output = diagnose_output(&app.cfg, &snap, &product);
     let args = serde_json::json!({ "product": product });
     let turn = typed_tool_turn(app, &format!("/diagnose {}", arg), "diagnose", args, output);
     call_agent(app, &sys, turn);

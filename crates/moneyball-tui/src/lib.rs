@@ -1,6 +1,7 @@
 //! moneyball-tui - ratatui REPL with brief view, slash-commands,
 //! completion, and first-run setup wizard.
 
+mod agent_tools;
 mod app;
 mod brief_flow;
 pub mod chat;

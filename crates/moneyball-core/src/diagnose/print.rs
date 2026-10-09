@@ -4,7 +4,7 @@
 
 use serde_json::Value;
 
-use super::{Diagnosis, Fatigue, StageCall, Window, RECENT_DAYS};
+use super::{Diagnosis, Fatigue, StageCall, RECENT_DAYS};
 use crate::text::{commas, table, truncate_marked};
 
 /// Ads listed by name before the rest are summed up.
@@ -15,7 +15,7 @@ pub fn text(d: &Diagnosis) -> String {
     format!(
         "DIAGNOSE {} - snapshot {}\n{}{}{}{}",
         d.product,
-        d.snapshot,
+        d.snapshot_date,
         stages(d),
         ads(d),
         trend(d),
@@ -23,8 +23,11 @@ pub fn text(d: &Diagnosis) -> String {
     )
 }
 
-fn name(s: &str) -> String {
-    s.chars().take(32).collect()
+fn name(s: &str, chars: usize) -> String {
+    match s.chars().count() > chars {
+        true => format!("{}...", s.chars().take(chars - 3).collect::<String>()),
+        false => s.to_string(),
+    }
 }
 
 fn money(v: Option<f64>) -> String {
@@ -32,8 +35,11 @@ fn money(v: Option<f64>) -> String {
 }
 
 fn stages(d: &Diagnosis) -> String {
-    let mut out =
-        String::from("\n1. Where its leads die (CRM leads by campaign, as far as each got)\n");
+    let days = d.recent.days + d.before.days;
+    let mut out = format!(
+        "\n1. Where its leads die (CRM leads of the last {} days by campaign, as far as each got)\n",
+        days
+    );
     let Some(rows) = &d.stages else {
         out.push_str("needs CRM data - see the CRM note.\n");
         return out;
@@ -47,7 +53,7 @@ fn stages(d: &Diagnosis) -> String {
         .iter()
         .map(|r| {
             vec![
-                name(&r.campaign),
+                name(&r.campaign, 32),
                 r.leads.to_string(),
                 pct(r.lost, r.leads),
                 pct(r.unreachable, r.leads),
@@ -98,8 +104,8 @@ fn ads(d: &Diagnosis) -> String {
         .take(ADS_SHOWN)
         .map(|a| {
             vec![
-                name(&a.name),
-                a.adset.chars().take(20).collect(),
+                name(&a.name, 32),
+                name(&a.adset, 20),
                 commas(a.spend),
                 a.m.to_string(),
                 money((a.m > 0).then(|| a.spend as f64 / a.m as f64)),
@@ -134,7 +140,8 @@ fn ads(d: &Diagnosis) -> String {
     out.push_str(
         "ctr% = link clicks per impression, was% = the ad's own before these days; freq/d = \
          times a day each person saw it. fatigued = clicked 30%+ less than before while seen \
-         2+ times a day; watch = one of the two, or 3+ a day; age_d = days since it was made\n",
+         2+ times a day; watch = clicked 30%+ less, or seen 3+ times a day; age_d = days \
+         since it was made\n",
     );
     out
 }
@@ -155,18 +162,17 @@ fn trend(d: &Diagnosis) -> String {
         (Some(a), Some(b)) if b > 0.0 => format!("{:+.0}%", (a / b - 1.0) * 100.0),
         _ => "-".into(),
     };
-    let per_day = |w: &Window, v: f64| w.per_day(v);
     let mut rows: Vec<(&str, Option<f64>, Option<f64>, bool)> = vec![
         (
             "spend per day (Rs)",
-            Some(per_day(now, now.spend)),
-            Some(per_day(then, then.spend)),
+            Some(now.per_day(now.spend)),
+            Some(then.per_day(then.spend)),
             true,
         ),
         (
             "Meta leads per day",
-            Some(per_day(now, now.m as f64)),
-            Some(per_day(then, then.m as f64)),
+            Some(now.per_day(now.m as f64)),
+            Some(then.per_day(then.m as f64)),
             false,
         ),
         ("cost per Meta lead (Rs)", now.cpl(), then.cpl(), true),
@@ -174,8 +180,8 @@ fn trend(d: &Diagnosis) -> String {
     if let (Some(a), Some(b)) = (now.q, then.q) {
         rows.push((
             "qualified per day",
-            Some(per_day(now, a as f64)),
-            Some(per_day(then, b as f64)),
+            Some(now.per_day(a as f64)),
+            Some(then.per_day(b as f64)),
             false,
         ));
         rows.push((
@@ -202,13 +208,13 @@ fn trend(d: &Diagnosis) -> String {
         })
         .collect();
     out.push_str(&table(&["", "last", "before", "change"], &cells));
-    // The verdict rides on what a lead that matters costs.
-    let (what, a, b) = match (now.rs_per_q(), then.rs_per_q()) {
-        (Some(a), Some(b)) => ("cost per qualified", a, b),
-        _ => match (now.cpl(), then.cpl()) {
-            (Some(a), Some(b)) => ("cost per Meta lead", a, b),
-            _ => return out,
-        },
+    // The verdict rides on what a lead that matters costs - but the last
+    // 3 days' leads are still being qualified, and that count only rises:
+    // trust a drop in cost per qualified, never a rise.
+    let (what, a, b) = match (now.rs_per_q(), then.rs_per_q(), now.cpl(), then.cpl()) {
+        (Some(a), Some(b), ..) if b > 0.0 && a <= b => ("cost per qualified", a, b),
+        (.., Some(a), Some(b)) if b > 0.0 => ("cost per Meta lead", a, b),
+        _ => return out,
     };
     let ratio = a / b;
     let pct = ((ratio - 1.0) * 100.0).abs().round();
@@ -252,8 +258,8 @@ fn changes(d: &Diagnosis) -> String {
     for r in rows {
         let when = super::local_time(&r.time)
             .map_or(r.time.clone(), |t| t.format("%a %d %b %H:%M").to_string());
-        let old = r.old.as_ref().and_then(|v| shown(v, "old_value"));
-        let new = r.new.as_ref().and_then(|v| shown(v, "new_value"));
+        let old = r.old.as_ref().and_then(|v| logged_value(v, "old_value"));
+        let new = r.new.as_ref().and_then(|v| logged_value(v, "new_value"));
         let what = match (old, new) {
             (Some(o), Some(n)) => format!("{} ({} -> {})", r.event, o, n),
             (None, Some(n)) => format!("{} (now {})", r.event, n),
@@ -293,17 +299,23 @@ fn changes(d: &Diagnosis) -> String {
     out
 }
 /// A logged value in words: a status as is, money in rupees (Meta logs
-/// minor units), on/off; a list or spec is too long to say here.
-fn shown(v: &Value, key: &str) -> Option<String> {
+/// minor units), on/off; a list or spec (some arrive as JSON text) is
+/// too long to say here.
+fn logged_value(v: &Value, key: &str) -> Option<String> {
     match v {
+        Value::String(s) if s.starts_with(['{', '[']) => None,
         Value::String(s) => Some(truncate_marked(s, 40, "...")),
         Value::Number(n) => Some(n.to_string()),
         Value::Bool(b) => Some(if *b { "on" } else { "off" }.into()),
         Value::Object(o) if o.get("type").and_then(Value::as_str) == Some("payment_amount") => {
             let major = (o.get(key)?.as_f64()? / 100.0).round() as u64;
+            let per = match o.get("additional_value").and_then(Value::as_str) {
+                Some("Per day") => "/day",
+                _ => "",
+            };
             Some(match o.get("currency").and_then(Value::as_str) {
-                Some("INR") | None => format!("Rs.{}", commas(major)),
-                Some(c) => format!("{} {}", c, commas(major)),
+                Some("INR") | None => format!("Rs.{}{}", commas(major), per),
+                Some(c) => format!("{} {}{}", c, commas(major), per),
             })
         }
         _ => None,

@@ -21,11 +21,15 @@ pub use print::text;
 pub const RECENT_DAYS: i64 = 7;
 /// How far back "before" reaches (a pull holds 28 days).
 const HISTORY_DAYS: i64 = 28;
+/// Logged changes no person made: an automatic audience, an ad's first
+/// delivery.
+const NOISE: &[&str] = &["create_audience", "first_delivery_event"];
 
 pub struct Diagnosis {
     pub product: String,
-    pub snapshot: String,
-    /// None when the snapshot has no CRM data.
+    pub snapshot_date: String,
+    /// None when the snapshot has no CRM data. Over `before` and
+    /// `recent` together, as the trend.
     pub stages: Option<Vec<StageRow>>,
     /// Ads that spent in the last 7 days, most spend first.
     pub ads: Vec<AdRow>,
@@ -82,7 +86,7 @@ pub enum Fatigue {
     /// Clicked 30%+ less than in its own earlier days while each person
     /// sees it twice a day or more.
     Fatigued,
-    /// One of the two, or seen three times a day or more.
+    /// Clicked 30%+ less than before, or seen three times a day or more.
     Watch,
     Ok,
     /// No impressions to judge by.
@@ -151,8 +155,8 @@ pub fn compute(snap: &Snapshot, cfg: &AppConfig, product: &str) -> Diagnosis {
     };
     Diagnosis {
         product: product.to_string(),
-        snapshot: snap.date.clone(),
-        stages: has_crm.then(|| stages(snap, &rows)),
+        snapshot_date: snap.date.clone(),
+        stages: has_crm.then(|| stages(snap, &rows, first, day)),
         ads: ads(snap, &rows, &ymd(recent_from), day),
         recent,
         before,
@@ -166,7 +170,7 @@ pub fn compute(snap: &Snapshot, cfg: &AppConfig, product: &str) -> Diagnosis {
             let since = recent_from.and_hms_opt(0, 0, 0).expect("midnight exists");
             c.rows
                 .iter()
-                .filter(|r| r.account == account)
+                .filter(|r| r.account == account && !NOISE.contains(&r.event_type.as_str()))
                 .filter(|r| local_time(&r.time).is_some_and(|t| t.naive_local() >= since))
                 .cloned()
                 .collect()
@@ -207,29 +211,45 @@ fn qualified_between(
     q
 }
 
-/// Every CRM lead from this product's ads, by campaign and how far it got.
-fn stages(snap: &Snapshot, rows: &[&AdsDailyRow]) -> Vec<StageRow> {
-    let mut campaign_of: HashMap<&str, &str> = HashMap::new();
+/// The CRM leads from this product's ads delivered on [from, day) (IST
+/// days), by campaign and how far each got - over the same days as the
+/// spend beside them.
+fn stages(
+    snap: &Snapshot,
+    rows: &[&AdsDailyRow],
+    from: NaiveDate,
+    day: NaiveDate,
+) -> Vec<StageRow> {
+    let from_s = from.format("%Y-%m-%d").to_string();
+    // Keyed by id: two campaigns may share a name.
+    let mut campaign_of: HashMap<&str, (&str, &str)> = HashMap::new();
     let mut spend: HashMap<&str, f64> = HashMap::new();
-    for r in rows {
-        campaign_of.insert(&r.ad_id, &r.campaign_name);
-        *spend.entry(&r.campaign_name).or_default() += r.spend_num();
+    for r in rows.iter().filter(|r| r.date_start >= from_s) {
+        campaign_of.insert(&r.ad_id, (&r.campaign_id, &r.campaign_name));
+        *spend.entry(&r.campaign_id).or_default() += r.spend_num();
     }
-    let mut by: BTreeMap<String, StageRow> = BTreeMap::new();
-    crm::for_each_ticket(&snap.crm, |t, _| {
-        let Some(campaign) =
+    let (start, end) = (
+        crate::brief::ist_midnight_epoch(from),
+        crate::brief::ist_midnight_epoch(day),
+    );
+    let mut by: BTreeMap<&str, StageRow> = BTreeMap::new();
+    crm::for_each_ticket(&snap.crm, |t, ep| {
+        if ep < start || ep >= end {
+            return;
+        }
+        let Some((id, name)) =
             crm::ticket_ad_id(t).and_then(|a| campaign_of.get(a.as_str()).copied())
         else {
             return;
         };
-        let e = by.entry(campaign.to_string()).or_insert_with(|| StageRow {
-            campaign: campaign.to_string(),
+        let e = by.entry(id).or_insert_with(|| StageRow {
+            campaign: name.to_string(),
             leads: 0,
             lost: 0,
             unreachable: 0,
             qualified: 0,
             visited: 0,
-            spend: spend.get(campaign).copied().unwrap_or(0.0).round() as u64,
+            spend: spend.get(id).copied().unwrap_or(0.0).round() as u64,
             call: StageCall::Stuck,
         });
         let stage = crm::ticket_stage(t);
@@ -243,7 +263,11 @@ fn stages(snap: &Snapshot, rows: &[&AdsDailyRow]) -> Vec<StageRow> {
     for r in &mut out {
         r.call = stage_call(r);
     }
-    out.sort_by_key(|r| std::cmp::Reverse(r.leads));
+    out.sort_by(|a, b| {
+        b.leads
+            .cmp(&a.leads)
+            .then_with(|| a.campaign.cmp(&b.campaign))
+    });
     out
 }
 
@@ -306,30 +330,36 @@ fn ads(snap: &Snapshot, rows: &[&AdsDailyRow], from: &str, day: NaiveDate) -> Ve
                 (a.impressions[i] > floor)
                     .then(|| a.clicks[i] as f64 / a.impressions[i] as f64 * 100.0)
             };
-            let (ctr, ctr_before) = (ctr(0, 0), ctr(1, BEFORE_IMPRESSIONS));
+            let (ctr_shown, ctr_before) = (ctr(0, 0), ctr(1, MIN_IMPRESSIONS));
             let freq = (a.reach > 0).then(|| a.impressions[0] as f64 / a.reach as f64);
             AdRow {
                 name: if a.name.is_empty() { id } else { a.name }.to_string(),
                 adset: a.adset.to_string(),
                 spend: a.spend.round() as u64,
                 m: a.m,
-                ctr,
+                ctr: ctr_shown,
                 ctr_before,
                 freq,
                 age_days: created
                     .get(id)
                     .and_then(|t| local_time(t))
                     .map(|t| (day - t.date_naive()).num_days()),
-                call: fatigue(ctr, ctr_before, freq),
+                // Judged only on enough impressions: 40 with no click is noise.
+                call: fatigue(ctr(0, MIN_IMPRESSIONS), ctr_before, freq),
             }
         })
         .collect();
-    out.sort_by_key(|r| std::cmp::Reverse(r.spend));
+    // HashMap order is random: ties break on the names.
+    out.sort_by(|a, b| {
+        b.spend
+            .cmp(&a.spend)
+            .then_with(|| (&a.name, &a.adset).cmp(&(&b.name, &b.adset)))
+    });
     out
 }
 
-/// Fewer earlier impressions than this say nothing about an ad's own CTR.
-const BEFORE_IMPRESSIONS: u64 = 1000;
+/// Fewer impressions than this say nothing about an ad's CTR.
+const MIN_IMPRESSIONS: u64 = 1000;
 
 /// An ad tires when people see it more and click it less: its link CTR
 /// against its own earlier days, and how often each person sees it.
@@ -340,6 +370,10 @@ fn fatigue(ctr: Option<f64>, before: Option<f64>, freq: Option<f64>) -> Fatigue 
         return Fatigue::Unknown;
     };
     let fell = before.is_some_and(|b| ctr < 0.7 * b);
+    // ponytail: frequency here is impressions over summed DAILY reach (a
+    // daily average, 1.1-1.6 on this account), so "2+ a day" is rare and
+    // a falling CTR makes most calls; a true 7-day frequency needs 7-day
+    // reach (one insights GET per account with time_increment=all_days).
     let freq = freq.unwrap_or(0.0);
     if fell && freq >= 2.0 {
         Fatigue::Fatigued
@@ -353,12 +387,8 @@ fn fatigue(ctr: Option<f64>, before: Option<f64>, freq: Option<f64>) -> Fatigue 
 /// Headless runner: load the snapshot, diagnose, print.
 pub fn run(cfg: &AppConfig, product: &str, date: Option<&str>) -> crate::error::Result<()> {
     let snap = crate::snapshot::load(&cfg.snap_for(date)?)?;
-    let product = match cfg.workspace.as_ref() {
-        Some(w) if !w.products.is_empty() => crate::product::resolve_product(product, &w.products)
-            .map_err(crate::error::Error::Config)?
-            .to_string(),
-        _ => product.to_string(),
-    };
+    let product =
+        crate::product::resolve_configured(cfg, product).map_err(crate::error::Error::Config)?;
     print!("{}", text(&compute(&snap, cfg, &product)));
     if let Some(note) = crm::status::CrmHealth::of(cfg, &snap).note() {
         println!("!! {}", note);

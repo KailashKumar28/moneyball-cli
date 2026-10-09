@@ -5,17 +5,6 @@ use crate::commands::{app_state_block, call_agent, typed_tool_turn, FUNNEL_SYSTE
 use crate::*;
 use moneyball_core::funnel::{self, By};
 
-/// A product name as the user or the model wrote it ("Namma Mane",
-/// lowercase) resolved to the configured one.
-pub(crate) fn resolve(cfg: &moneyball_core::AppConfig, name: &str) -> Result<String, String> {
-    let products = cfg
-        .workspace
-        .as_ref()
-        .map(|w| w.products.as_slice())
-        .unwrap_or_default();
-    moneyball_core::product::resolve_product(name, products).map(String::from)
-}
-
 /// What the funnel tool returns: the full table the model reasons from
 /// (ids, kill multiple, maturity) and the pre-computed CPL order.
 pub(crate) fn funnel_output(
@@ -54,7 +43,7 @@ pub(crate) fn run_funnel(app: &mut App, arg: &str) {
         _ => (arg, "adset"),
     };
     let by = By::parse(by).expect("level pre-validated");
-    let Ok(product) = resolve(&app.cfg, name) else {
+    let Ok(product) = moneyball_core::product::resolve_configured(&app.cfg, name) else {
         let products: Vec<&str> = app
             .cfg
             .workspace

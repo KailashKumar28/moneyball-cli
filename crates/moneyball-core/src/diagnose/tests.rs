@@ -144,3 +144,26 @@ fn stage_calls_follow_where_leads_stop() {
     assert_eq!(call("Camp One"), StageCall::Form);
     assert_eq!(call("Camp Two"), StageCall::Sales);
 }
+
+#[test]
+fn leads_outside_the_window_are_not_counted_and_a_rising_cost_per_qualified_is_not_trusted() {
+    let at = |stage: &str, day: &str| {
+        let d = NaiveDate::parse_from_str(day, "%Y-%m-%d").unwrap();
+        json!({"ad_id": "a1", "stage": stage,
+               "delivery": crate::brief::ist_midnight_epoch(d) + 3600})
+    };
+    // Six qualified in the days before, one in the last week (its leads
+    // may still qualify), and a 2023 lead that must not count anywhere.
+    let mut crm: Vec<_> = (1..=6)
+        .map(|d| at("Contactable", &format!("2026-09-{:02}", d)))
+        .collect();
+    crm.push(at("Visit", "2026-09-25"));
+    crm.push(json!({"ad_id": "a1", "stage": "Lost", "delivery": 1690000000}));
+    let d = compute(&snap(json!(crm)), &cfg(), "P");
+    let one = &d.stages.as_ref().unwrap()[0];
+    assert_eq!((one.leads, one.lost, one.qualified), (7, 0, 7));
+    assert_eq!((d.recent.q, d.before.q), (Some(1), Some(6)));
+    let text = text(&d);
+    assert!(text.contains("cost per Meta lead is up"), "{}", text);
+    assert!(!text.contains("cost per qualified is up"), "{}", text);
+}

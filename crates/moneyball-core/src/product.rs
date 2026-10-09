@@ -1,7 +1,17 @@
 //! Product identity helpers - resolving typed/suggested product names
 //! against the workspace. Split from config.rs (size cap).
 
-use crate::config::Product;
+use crate::config::{AppConfig, Product};
+
+/// A typed product name resolved against this workspace's products (see
+/// resolve_product). A workspace with none configured - its snapshots
+/// come from another pipeline - takes the name as typed.
+pub fn resolve_configured(cfg: &AppConfig, name: &str) -> std::result::Result<String, String> {
+    match cfg.workspace.as_ref().map(|w| w.products.as_slice()) {
+        Some(products) if !products.is_empty() => resolve_product(name, products).map(String::from),
+        _ => Ok(name.trim().to_string()),
+    }
+}
 
 /// Resolve a user- or model-typed product name against the workspace:
 /// exact, else case-insensitive, else unique substring. Err carries the

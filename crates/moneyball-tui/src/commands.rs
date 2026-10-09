@@ -3,12 +3,10 @@
 
 use crate::*;
 
-// Two chrono types collide on import name; alias the plain Utc.
-
 // CLAUDE.md hard rule: only commands with real handlers may appear
 // here - this list feeds the palette, /help, AND every LLM system
-// prompt (app_state_block). Re-add /diagnose and /ledger in the same
-// commit that wires them.
+// prompt (app_state_block). Re-add /ledger in the same commit that
+// wires it.
 pub(crate) const COMMANDS: &[(&str, &str)] = &[
     ("/brief", "7-day portfolio brief"),
     (
@@ -449,7 +447,7 @@ pub(crate) fn call_agent(app: &mut App, system: &str, turn: Vec<moneyball_core::
                 }
             }
         });
-        let exec = SnapshotTools { cfg };
+        let exec = crate::agent_tools::SnapshotTools { cfg };
         // Only implemented tools go on the wire - the model must never
         // be steered into stubs (audit F4).
         let tools = vec![
@@ -465,58 +463,6 @@ pub(crate) fn call_agent(app: &mut App, system: &str, turn: Vec<moneyball_core::
     });
     app.stream = Some(rx);
     app.turn_active = true;
-}
-
-/// Tool executor over on-disk snapshot data. Runs on the agent worker
-/// thread; errors become ToolOutput{is_error} messages the model sees.
-struct SnapshotTools {
-    cfg: moneyball_core::AppConfig,
-}
-
-impl SnapshotTools {
-    fn snap(&self) -> Result<moneyball_core::Snapshot, String> {
-        self.cfg
-            .snap_for(self.cfg.date.as_deref())
-            .and_then(|p| moneyball_core::snapshot::load(&p))
-            .map_err(|_| {
-                "no snapshot on disk - tell the user to run /refresh (or /brief, which \
-                 self-heals) before asking for numbers"
-                    .to_string()
-            })
-    }
-}
-
-impl moneyball_core::agent::ToolExec for SnapshotTools {
-    fn run(&self, name: &str, args: &serde_json::Value) -> Result<String, String> {
-        match name {
-            "brief" => Ok(crate::brief_flow::brief_output(&self.cfg, &self.snap()?)),
-            "funnel" => {
-                let arg = |k: &str| args.get(k).and_then(|v| v.as_str());
-                let by = moneyball_core::funnel::By::parse(arg("by").unwrap_or("adset"))
-                    .map_err(|e| e.reason())?;
-                let product = crate::funnel_flow::resolve(&self.cfg, arg("product").unwrap_or(""))?;
-                Ok(crate::funnel_flow::funnel_output(
-                    &self.cfg,
-                    &self.snap()?,
-                    &product,
-                    by,
-                ))
-            }
-            "diagnose" => {
-                let name = args.get("product").and_then(|v| v.as_str()).unwrap_or("");
-                let product = crate::funnel_flow::resolve(&self.cfg, name)?;
-                Ok(crate::diagnose_flow::diagnose_output(
-                    &self.cfg,
-                    &self.snap()?,
-                    &product,
-                ))
-            }
-            other => Err(format!(
-                "tool \"{}\" is not implemented - answer from the tools you have",
-                other
-            )),
-        }
-    }
 }
 
 /// Free-form chat path. Tries to load the brief silently so the LLM has

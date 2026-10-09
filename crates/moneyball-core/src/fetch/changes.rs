@@ -14,22 +14,20 @@ use crate::schema::{ChangeRow, ChangesFile, CHANGES_SCHEMA};
 const FIELDS: &str =
     "event_type,translated_event_type,event_time,object_name,object_type,extra_data";
 
-/// Meta logs one of these per automatic audience it makes: noise to a
-/// reader looking for what a person changed.
-const NOISE: &[&str] = &["create_audience"];
-
 /// Pull every account's log from `since` (epoch seconds) and write
-/// `<snap_dir>/changes.json`. Returns the row count. Best-effort by
-/// contract (the caller warns, never loses the snapshot).
+/// `<snap_dir>/changes.json`. Returns the row count and, when some
+/// account's log could not be read, why (the others still land). Err
+/// when no account's could, or the file cannot be written; the caller
+/// warns, never loses the snapshot.
 pub fn fetch_and_write(
     client: &reqwest::blocking::Client,
     token: &str,
     accounts: &BTreeSet<String>,
     since: i64,
     snap_dir: &Path,
-) -> Result<usize> {
+) -> Result<(usize, Option<String>)> {
     let since = since.to_string();
-    let mut rows = Vec::new();
+    let (mut rows, mut failed) = (Vec::new(), Vec::new());
     for act in accounts {
         let first = client
             .get(format!("{}/{}/activities", super::META_GRAPH_BASE, act))
@@ -39,10 +37,10 @@ pub fn fetch_and_write(
                 ("since", &since),
                 ("limit", "500"),
             ]);
-        for e in crate::meta::get_all(client, first, "the change log", crate::meta::PULL)? {
-            if let Some(row) = row_of(act, &e) {
-                rows.push(row);
-            }
+        match crate::meta::get_all(client, first, "the change log", crate::meta::PULL) {
+            Ok(log) => rows.extend(log.iter().map(|e| row_of(act, e))),
+            Err(e) if failed.len() + 1 == accounts.len() => return Err(e),
+            Err(e) => failed.push(format!("{}: {}", act, e.reason())),
         }
     }
     // RFC3339 with one offset sorts as text.
@@ -55,15 +53,15 @@ pub fn fetch_and_write(
     let tmp = snap_dir.join("changes.json.tmp");
     std::fs::write(&tmp, serde_json::to_string_pretty(&file)?)?;
     std::fs::rename(&tmp, snap_dir.join("changes.json"))?;
-    Ok(file.rows.len())
+    Ok((
+        file.rows.len(),
+        (!failed.is_empty()).then(|| failed.join("; ")),
+    ))
 }
 
-fn row_of(account: &str, e: &Value) -> Option<ChangeRow> {
+fn row_of(account: &str, e: &Value) -> ChangeRow {
     let text = |k: &str| e.get(k).and_then(Value::as_str).unwrap_or("").to_string();
     let event_type = text("event_type");
-    if NOISE.contains(&event_type.as_str()) {
-        return None;
-    }
     // extra_data arrives as a JSON string.
     let extra: Value = e
         .get("extra_data")
@@ -77,7 +75,7 @@ fn row_of(account: &str, e: &Value) -> Option<ChangeRow> {
         "ADGROUP" => "ad".to_string(),
         other => other.to_lowercase().replace('_', " "),
     };
-    Some(ChangeRow {
+    ChangeRow {
         account: account.to_string(),
         time: text("event_time"),
         event: match text("translated_event_type") {
@@ -89,7 +87,7 @@ fn row_of(account: &str, e: &Value) -> Option<ChangeRow> {
         object_name: text("object_name"),
         old: value("old_value"),
         new: value("new_value"),
-    })
+    }
 }
 
 #[cfg(test)]
@@ -106,7 +104,7 @@ mod tests {
             "object_name": "Lookalike",
             "extra_data": "{\"old_value\":{\"type\":\"payment_amount\",\"currency\":\"INR\",\"old_value\":500000},\"new_value\":{\"type\":\"payment_amount\",\"currency\":\"INR\",\"new_value\":400000}}"
         });
-        let r = row_of("act_1", &e).unwrap();
+        let r = row_of("act_1", &e);
         assert_eq!(
             (
                 r.object_type.as_str(),
@@ -116,7 +114,5 @@ mod tests {
             ("ad set", "Ad set budget updated", "Lookalike")
         );
         assert_eq!(r.old.unwrap()["old_value"], 500000);
-        let noise = serde_json::json!({"event_type": "create_audience"});
-        assert!(row_of("act_1", &noise).is_none());
     }
 }

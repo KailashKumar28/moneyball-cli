@@ -209,12 +209,7 @@ fn learning_of(snap: &Snapshot, id: &str, by: By) -> String {
 pub fn run(cfg: &AppConfig, product: &str, by: &str, days: u32, date: Option<&str>) -> Result<()> {
     let by = By::parse(by)?;
     let snap = crate::snapshot::load(&cfg.snap_for(date)?)?;
-    let product: String = match cfg.workspace.as_ref() {
-        Some(w) if !w.products.is_empty() => crate::product::resolve_product(product, &w.products)
-            .map_err(Error::Config)?
-            .to_string(),
-        _ => product.to_string(),
-    };
+    let product = crate::product::resolve_configured(cfg, product).map_err(Error::Config)?;
     let product = product.as_str();
     let rows = compute(&snap, cfg, product, days, by);
     println!(

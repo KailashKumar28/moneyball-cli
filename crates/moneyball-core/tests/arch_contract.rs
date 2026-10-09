@@ -148,7 +148,7 @@ fn file_size_ratchet() {
         ("crates/moneyball-core/src/crm/mod.rs", 434),
         ("crates/moneyball-core/src/llm.rs", 684),
         ("crates/moneyball-tui/src/chat.rs", 460),
-        ("crates/moneyball-tui/src/commands.rs", 539),
+        ("crates/moneyball-tui/src/commands.rs", 485),
         ("crates/moneyball-tui/src/event.rs", 716),
         ("crates/moneyball-tui/src/setup/mod.rs", 658),
         ("crates/moneyball-tui/src/setup/render_steps.rs", 438),

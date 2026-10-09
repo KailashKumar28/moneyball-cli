@@ -128,12 +128,12 @@ pub fn fetch_snapshot(cfg: &AppConfig, token: &str, days: u32) -> Result<FetchRe
     // The accounts' change log, for /diagnose. Best-effort.
     let since_epoch = since
         .and_hms_opt(0, 0, 0)
-        .and_then(|t| t.and_local_timezone(Local).single())
+        .and_then(|t| t.and_local_timezone(Local).earliest())
         .map_or(0, |t| t.timestamp());
     let distinct: std::collections::BTreeSet<String> = accounts.values().cloned().collect();
     let (changes_n, changes_error) =
         match changes::fetch_and_write(&client, token, &distinct, since_epoch, &path) {
-            Ok(n) => (n, None),
+            Ok(got) => got,
             Err(e) => (0, Some(e.reason())),
         };
 
