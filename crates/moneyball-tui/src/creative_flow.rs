@@ -1,7 +1,7 @@
 //! /report flow (slice C) - generate the creative report on a worker
 //! thread (image re-encoding takes a second or two; the event loop
 //! never blocks) and surface the text summary + browser path as a
-//! tool cell. Same worker/drain shape as fetch_flow.rs.
+//! tool cell. Same worker/drain shape as refresh_flow.rs.
 
 use crate::chat::{cells, Cell};
 use crate::*;
@@ -78,7 +78,7 @@ pub(crate) fn on_report_failed(app: &mut App, err: String, ms: u64) {
     // Failed tool cells are never the last word (ARCHITECTURE section 5).
     app.chat.push(Cell::AssistantText(cells::AssistantText {
         text: format!(
-            "couldn't build the report: {}. /fetch pulls a fresh snapshot if none exists yet.",
+            "couldn't build the report: {}. /refresh pulls a fresh snapshot if none exists yet.",
             err
         ),
         streaming: false,

@@ -28,6 +28,10 @@ bottom after a release-sized batch.)
         (moneyball.run/1) written whatever happens; exit 0/2/1; MB_AGENT
         JSON. Live: the 08 Oct report written, CRM degraded on the expired
         LeadZump token with its exact fix. Typed MetaAuth / CrmAuth errors.
+  - [x] /refresh in the TUI (2026-10-09): each step shows "running", then
+        its result; outcome, fix and report close the cell. /fetch is now an
+        unlisted alias and /brief self-heals through /refresh (fetch_flow.rs
+        deleted: one pull path).
 - [ ] **Daily creative report** (plan: docs/CLOUD_PLAN.md, agreed
       2026-08-07 - report.json is the product, HTML is a renderer;
       reimplements pipeline/creative_report.py, never imports it):

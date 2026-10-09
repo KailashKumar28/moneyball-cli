@@ -1,9 +1,8 @@
 //! Slash-command surface: registry, dispatch (`submit`), and the LLM
-//! call paths (fetch, free-form chat, streaming agent).
+//! call paths (brief, free-form chat, streaming agent).
 
 use crate::*;
 
-pub(crate) use crate::fetch_flow::{on_fetch_done, on_fetch_failed, run_fetch};
 use moneyball_core::brief::{self};
 
 // Two chrono types collide on import name; alias the plain Utc.
@@ -14,7 +13,10 @@ use moneyball_core::brief::{self};
 // commit that wires them.
 pub(crate) const COMMANDS: &[(&str, &str)] = &[
     ("/brief", "7-day portfolio brief"),
-    ("/fetch", "pull daily insights from Meta into a snapshot"),
+    (
+        "/refresh",
+        "pull Meta, then CRM, then write yesterday's report",
+    ),
     ("/funnel", "per-entity funnel for a product"),
     (
         "/report",
@@ -83,69 +85,9 @@ pub(crate) fn submit(app: &mut App) {
                 .push(Cell::System(cells::System("exiting moneyball.".into())));
             app.quit = true;
         }
-        "/brief" => {
-            let started = std::time::Instant::now();
-            app.chat.push(Cell::AssistantText(cells::AssistantText {
-                text: "loading portfolio snapshot...".into(),
-                streaming: false,
-            }));
-            app.load_brief();
-            // If brief loaded, push the deterministic numbers as a tool
-            // call (so the user can see the source data), then call the
-            // configured LLM for an interpretation.
-            if let Some(b) = &app.brief {
-                let mut out = format_brief_as_lines(b);
-                let mut user_prompt = build_brief_prompt(b);
-                if let Some(note) = &app.crm_note {
-                    out.push(format!("warn: {}", note));
-                    user_prompt.push_str(&format!(
-                        "\n\nIMPORTANT: {}. Do not diagnose lead quality from l/q/v.",
-                        note
-                    ));
-                }
-                app.chat
-                    .push_tool("brief", "", out, true, started.elapsed().as_millis() as u64);
-                let sys = format!("{}\n\n{}", BRIEF_SYSTEM_PROMPT, app_state_block(app));
-                call_agent(app, &sys, &user_prompt);
-            } else if moneyball_core::secrets::load_meta_token().is_some()
-                && app.cfg.has_workspace()
-            {
-                // No snapshot but we CAN get one ourselves: self-heal by
-                // fetching from Meta, then show the brief (run_fetch does
-                // both). Agent populates its own data - no dead ends.
-                app.status = None;
-                app.chat.push(Cell::AssistantText(cells::AssistantText {
-                    text: "no snapshot yet - pulling one from Meta now (same as /fetch)...".into(),
-                    streaming: false,
-                }));
-                run_fetch(app, 28);
-            } else {
-                // Can't self-fetch (no Meta token / no workspace): explain
-                // both paths. Status cleared so the error shows once.
-                app.status = None;
-                let snap_dir = app.cfg.history_dir().join("snap");
-                app.chat.push_tool(
-                    "brief",
-                    "",
-                    vec!["no snapshot data and no Meta token to fetch one with.".into()],
-                    false,
-                    started.elapsed().as_millis() as u64,
-                );
-                app.chat.push(Cell::AssistantText(cells::AssistantText {
-                    text: format!(
-                        "I can pull the data myself once Meta is connected: run /setup to paste a \
-token, then /fetch (or just /brief) pulls daily insights automatically. Alternatively, point \
-your own pipeline at\n\n    {}/<YYYY-MM-DD>/\n\nand /brief reads whatever it writes.",
-                        snap_dir.display()
-                    ),
-                    streaming: false,
-                }));
-            }
-        }
-        "/fetch" => {
-            let days: u32 = arg.parse().unwrap_or(28);
-            run_fetch(app, days);
-        }
+        "/brief" => run_brief(app),
+        // /fetch is the old name, kept for muscle memory (unlisted).
+        "/refresh" | "/fetch" => crate::refresh_flow::run_refresh(app, arg == "--force", false),
         "/setup" => {
             app.chat.push(Cell::AssistantText(cells::AssistantText {
                 text:
@@ -197,7 +139,7 @@ your own pipeline at\n\n    {}/<YYYY-MM-DD>/\n\nand /brief reads whatever it wri
                     "snapshot",
                     "",
                     vec![format!(
-                        "no snapshots in {} - run /fetch to pull one.",
+                        "no snapshots in {} - run /refresh to pull one.",
                         snap_root.display()
                     )],
                     false,
@@ -360,6 +302,64 @@ learning entity. 3-8 sentences, no preamble.";
 /// Live app state injected into every LLM system prompt so the model
 /// never hallucinates about setup/data (codex + claude code both ground
 /// their agents in real environment state for exactly this reason).
+/// /brief: the deterministic numbers as a tool cell (so the user sees the
+/// source data), then the configured LLM's interpretation. With no
+/// snapshot it self-heals through /refresh, which runs this again.
+pub(crate) fn run_brief(app: &mut App) {
+    use crate::chat::{cells, Cell};
+    let started = std::time::Instant::now();
+    app.chat.push(Cell::AssistantText(cells::AssistantText {
+        text: "loading portfolio snapshot...".into(),
+        streaming: false,
+    }));
+    app.load_brief();
+    if let Some(b) = &app.brief {
+        let mut out = format_brief_as_lines(b);
+        let mut user_prompt = build_brief_prompt(b);
+        if let Some(note) = &app.crm_note {
+            out.push(format!("warn: {}", note));
+            user_prompt.push_str(&format!(
+                "\n\nIMPORTANT: {}. Do not diagnose lead quality from l/q/v.",
+                note
+            ));
+        }
+        app.chat
+            .push_tool("brief", "", out, true, started.elapsed().as_millis() as u64);
+        let sys = format!("{}\n\n{}", BRIEF_SYSTEM_PROMPT, app_state_block(app));
+        call_agent(app, &sys, &user_prompt);
+    } else if moneyball_core::secrets::load_meta_token().is_some() && app.cfg.has_workspace() {
+        // No snapshot but we CAN get one ourselves. Agent populates its
+        // own data - no dead ends.
+        app.status = None;
+        app.chat.push(Cell::AssistantText(cells::AssistantText {
+            text: "no snapshot yet - running /refresh to pull one, then the brief...".into(),
+            streaming: false,
+        }));
+        crate::refresh_flow::run_refresh(app, false, true);
+    } else {
+        // Can't self-fetch (no Meta token / no workspace): explain
+        // both paths. Status cleared so the error shows once.
+        app.status = None;
+        let snap_dir = app.cfg.history_dir().join("snap");
+        app.chat.push_tool(
+            "brief",
+            "",
+            vec!["no snapshot data and no Meta token to fetch one with.".into()],
+            false,
+            started.elapsed().as_millis() as u64,
+        );
+        app.chat.push(Cell::AssistantText(cells::AssistantText {
+            text: format!(
+                "I can pull the data myself once Meta is connected: run /setup to paste a \
+token, then /refresh (or just /brief) pulls daily insights automatically. Alternatively, point \
+your own pipeline at\n\n    {}/<YYYY-MM-DD>/\n\nand /brief reads whatever it writes.",
+                snap_dir.display()
+            ),
+            streaming: false,
+        }));
+    }
+}
+
 pub(crate) fn app_state_block(app: &App) -> String {
     let mut s = String::from("== live app state (authoritative - never contradict this) ==\n");
     match app.cfg.workspace.as_ref() {
@@ -393,7 +393,7 @@ names EXACTLY as listed - suggested commands must run verbatim when typed.\n",
             }
         }
         None => s.push_str(
-            "snapshot: none yet. /brief self-heals by running /fetch (Meta pull) when a token \
+            "snapshot: none yet. /brief self-heals by running /refresh when a token \
              is configured; otherwise an external pipeline can write \
              <workspace>/.moneyball/history/snap/<YYYY-MM-DD>/*.json. \
              /setup does NOT create snapshots - never suggest it for missing data.\n",
@@ -510,7 +510,7 @@ impl SnapshotTools {
             .snap_for(self.cfg.date.as_deref())
             .and_then(|p| moneyball_core::snapshot::load(&p))
             .map_err(|_| {
-                "no snapshot on disk - tell the user to run /fetch (or /brief, which \
+                "no snapshot on disk - tell the user to run /refresh (or /brief, which \
                  self-heals) before asking for numbers"
                     .to_string()
             })

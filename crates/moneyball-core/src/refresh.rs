@@ -15,6 +15,13 @@ use crate::config::AppConfig;
 use crate::error::Result;
 use crate::schema::{Outcome, RunRecord, RunStep, StepStatus, Trigger, RUN_SCHEMA};
 
+/// What the caller hears while a refresh runs: a step starting (by name)
+/// and a step finished (its record).
+pub enum Progress<'a> {
+    Begin(&'a str),
+    Done(&'a RunStep),
+}
+
 pub struct Options {
     pub trigger: Trigger,
     /// Pull Meta again even when today's snapshot already has it.
@@ -23,14 +30,14 @@ pub struct Options {
     pub days: u32,
 }
 
-/// Run every step, calling `on_step` as each finishes, and return the
+/// Run every step, telling `on_step` as each starts and finishes, and return the
 /// record (also written to `runs/<date>.json`). Err only when the run
 /// cannot start: no workspace, or another refresh holds the lock.
 pub fn run(
     cfg: &AppConfig,
     meta_token: Option<&str>,
     opts: &Options,
-    on_step: &mut dyn FnMut(&RunStep),
+    on_step: &mut dyn FnMut(Progress),
 ) -> Result<RunRecord> {
     let _lock = crate::runs::lock(cfg)?;
     let date = chrono::Local::now()
@@ -53,10 +60,6 @@ pub fn run(
         artifacts: BTreeMap::new(),
     };
     crate::runs::write(cfg, &run)?;
-    let mut push = |run: &mut RunRecord, step: RunStep| {
-        on_step(&step);
-        run.steps.push(step);
-    };
 
     // 1 + 2. Meta insights, then creatives/leads/adsets (one fetch call).
     let snap_dir = cfg.history_dir().join("snap").join(&date);
@@ -67,12 +70,14 @@ pub fn run(
             .unwrap_or(0);
         let mut step = done("meta", 0, [("rows", rows)]);
         step.message = Some("reused this morning's Meta pull (--force pulls it again)".into());
-        push(&mut run, step);
+        push(&mut run, on_step, step);
         push(
             &mut run,
+            on_step,
             skipped("assets", "reused with this morning's Meta pull"),
         );
     } else {
+        on_step(Progress::Begin("meta"));
         let started = Instant::now();
         let fetched = match meta_token {
             Some(token) => crate::fetch::fetch_snapshot(cfg, token, opts.days),
@@ -82,16 +87,17 @@ pub fn run(
         };
         match fetched {
             Err(e) => {
-                push(&mut run, failed("meta", started, &e));
-                push(&mut run, skipped("assets", "skipped: Meta failed"));
+                push(&mut run, on_step, failed("meta", started, &e));
+                push(&mut run, on_step, skipped("assets", "skipped: Meta failed"));
                 push(
                     &mut run,
+                    on_step,
                     skipped(
                         "crm",
                         "skipped, so CRM stays matched to the same day as Meta",
                     ),
                 );
-                push(&mut run, skipped("report", "skipped: no new data"));
+                push(&mut run, on_step, skipped("report", "skipped: no new data"));
                 return finish(cfg, run, Outcome::Failed);
             }
             Ok(f) => {
@@ -119,7 +125,7 @@ pub fn run(
                     step.error_kind = Some("meta_product".into());
                     step.message = Some(format!("no data for {}", missing.join("; ")));
                 }
-                push(&mut run, step);
+                push(&mut run, on_step, step);
                 run.artifacts
                     .insert("snapshot".into(), f.path.display().to_string());
 
@@ -145,7 +151,7 @@ pub fn run(
                     assets.error_kind = Some("capture".into());
                     assets.message = Some(errors.join("; "));
                 }
-                push(&mut run, assets);
+                push(&mut run, on_step, assets);
             }
         }
     }
@@ -154,9 +160,11 @@ pub fn run(
     if !crate::crm::fetch::spec_path(cfg).is_file() {
         push(
             &mut run,
+            on_step,
             skipped("crm", "no CRM connected for this workspace"),
         );
     } else {
+        on_step(Progress::Begin("crm"));
         let started = Instant::now();
         let quiet = AppConfig {
             agent: true,
@@ -166,6 +174,7 @@ pub fn run(
             Ok(r) if r.path.is_some() => {
                 push(
                     &mut run,
+                    on_step,
                     done(
                         "crm",
                         elapsed(started),
@@ -182,20 +191,22 @@ pub fn run(
                     r.name,
                     r.check.errors.first().cloned().unwrap_or_default()
                 ));
-                push(&mut run, step);
+                push(&mut run, on_step, step);
             }
-            Err(e) => push(&mut run, failed("crm", started, &e)),
+            Err(e) => push(&mut run, on_step, failed("crm", started, &e)),
         }
     }
 
     // 4. Yesterday's report from this snapshot. Without CRM it still goes
     //    out: the verdict gate withholds every verdict CRM data would need.
+    on_step(Progress::Begin("report"));
     let started = Instant::now();
     match crate::report::generate(cfg, Some(&date), 1) {
         Ok(out) => {
             let creatives: usize = out.report.products.iter().map(|p| p.creatives.len()).sum();
             push(
                 &mut run,
+                on_step,
                 done(
                     "report",
                     elapsed(started),
@@ -207,7 +218,7 @@ pub fn run(
             run.artifacts
                 .insert("report_json".into(), out.json_path.display().to_string());
         }
-        Err(e) => push(&mut run, failed("report", started, &e)),
+        Err(e) => push(&mut run, on_step, failed("report", started, &e)),
     }
 
     let missing = run
@@ -231,6 +242,11 @@ pub fn data_day_label() -> String {
     (chrono::Local::now().date_naive() - chrono::Duration::days(1))
         .format("%a %d %b %Y")
         .to_string()
+}
+
+fn push(run: &mut RunRecord, on_step: &mut dyn FnMut(Progress), step: RunStep) {
+    on_step(Progress::Done(&step));
+    run.steps.push(step);
 }
 
 fn finish(cfg: &AppConfig, mut run: RunRecord, outcome: Outcome) -> Result<RunRecord> {
@@ -279,4 +295,75 @@ fn elapsed(started: Instant) -> u64 {
 
 fn now() -> String {
     chrono::Utc::now().format("%Y-%m-%dT%H:%M:%SZ").to_string()
+}
+
+/// One plain ASCII line per step, shared by the shell and the TUI cell;
+/// a failed or partial step carries its whole reason on the next line.
+pub fn step_line(n: usize, s: &RunStep) -> String {
+    let label = step_label(&s.name);
+    let status = match s.status {
+        StepStatus::Done => "done",
+        StepStatus::Partial => "partial",
+        StepStatus::Failed => "failed",
+        StepStatus::Skipped => "skipped",
+    };
+    let counts = s
+        .counts
+        .iter()
+        .map(|(k, v)| format!("{} {}", commas(*v), k))
+        .collect::<Vec<_>>()
+        .join(", ");
+    // A step that went wrong gets its whole reason on the next line; a
+    // reason cut short is exactly the part the user needed.
+    let trouble = matches!(s.status, StepStatus::Failed | StepStatus::Partial);
+    let detail = match (&s.message, counts.is_empty()) {
+        (Some(m), true) if !trouble => m.clone(),
+        (Some(m), false) if !trouble => format!("{}; {}", counts, m),
+        _ => counts,
+    };
+    let time = if s.ms > 0 {
+        format!("{:.1}s", s.ms as f64 / 1000.0)
+    } else {
+        String::new()
+    };
+    let line = format!(
+        "  {} {:<20} {:<8} {:<70} {}",
+        n,
+        label,
+        status,
+        crate::text::truncate_marked(&detail, 70, "..."),
+        time
+    );
+    let line = line.trim_end().to_string();
+    match (&s.message, trouble) {
+        (Some(m), true) => format!("{}\n      {}", line, m),
+        _ => line,
+    }
+}
+
+/// The line a step shows while it runs; step_line replaces it when done.
+pub fn running_line(n: usize, name: &str) -> String {
+    format!("  {} {:<20} running", n, step_label(name))
+}
+
+fn step_label(name: &str) -> &str {
+    match name {
+        "meta" => "Meta insights",
+        "assets" => "creatives and leads",
+        "crm" => "CRM",
+        "report" => "daily report",
+        other => other,
+    }
+}
+
+fn commas(n: u64) -> String {
+    let s = n.to_string();
+    let mut out = String::new();
+    for (i, c) in s.chars().enumerate() {
+        if i > 0 && (s.len() - i).is_multiple_of(3) {
+            out.push(',');
+        }
+        out.push(c);
+    }
+    out
 }

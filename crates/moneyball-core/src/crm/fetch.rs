@@ -80,7 +80,7 @@ pub fn fetch_crm(cfg: &AppConfig, days: u32) -> Result<CrmFetchReport> {
     // cover that snapshot's days, not the days around whenever this ran.
     let date = super::status::target_snapshot(cfg)?.ok_or_else(|| {
         Error::Config(
-            "no ads snapshot to attach CRM data to - run `moneyball fetch` (or /fetch) first"
+            "no ads snapshot to attach CRM data to - run `moneyball refresh` (or /refresh) first"
                 .into(),
         )
     })?;

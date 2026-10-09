@@ -44,7 +44,7 @@ and HOME/cwd reads live only in config.rs (also arch-enforced).
   locally built binaries). Secrets never appear in config.json,
   crm.toml, or logs - crm.toml references them as `secret:<name>` /
   `env:<VAR>`.
-- Within `history/`, `/fetch` writes `snap/<date>/{ads_daily,creatives}.json`
+- Within `history/`, a refresh (`/refresh`, `moneyball refresh`) writes `snap/<date>/{ads_daily,creatives}.json`
   (temp-then-rename; a creatives failure warns, never loses the
   snapshot) and, from slice A2 on, caches creative images
   content-addressed under `history/assets/creatives/<hh>/<sha256>.<ext>`

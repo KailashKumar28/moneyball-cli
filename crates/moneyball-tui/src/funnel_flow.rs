@@ -55,7 +55,7 @@ pub(crate) fn run_funnel(app: &mut App, arg: &str) {
         Ok(s) => s,
         Err(_) => {
             app.chat.push(Cell::AssistantText(cells::AssistantText {
-                text: "no snapshot yet - run /fetch first (or /brief, which self-heals).".into(),
+                text: "no snapshot yet - run /refresh first (or /brief, which self-heals).".into(),
                 streaming: false,
             }));
             return;

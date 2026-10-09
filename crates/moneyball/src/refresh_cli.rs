@@ -6,7 +6,7 @@
 use anyhow::Result;
 
 use moneyball_core::refresh::{self, Options};
-use moneyball_core::schema::{Outcome, RunStep, StepStatus, Trigger};
+use moneyball_core::schema::{Outcome, StepStatus, Trigger};
 use moneyball_core::AppConfig;
 
 pub(crate) fn run(cfg: &AppConfig, force: bool, days: u32) -> Result<()> {
@@ -25,10 +25,12 @@ pub(crate) fn run(cfg: &AppConfig, force: bool, days: u32) -> Result<()> {
     };
     let agent = cfg.agent;
     let mut n = 0;
-    let run = refresh::run(cfg, token.as_deref(), &opts, &mut |step| {
-        n += 1;
-        if !agent {
-            println!("{}", step_line(n, step));
+    let run = refresh::run(cfg, token.as_deref(), &opts, &mut |p| {
+        if let refresh::Progress::Done(step) = p {
+            n += 1;
+            if !agent {
+                println!("{}", refresh::step_line(n, step));
+            }
         }
     })?;
 
@@ -72,65 +74,4 @@ pub(crate) fn run(cfg: &AppConfig, force: bool, days: u32) -> Result<()> {
         Outcome::Degraded => std::process::exit(2),
         _ => std::process::exit(1),
     }
-}
-
-/// `  1 Meta insights        done     5 products, 1,104 rows      18.2s`
-fn step_line(n: usize, s: &RunStep) -> String {
-    let label = match s.name.as_str() {
-        "meta" => "Meta insights",
-        "assets" => "creatives and leads",
-        "crm" => "CRM",
-        "report" => "daily report",
-        other => other,
-    };
-    let status = match s.status {
-        StepStatus::Done => "done",
-        StepStatus::Partial => "partial",
-        StepStatus::Failed => "failed",
-        StepStatus::Skipped => "skipped",
-    };
-    let counts = s
-        .counts
-        .iter()
-        .map(|(k, v)| format!("{} {}", commas(*v), k))
-        .collect::<Vec<_>>()
-        .join(", ");
-    // A step that went wrong gets its whole reason on the next line; a
-    // reason cut short is exactly the part the user needed.
-    let trouble = matches!(s.status, StepStatus::Failed | StepStatus::Partial);
-    let detail = match (&s.message, counts.is_empty()) {
-        (Some(m), true) if !trouble => m.clone(),
-        (Some(m), false) if !trouble => format!("{}; {}", counts, m),
-        _ => counts,
-    };
-    let time = if s.ms > 0 {
-        format!("{:.1}s", s.ms as f64 / 1000.0)
-    } else {
-        String::new()
-    };
-    let line = format!(
-        "  {} {:<20} {:<8} {:<70} {}",
-        n,
-        label,
-        status,
-        moneyball_core::text::truncate_marked(&detail, 70, "..."),
-        time
-    );
-    let line = line.trim_end().to_string();
-    match (&s.message, trouble) {
-        (Some(m), true) => format!("{}\n      {}", line, m),
-        _ => line,
-    }
-}
-
-fn commas(n: u64) -> String {
-    let s = n.to_string();
-    let mut out = String::new();
-    for (i, c) in s.chars().enumerate() {
-        if i > 0 && (s.len() - i).is_multiple_of(3) {
-            out.push(',');
-        }
-        out.push(c);
-    }
-    out
 }

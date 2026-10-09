@@ -5,7 +5,7 @@ math) never touches the network; network code lives in exactly four core
 modules (canonical list: ARCHITECTURE.md §1, enforced by the arch_contract
 test) - and nothing ever writes to Meta or the CRM.
 Analysis reads snapshots via the documented schema, whether written by
-`/fetch`, `crm fetch`, or an external pipeline. TUI is the management
+`/refresh`, `crm fetch`, or an external pipeline. TUI is the management
 surface; no web UI.
 
 See [ARCHITECTURE.md](ARCHITECTURE.md) for the BINDING structure & style

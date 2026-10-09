@@ -41,11 +41,11 @@ pub(crate) fn event_loop(t: &mut Tui, app: &mut App) -> Result<()> {
     Ok(())
 }
 
-/// Drain any pending worker events (LLM stream deltas, fetch results)
+/// Drain any pending worker events (LLM stream deltas, refresh steps)
 /// into the app. Runs every tick, so text appears as it arrives
 /// (~10 redraws/sec). The receiver borrow is released before each event
-/// is handled because fetch completion chains into a NEW stream
-/// (`on_fetch_done` -> call_agent).
+/// is handled because a refresh can chain into a NEW stream (the
+/// self-healing /brief -> call_agent).
 fn drain_stream(app: &mut App) {
     use std::sync::mpsc::TryRecvError;
     loop {
@@ -144,16 +144,6 @@ fn drain_stream(app: &mut App) {
                     }
                 }
             }
-            Ok(StreamEvent::FetchDone { report, days, ms }) => {
-                app.stream = None;
-                commands::on_fetch_done(app, report, days, ms);
-                return;
-            }
-            Ok(StreamEvent::FetchFailed { err, days, ms }) => {
-                app.stream = None;
-                commands::on_fetch_failed(app, err, days, ms);
-                return;
-            }
             Ok(StreamEvent::ReportDone { out, ms }) => {
                 app.stream = None;
                 crate::creative_flow::on_report_done(app, out, ms);
@@ -162,6 +152,22 @@ fn drain_stream(app: &mut App) {
             Ok(StreamEvent::ReportFailed { err, ms }) => {
                 app.stream = None;
                 crate::creative_flow::on_report_failed(app, err, ms);
+                return;
+            }
+            // Steps keep the stream open; Done/Failed close it.
+            Ok(StreamEvent::RefreshStep(line)) => crate::refresh_flow::on_refresh_step(app, line),
+            Ok(StreamEvent::RefreshDone {
+                run,
+                ms,
+                then_brief,
+            }) => {
+                app.stream = None;
+                crate::refresh_flow::on_refresh_done(app, *run, ms, then_brief);
+                return;
+            }
+            Ok(StreamEvent::RefreshFailed { err, ms }) => {
+                app.stream = None;
+                crate::refresh_flow::on_refresh_failed(app, err, ms);
                 return;
             }
             Err(TryRecvError::Empty) => return,
@@ -372,11 +378,13 @@ fn handle_esc(app: &mut App) {
         app.status = Some("interrupting...".into());
         return;
     }
-    // Esc during a fetch: the pull cannot be stopped mid-request; say so
+    // Esc during a refresh: the pull cannot be stopped mid-request; say so
     // honestly instead of pretending (the result is discarded).
     if app.stream.take().is_some() {
         app.chat.finish_streaming();
-        app.status = Some("fetch result discarded (the Meta pull itself completes)".into());
+        // A running Meta pull can't be cut mid-request; it finishes in the
+        // background (a refresh still writes its run record).
+        app.status = Some("stopped waiting - the job finishes in the background".into());
         return;
     }
     if !app.input.is_empty() {

@@ -91,7 +91,7 @@ pub fn table(rows: &[FunnelRow]) -> String {
     if rows.iter().any(|r| r.kill.is_none()) {
         out.push_str(
             "kill withheld: this snapshot has no CRM data, so qualified counts are unknown, not zero. \
-             Fetch CRM (moneyball crm fetch) and run this again.\n",
+             Run a refresh (moneyball refresh, or /refresh in the app), then this again.\n",
         );
     }
     out

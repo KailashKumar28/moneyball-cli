@@ -394,6 +394,15 @@ impl ChatLog {
         self.scroll = self.max_scroll.get();
     }
 
+    /// The newest result cell of `name`, for a tool that reports while it
+    /// runs (lines appended live, its duration set when it ends).
+    pub fn tool_result_mut(&mut self, name: &str) -> Option<&mut cells::ToolResult> {
+        self.cells.iter_mut().rev().find_map(|c| match c {
+            Cell::ToolResult(r) if r.name == name => Some(r),
+            _ => None,
+        })
+    }
+
     /// Flip the most recent Running tool cell to Done/Failed - the
     /// ToolEnd half of the ARCHITECTURE 6b cell contract.
     pub fn finalize_tool(&mut self, ok: bool) {

@@ -65,23 +65,25 @@ pub struct App {
 pub enum StreamEvent {
     /// Agent-loop event (deltas, tool begin/end, turn end).
     Agent(Ev),
-    /// `/fetch` worker finished pulling a snapshot from Meta.
-    FetchDone {
-        report: moneyball_core::fetch::FetchReport,
-        days: u32,
-        ms: u64,
-    },
-    FetchFailed {
-        err: String,
-        days: u32,
-        ms: u64,
-    },
     /// `/report` worker finished generating the creative report.
     ReportDone {
         out: Box<moneyball_core::report::ReportOutput>,
         ms: u64,
     },
     ReportFailed {
+        err: String,
+        ms: u64,
+    },
+    /// `/refresh` worker: a step started or finished, as its display line.
+    RefreshStep(String),
+    RefreshDone {
+        run: Box<moneyball_core::schema::RunRecord>,
+        ms: u64,
+        /// Started by /brief's self-heal: run the brief once data lands.
+        then_brief: bool,
+    },
+    /// The refresh could not start (no workspace, or one already running).
+    RefreshFailed {
         err: String,
         ms: u64,
     },
