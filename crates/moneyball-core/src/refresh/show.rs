@@ -3,6 +3,10 @@
 //! what a step is called, what its status word is, or how its counts read.
 
 use crate::schema::{RunStep, StepStatus};
+use crate::text::commas;
+
+/// Under a step carried over from today's earlier pull.
+pub const REUSED_NOTE: &str = "from today's earlier pull (--force pulls Meta again)";
 
 /// The day a refresh started now fills, for headers ("Wed 07 Oct 2026"):
 /// yesterday, since the snapshot day itself is never in a window.
@@ -70,7 +74,7 @@ pub fn duration(ms: u64) -> String {
 
 /// One plain line per step for the shell: label, status, counts, time;
 /// the step's message (a failure's whole reason, a skip's why) goes on
-/// the next line, never cut short.
+/// the next line, never cut short, and a carried-over step says so.
 pub fn step_line(n: usize, s: &RunStep) -> String {
     let line = format!(
         "  {} {:<20} {:<7} {:<40} {:>6}",
@@ -80,22 +84,12 @@ pub fn step_line(n: usize, s: &RunStep) -> String {
         counts_detail(s),
         duration(s.ms)
     );
-    let line = line.trim_end().to_string();
-    match &s.message {
-        Some(m) => format!("{}\n      {}", line, m),
-        None => line,
+    let mut out = line.trim_end().to_string();
+    if let Some(m) = &s.message {
+        out.push_str(&format!("\n      {}", m));
     }
-}
-
-/// 1234567 -> "1,234,567".
-pub fn commas(n: u64) -> String {
-    let s = n.to_string();
-    let mut out = String::new();
-    for (i, c) in s.chars().enumerate() {
-        if i > 0 && (s.len() - i).is_multiple_of(3) {
-            out.push(',');
-        }
-        out.push(c);
+    if s.reused && s.status != StepStatus::Skipped {
+        out.push_str(&format!("\n      {}", REUSED_NOTE));
     }
     out
 }
@@ -113,6 +107,7 @@ mod tests {
             error_kind: None,
             message: None,
             fix: None,
+            reused: false,
         }
     }
 

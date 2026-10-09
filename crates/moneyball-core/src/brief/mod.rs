@@ -336,7 +336,7 @@ pub struct ProductRowsAndFeasibility {
 pub fn staleness_warning(snapshot_date: &str) -> Option<String> {
     let d = NaiveDate::parse_from_str(snapshot_date, "%Y-%m-%d").ok()?;
     let days = (chrono::Local::now().date_naive() - d).num_days();
-    (days >= 2).then(|| {
+    (days >= crate::health::STALE_DAYS).then(|| {
         format!(
             "!! snapshot is {} days old (dated {}) - fetch fresh data before acting on it",
             days, snapshot_date

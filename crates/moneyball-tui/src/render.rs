@@ -205,7 +205,7 @@ fn render_chat_view(f: &mut ratatui::Frame, area: Rect, app: &App) {
     // 5. Keybinding caption (no borders) - contextual, codex-style.
     let caption_text = if palette_h > 0 {
         "  \u{2191}\u{2193} choose  \u{00B7}  \u{21B5} run  \u{00B7}  \u{21E5} complete  \u{00B7}  esc clear"
-    } else if busy.is_some() && app.input.is_empty() && !app.turn_active {
+    } else if busy.is_some() && app.input.is_empty() && !app.turn_active && app.stream.is_none() {
         "  esc cancel refresh (after the current step)  \u{00B7}  other commands still work"
     } else {
         "  \u{21B5} send  \u{00B7}  esc clear input  \u{00B7}  \u{21E5} complete  \u{00B7}  \u{2191}\u{2193} scroll  \u{00B7}  /exit to quit"
@@ -224,7 +224,10 @@ fn render_chat_view(f: &mut ratatui::Frame, area: Rect, app: &App) {
                 Style::default().fg(Color::Yellow),
             )),
             (None, Some(step)) => Line::from(vec![
-                Span::styled("  \u{25D0}", Style::default().fg(Color::Cyan)),
+                Span::styled(
+                    format!("  {}", crate::widgets::LOAD),
+                    Style::default().fg(Color::Cyan),
+                ),
                 Span::styled(
                     format!(
                         " refresh running  \u{00B7}  step {} of {}",

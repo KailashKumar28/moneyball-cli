@@ -96,8 +96,8 @@ impl App {
         self.view = View::Setup(state);
     }
 
-    /// Test-only: route the app to the brief view with no brief loaded,
-    /// so the welcome screen (configured but no data) renders.
+    /// Test-only: route the app to the chat view with no brief loaded
+    /// (configured, but no data on screen).
     pub fn force_welcome_for_test(&mut self) {
         self.view = View::Brief;
         self.brief = None;
@@ -275,7 +275,12 @@ impl App {
                     self.brief = Some(r);
                     self.status = None;
                 }
-                Err(e) => self.status = Some(format!("snapshot load failed: {}", e)),
+                Err(e) => {
+                    // Configured, with data that would not load: the bar and
+                    // landing still speak for the workspace, never "setup".
+                    self.health = Some(moneyball_core::health::Health::of(&self.cfg, None));
+                    self.status = Some(format!("snapshot load failed: {}", e));
+                }
             },
             // Missing snapshot is the normal first-run state, not a fault:
             // the context bar already shows "no data", so keep the status

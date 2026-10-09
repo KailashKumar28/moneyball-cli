@@ -11,6 +11,7 @@
 
 mod card;
 mod exec;
+pub use exec::daily;
 mod group;
 pub mod html;
 mod img;
@@ -250,7 +251,9 @@ pub fn generate(cfg: &AppConfig, date: Option<&str>, window_days: u32) -> Result
         String::new()
     };
     let json_path = dir.join(format!("creative-report{}.json", range_suffix));
-    let tmp = dir.join(format!("creative-report{}.json.tmp", range_suffix));
+    // Temp names unique to this writer: a refresh and /report (or the
+    // schedule and the shell) may write the same day at once.
+    let tmp = dir.join(format!("creative-report{}.json.{}", range_suffix, writer()));
     std::fs::write(&tmp, serde_json::to_string_pretty(&report)?)?;
     std::fs::rename(&tmp, &json_path)?;
 
@@ -293,7 +296,7 @@ pub fn generate(cfg: &AppConfig, date: Option<&str>, window_days: u32) -> Result
         )
     };
     let html_path = dir.join(html_name);
-    let html_tmp = dir.join("report.html.tmp");
+    let html_tmp = dir.join(format!("report.html.{}", writer()));
     std::fs::write(
         &html_tmp,
         html::render(&report, prior.as_ref(), &brand, &cfg.history_dir()),
@@ -305,6 +308,14 @@ pub fn generate(cfg: &AppConfig, date: Option<&str>, window_days: u32) -> Result
         json_path,
         html_path,
     })
+}
+
+fn writer() -> String {
+    format!(
+        "tmp.{}.{:?}",
+        std::process::id(),
+        std::thread::current().id()
+    )
 }
 
 /// Headless runner: generate + print the text summary.

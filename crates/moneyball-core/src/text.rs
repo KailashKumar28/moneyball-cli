@@ -24,6 +24,19 @@ pub fn truncate_marked(s: &str, cap: usize, marker: &str) -> String {
     }
 }
 
+/// 1234567 -> "1,234,567": the one number format every surface shares.
+pub fn commas(n: u64) -> String {
+    let s = n.to_string();
+    let mut out = String::new();
+    for (i, c) in s.chars().enumerate() {
+        if i > 0 && (s.len() - i).is_multiple_of(3) {
+            out.push(',');
+        }
+        out.push(c);
+    }
+    out
+}
+
 /// Split a pre-formatted line into pieces of at most `width` columns
 /// (chars), the first at `width` and the rest at `rest`. Keeps every
 /// internal space, so aligned columns survive (word-wrapping collapses

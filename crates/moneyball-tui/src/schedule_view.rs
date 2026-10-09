@@ -55,7 +55,7 @@ fn ask(app: &mut App, at: (u32, u32)) {
     let logs = plan
         .log
         .parent()
-        .map_or(String::new(), |d| format!("{}/", d.display()));
+        .map_or(String::new(), |d| format!("{}/", crate::widgets::tilde(d)));
     let keys = Para::new(6, 6)
         .run("y", bold(Color::Cyan))
         .run(format!(" install at {}   ", time), gray())
@@ -79,7 +79,7 @@ fn ask(app: &mut App, at: (u32, u32)) {
                 gray(),
             ),
             Para::default(),
-            row("writes", plan.plist.display().to_string()),
+            row("writes", crate::widgets::tilde(&plan.plist)),
             row("runs", plan.command()),
             row("logs", logs),
             row("remove", "/schedule off".into()).run("  (or moneyball schedule --off)", gray()),

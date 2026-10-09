@@ -1,14 +1,11 @@
 //! Data health: one reading of how fresh the workspace's data is, behind
-//! the TUI's context bar and landing (and /status next). File reads only:
-//! the snapshot on screen, the newest snapshot holding CRM data, and the
-//! run records. No network.
-
-use std::path::PathBuf;
+//! the TUI's context bar and landing. File reads only: the snapshot on
+//! screen, the newest snapshot holding CRM data, and the run records.
 
 use chrono::{DateTime, Local, NaiveDate};
 
 use crate::config::AppConfig;
-use crate::schema::{CreativeReport, Outcome, RunRecord, StepStatus, CREATIVE_REPORT_SCHEMA};
+use crate::schema::{Outcome, RunRecord, StepStatus};
 use crate::snapshot::Snapshot;
 
 /// Data this many days old reads as stale (the brief warns at the same age).
@@ -17,9 +14,10 @@ pub const STALE_DAYS: i64 = 2;
 /// The bar's state; when several hold, the first listed wins.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum State {
-    NoData,
-    /// Today's refresh failed: nothing new was written.
+    /// Today's refresh failed: nothing new was written. Outranks NoData,
+    /// so a first refresh that fails shows its fix, not "no data yet".
     Failed,
+    NoData,
     /// The newest data is STALE_DAYS or more old.
     Stale,
     /// The snapshot on screen has no CRM data.
@@ -35,14 +33,14 @@ pub enum State {
 #[derive(Debug, Clone)]
 pub struct Health {
     pub today: NaiveDate,
-    /// The snapshot on screen, and the newest one holding CRM data.
-    pub snapshot: Option<NaiveDate>,
-    pub crm_snapshot: Option<NaiveDate>,
+    /// The date of the snapshot on screen, and of the newest holding CRM.
+    pub snap_date: Option<NaiveDate>,
+    pub crm_snap_date: Option<NaiveDate>,
     pub crm_connected: bool,
-    /// The run that wrote the snapshot, when one was recorded.
+    /// The snapshot's run record: its latest refresh, when one was recorded.
     pub run: Option<RunRecord>,
-    /// When the snapshot's Meta data was pulled (its run, else the file).
-    pub pulled_at: Option<DateTime<Local>>,
+    /// When that refresh finished (else when the snapshot was written).
+    pub refreshed_at: Option<DateTime<Local>>,
     /// Today's run, when it failed.
     pub failed_today: Option<RunRecord>,
     pub state: State,
@@ -52,13 +50,13 @@ impl Health {
     pub fn of(cfg: &AppConfig, snap: Option<&Snapshot>) -> Health {
         let today = Local::now().date_naive();
         let day = |d: &str| NaiveDate::parse_from_str(d, "%Y-%m-%d").ok();
-        let snapshot = snap.and_then(|s| day(&s.date));
-        let crm_snapshot = match snap {
-            Some(s) if !crate::crm::is_empty(&s.crm) => snapshot,
+        let snap_date = snap.and_then(|s| day(&s.date));
+        let crm_snap_date = match snap {
+            Some(s) if !crate::crm::is_empty(&s.crm) => snap_date,
             _ => crate::crm::status::newest_crm_snapshot(cfg).and_then(|d| day(&d)),
         };
         let run = snap.and_then(|s| crate::runs::read(cfg, &s.date));
-        let pulled_at = run
+        let refreshed_at = run
             .as_ref()
             .and_then(|r| DateTime::parse_from_rfc3339(&r.finished_at).ok())
             .map(|t| t.with_timezone(&Local))
@@ -70,34 +68,34 @@ impl Health {
             .filter(|r| r.outcome == Outcome::Failed);
         Health {
             today,
-            snapshot,
-            crm_snapshot,
+            snap_date,
+            crm_snap_date,
             crm_connected: crate::crm::fetch::spec_path(cfg).is_file(),
             state: state(
                 today,
-                snapshot,
-                crm_snapshot,
+                snap_date,
+                crm_snap_date,
                 failed_today.is_some(),
                 run.as_ref(),
             ),
             run,
-            pulled_at,
+            refreshed_at,
             failed_today,
         }
     }
 
     /// Days since the snapshot was pulled.
     pub fn age_days(&self) -> Option<i64> {
-        self.snapshot.map(|s| (self.today - s).num_days())
+        self.snap_date.map(|s| (self.today - s).num_days())
     }
 
     /// The last day the data covers: the day before its snapshot.
     pub fn data_day(&self) -> Option<NaiveDate> {
-        self.snapshot.and_then(|d| d.pred_opt())
+        self.snap_date.and_then(|d| d.pred_opt())
     }
 
     pub fn crm_day(&self) -> Option<NaiveDate> {
-        self.crm_snapshot.and_then(|d| d.pred_opt())
+        self.crm_snap_date.and_then(|d| d.pred_opt())
     }
 
     pub fn label(&self) -> String {
@@ -112,43 +110,23 @@ impl Health {
     }
 }
 
-/// The daily report written from a snapshot: its report.json and the
-/// HTML a client opens. None until that snapshot has a daily report.
-pub fn daily_report(cfg: &AppConfig, snap_date: &str) -> Option<(CreativeReport, PathBuf)> {
-    let dir = cfg.mb_dir().join("reports").join(snap_date);
-    let raw = std::fs::read_to_string(dir.join("creative-report.json")).ok()?;
-    let report: CreativeReport = serde_json::from_str(&raw).ok()?;
-    if report.schema != CREATIVE_REPORT_SCHEMA {
-        return None;
-    }
-    let html = std::fs::read_dir(&dir)
-        .ok()?
-        .filter_map(|e| e.ok().map(|e| e.path()))
-        .find(|p| {
-            p.file_name()
-                .and_then(|n| n.to_str())
-                .is_some_and(|n| n.contains("-Daily-") && n.ends_with(".html"))
-        })?;
-    Some((report, html))
-}
-
 fn state(
     today: NaiveDate,
-    snapshot: Option<NaiveDate>,
-    crm_snapshot: Option<NaiveDate>,
+    snap_date: Option<NaiveDate>,
+    crm_snap_date: Option<NaiveDate>,
     failed_today: bool,
     run: Option<&RunRecord>,
 ) -> State {
-    let Some(snap) = snapshot else {
-        return State::NoData;
-    };
     if failed_today {
         return State::Failed;
     }
+    let Some(snap) = snap_date else {
+        return State::NoData;
+    };
     if (today - snap).num_days() >= STALE_DAYS {
         return State::Stale;
     }
-    if crm_snapshot != Some(snap) {
+    if crm_snap_date != Some(snap) {
         return State::CrmMissing;
     }
     let meta = run.and_then(|r| r.steps.iter().find(|s| s.name == "meta"));
@@ -179,6 +157,11 @@ mod tests {
         let today = d("2026-10-09").unwrap();
         let fresh = d("2026-10-09");
         assert_eq!(state(today, None, None, false, None), State::NoData);
+        assert_eq!(
+            state(today, None, None, true, None),
+            State::Failed,
+            "a first refresh that failed shows its fix, not 'no data'"
+        );
         assert_eq!(state(today, fresh, fresh, true, None), State::Failed);
         assert_eq!(
             state(today, d("2026-10-07"), d("2026-08-12"), false, None),
@@ -208,6 +191,7 @@ mod tests {
                 error_kind: Some("meta_product".into()),
                 message: None,
                 fix: None,
+                reused: false,
             }],
             artifacts: Default::default(),
         };

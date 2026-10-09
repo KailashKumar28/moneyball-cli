@@ -13,6 +13,7 @@ pub const BRAND: &str = "\u{25C6}"; // black diamond
 pub const OK: &str = "\u{25CF}"; // black circle
 pub const LOAD: &str = "\u{25D0}"; // circle with left half black
 pub const IDLE: &str = "\u{25CB}"; // white circle
+pub const FAIL: &str = "\u{2716}"; // heavy multiplication x
 pub const DOT: &str = "  \u{00B7}  ";
 
 pub fn dim() -> Style {
@@ -74,12 +75,14 @@ pub fn context_line(
                 };
                 tail.push(Span::styled(format!("{}data ", DOT), dim()));
                 tail.push(Span::styled(value, style));
+                // CRM data in this snapshot is fresh however it got there
+                // (an external pipeline needs no crm.toml).
                 let crm = match (h.crm_connected, h.crm_day()) {
-                    (false, _) => ("not connected".to_string(), fg(Color::Yellow)),
-                    (true, None) => ("none".to_string(), fg(Color::Yellow)),
-                    (true, Some(d)) if h.crm_snapshot == h.snapshot => {
+                    (_, Some(d)) if h.crm_snap_date == h.snap_date => {
                         (d.format("%d %b").to_string(), gray())
                     }
+                    (false, _) => ("not connected".to_string(), fg(Color::Yellow)),
+                    (true, None) => ("none".to_string(), fg(Color::Yellow)),
                     (true, Some(d)) => (d.format("%d %b").to_string(), fg(Color::Yellow)),
                 };
                 tail.push(Span::styled(format!("{}CRM ", DOT), dim()));
@@ -108,12 +111,7 @@ pub fn context_line(
     let tail_w: usize = tail.iter().map(|s| s.content.chars().count()).sum();
     let lead = "  \u{2514}\u{2500} workspace: ";
     let room = (width as usize).saturating_sub(lead.chars().count() + tail_w);
-    let home = moneyball_core::config::home_dir();
-    let home = home.as_deref().and_then(|h| h.to_str()).unwrap_or_default();
-    let mut path = match workspace.strip_prefix(home) {
-        Some(rest) if !home.is_empty() => format!("~{}", rest),
-        _ => workspace.to_string(),
-    };
+    let mut path = tilde(std::path::Path::new(workspace));
     if path.chars().count() > room {
         path = std::path::Path::new(workspace)
             .file_name()
@@ -144,7 +142,7 @@ pub fn day_numbers(report: &moneyball_core::schema::CreativeReport) -> String {
     let mut parts = vec![
         format!(
             "spend Rs.{}",
-            moneyball_core::refresh::commas(k.spend.round() as u64)
+            moneyball_core::text::commas(k.spend.round() as u64)
         ),
         format!("Meta leads {}", k.funnel.m_leads),
     ];
@@ -154,7 +152,7 @@ pub fn day_numbers(report: &moneyball_core::schema::CreativeReport) -> String {
         if let Some(c) = k.cost_per_qualified {
             parts.push(format!(
                 "Rs.{} per qualified",
-                moneyball_core::refresh::commas(c.round() as u64)
+                moneyball_core::text::commas(c.round() as u64)
             ));
         }
     } else {
@@ -173,6 +171,16 @@ pub fn fix_does(fix: &str) -> &'static str {
         "in a shell; it walks you through connecting your CRM"
     } else {
         "in a shell"
+    }
+}
+
+/// A path as the user would write it: under home, "~/...".
+pub fn tilde(path: &std::path::Path) -> String {
+    match moneyball_core::config::home_dir()
+        .and_then(|h| path.strip_prefix(h).ok().map(|r| r.to_path_buf()))
+    {
+        Some(rest) => format!("~/{}", rest.display()),
+        None => path.display().to_string(),
     }
 }
 

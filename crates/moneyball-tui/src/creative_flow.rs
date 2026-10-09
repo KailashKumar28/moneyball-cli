@@ -11,6 +11,11 @@ pub(crate) fn run_report(app: &mut App, arg: &str) {
         app.status = Some("still working - esc to interrupt, then resend".into());
         return;
     }
+    // A refresh writes today's report itself; two writers would race.
+    if app.refresh.is_some() {
+        app.status = Some("a refresh is writing today's report - wait for it".into());
+        return;
+    }
     // Optional arg: trailing window in days ("/report 7"); default 1.
     // Anything else is a typo, never a silent 1-day report.
     let window: u32 = match arg.trim() {

@@ -36,8 +36,14 @@ pub struct RefreshJob {
 const STOPPING: &str = "stopping after the current step...";
 
 pub(crate) fn run_refresh(app: &mut App, force: bool, then_brief: bool) {
-    if app.refresh.is_some() {
-        app.status = Some("a refresh is already running - its steps are above".into());
+    if let Some(job) = &mut app.refresh {
+        // /brief asking mid-run: let this run bring the brief, not a second one.
+        job.then_brief |= then_brief;
+        app.status = Some(if then_brief {
+            "a refresh is already running - the brief follows it".into()
+        } else {
+            "a refresh is already running - its steps are above".into()
+        });
         return;
     }
     let day = refresh::data_day_label();
@@ -65,7 +71,7 @@ pub(crate) fn run_refresh(app: &mut App, force: bool, then_brief: bool) {
         let step_tx = tx.clone();
         let result = refresh::run(&cfg, token.as_deref(), &opts, &mut |p| {
             let _ = step_tx.send(match p {
-                Progress::Begin(name) => Ev::Begin(step_name(name)),
+                Progress::Begin(name) => Ev::Begin(name),
                 Progress::Done(step) => Ev::Done(Box::new(step.clone())),
             });
         });
@@ -74,7 +80,7 @@ pub(crate) fn run_refresh(app: &mut App, force: bool, then_brief: bool) {
                 run: Box::new(run),
                 ms: started.elapsed().as_millis() as u64,
             },
-            Err(e) => Ev::CouldNotStart { err: e.to_string() },
+            Err(e) => Ev::CouldNotStart { err: e.reason() },
         });
     });
     app.refresh = Some(RefreshJob {
@@ -131,9 +137,8 @@ pub(crate) fn drain(app: &mut App) {
                 // never leave the cell spinning.
                 app.refresh = None;
                 return with_cell(app, |c| {
-                    c.end = Some(End::CouldNotStart(
-                        "the refresh stopped unexpectedly; its run record says how far it got"
-                            .into(),
+                    c.end = Some(End::Stopped(
+                        "its run record keeps the steps that finished".into(),
                     ))
                 });
             }
@@ -147,15 +152,16 @@ fn finished(app: &mut App, run: RunRecord, ms: u64, then_brief: bool) {
         .as_ref()
         .and_then(|h| h.data_day())
         .map(|d| d.format("%d %b").to_string());
-    let daily = run
+    // The run says where its report went; the numbers come from its json.
+    let report = run.artifacts.get("report").cloned();
+    let numbers = run
         .artifacts
-        .contains_key("report")
-        .then(|| moneyball_core::health::daily_report(&app.cfg, &run.date))
-        .flatten();
-    let report = daily.as_ref().map(|(_, html)| html.display().to_string());
-    let numbers = daily.as_ref().map(|(r, _)| day_numbers(r));
-    if let Some((_, html)) = daily {
-        app.report_path = Some(html);
+        .get("report_json")
+        .and_then(|p| std::fs::read_to_string(p).ok())
+        .and_then(|raw| serde_json::from_str::<moneyball_core::schema::CreativeReport>(&raw).ok())
+        .map(|r| day_numbers(&r));
+    if let Some(html) = &report {
+        app.report_path = Some(html.into());
     }
     with_cell(app, |c| {
         c.end = Some(End::Finished {
@@ -177,7 +183,7 @@ fn finished(app: &mut App, run: RunRecord, ms: u64, then_brief: bool) {
         if app.stream.is_some() {
             app.status = Some("the data is in - /brief reads it".into());
         } else {
-            crate::commands::run_brief(app);
+            crate::brief_flow::run_brief(app);
         }
     }
 }
@@ -191,15 +197,6 @@ fn with_cell(app: &mut App, f: impl FnOnce(&mut RefreshCell)) {
     if let Some(c) = cell {
         f(c);
     }
-}
-
-/// Core's step name as the static one the cell keys its rows by.
-fn step_name(name: &str) -> &'static str {
-    refresh::STEPS
-        .iter()
-        .find(|s| **s == name)
-        .copied()
-        .unwrap_or("meta")
 }
 
 /// Ctrl+O: open the newest daily report in the default browser.

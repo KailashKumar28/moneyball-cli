@@ -7,14 +7,18 @@ use std::path::PathBuf;
 use chrono::{DateTime, Duration, NaiveDate};
 use ratatui::style::{Color, Modifier, Style};
 
-use moneyball_core::health::{daily_report, Health, State};
+use moneyball_core::health::{Health, State};
 use moneyball_core::refresh::{self as r};
+use moneyball_core::report::daily;
 use moneyball_core::schema::{CreativeReport, RunRecord, StepStatus, Trigger};
+use moneyball_core::text::commas;
 use moneyball_core::AppConfig;
 
-use crate::widgets::{bold, day_numbers, dim, fg, fix_does, gray, Para, DOT};
+use crate::widgets::{bold, day_numbers, dim, fg, fix_does, gray, Para, DOT, FAIL};
 
 const DAY: &str = "%a %d %b";
+const NOT_CONNECTED: &str =
+    "No CRM is connected, so CRM leads, qualified and every verdict are off.";
 
 /// The landing's paragraphs, and the report ctrl+o opens (when there is
 /// one). `scheduled`: a morning refresh is installed.
@@ -23,13 +27,49 @@ pub(crate) fn landing(
     h: &Health,
     scheduled: bool,
 ) -> (Vec<Para>, Option<PathBuf>) {
-    let mut out = Vec::new();
     let day = h
         .data_day()
         .map(|d| d.format(DAY).to_string())
         .unwrap_or_default();
-    let run = h.run.as_ref();
+    let (mut out, fixes) = story(h, &day, scheduled);
+    // States whose day still has numbers worth showing under the story.
+    let whole_day = matches!(
+        h.state,
+        State::Fresh | State::Partial { .. } | State::CrmMissing
+    );
+    // Without numbers below, the fix and the next command stand apart.
+    if !whole_day {
+        out.push(Para::default());
+    }
+    for fix in &fixes {
+        out.push(
+            Para::new(4, 10)
+                .run("fix:  ", gray())
+                .run(fix.clone(), bold(Color::Cyan))
+                .run(format!("   {}", fix_does(fix)), gray()),
+        );
+    }
+    out.extend(next_command(h, !fixes.is_empty(), !scheduled && !whole_day));
+    if !whole_day {
+        return (out, None);
+    }
+    if !out.is_empty() {
+        out.push(Para::default());
+    }
+    let report = h
+        .snap_date
+        .and_then(|s| daily(cfg, &s.format("%Y-%m-%d").to_string()));
+    out.extend(day_block(cfg, h, &day, report.as_ref()));
+    (out, report.map(|(_, html)| html))
+}
+
+/// What is wrong, since when, and the fixes the run records name.
+fn story(h: &Health, day: &str, scheduled: bool) -> (Vec<Para>, Vec<String>) {
+    let mut out = Vec::new();
     let mut fixes: Vec<String> = Vec::new();
+    let run = h.run.as_ref();
+    let fixes_of =
+        |r: &RunRecord| -> Vec<String> { r.steps.iter().filter_map(|s| s.fix.clone()).collect() };
     match h.state {
         State::NoData => out.push(headline(
             "! No data yet.",
@@ -37,18 +77,18 @@ pub(crate) fn landing(
             Color::Yellow,
         )),
         State::Stale => {
-            let age = h.age_days().unwrap_or(0);
-            let mut rest = match h.pulled_at {
+            let mut rest = match h.refreshed_at {
                 Some(t) => format!(
                     " Last refresh: {}{}.",
                     t.format("%a %d %b, %-I:%M %P"),
-                    trigger(run)
+                    run.map_or(String::new(), |r| format!(" ({})", how(r)))
                 ),
                 None => String::new(),
             };
-            if let Some(snap) = h.snapshot {
+            if let Some(snap) = h.snap_date {
                 rest.push_str(&missed(snap, h.today));
             }
+            let age = h.age_days().unwrap_or(0);
             out.push(headline(
                 &format!("! Your data is {} days old.", age),
                 &rest,
@@ -64,36 +104,31 @@ pub(crate) fn landing(
         State::Failed => {
             let failed = h.failed_today.as_ref();
             let step = failed.and_then(|f| f.steps.iter().find(|s| s.status == StepStatus::Failed));
-            let rest = match step {
-                Some(s) => format!(
+            let rest = step.map_or(String::new(), |s| {
+                format!(
                     " {}: {}",
                     r::step_label(&s.name),
                     s.message.clone().unwrap_or_default()
-                ),
-                None => String::new(),
-            };
+                )
+            });
             out.push(headline(
-                "\u{2716} Today's refresh failed.",
+                &format!("{} Today's refresh failed.", FAIL),
                 &rest,
                 Color::Red,
             ));
-            out.push(Para::new(4, 4).run(
-                format!("Your last good data ({}) is still here.", day),
-                gray(),
-            ));
-            fixes.extend(
-                failed
-                    .into_iter()
-                    .flat_map(|f| f.steps.iter().filter_map(|s| s.fix.clone())),
-            );
+            // A first refresh that failed has no earlier data to speak of.
+            if h.snap_date.is_some() {
+                out.push(Para::new(4, 4).run(
+                    format!("Your last good data ({}) is still here.", day),
+                    gray(),
+                ));
+            }
+            fixes.extend(failed.map(fixes_of).unwrap_or_default());
         }
         State::CrmMissing => {
             let crm = run.and_then(|r| r.steps.iter().find(|s| s.name == "crm"));
             let rest = match crm {
-                _ if !h.crm_connected => {
-                    " No CRM is connected, so CRM leads, qualified and every verdict are off."
-                        .to_string()
-                }
+                _ if !h.crm_connected => format!(" {}", NOT_CONNECTED),
                 Some(s) if s.status == StepStatus::Failed => format!(
                     " {}.",
                     s.message
@@ -109,10 +144,10 @@ pub(crate) fn landing(
                 &rest,
                 Color::Yellow,
             ));
-            fixes.extend(
-                run.into_iter()
-                    .flat_map(|r| r.steps.iter().filter_map(|s| s.fix.clone())),
-            );
+            fixes.extend(run.map(fixes_of).unwrap_or_default());
+            if !h.crm_connected && fixes.is_empty() {
+                fixes.push("moneyball crm connect".into());
+            }
         }
         State::Partial { have, of } => {
             let meta = run.and_then(|r| r.steps.iter().find(|s| s.name == "meta"));
@@ -128,79 +163,52 @@ pub(crate) fn landing(
         }
         State::Fresh => {}
     }
-    if h.state == State::CrmMissing && !h.crm_connected && fixes.is_empty() {
-        fixes.push("moneyball crm connect".into());
-    }
-    let whole_day = matches!(
-        h.state,
-        State::Fresh | State::Partial { .. } | State::CrmMissing
-    );
-    // Without the day's numbers below, the fix and the next command
-    // stand apart from the story above them.
-    if !whole_day && h.state != State::Fresh {
-        out.push(Para::default());
-    }
-    for fix in &fixes {
-        out.push(
-            Para::new(4, 10)
-                .run("fix:  ", gray())
-                .run(fix.clone(), bold(Color::Cyan))
-                .run(format!("   {}", fix_does(fix)), gray()),
-        );
-    }
-    // Then the one command that brings the data in.
+    (out, fixes)
+}
+
+/// The one command that brings the data in, under any fix ("then"), and
+/// /schedule beneath it when nothing refreshes on its own.
+fn next_command(h: &Health, after_fix: bool, offer_schedule: bool) -> Vec<Para> {
     let (cmd, does) = match h.state {
-        State::Fresh => ("", ""),
+        State::Fresh => return Vec::new(),
         State::Partial { .. } => ("/refresh --force", "pulls Meta again for every product"),
         State::CrmMissing if h.age_days() == Some(0) => (
             "/refresh",
-            "reuses this morning's Meta pull: only CRM and the report run again",
+            "reuses today's Meta pull: only CRM and the report run again",
         ),
         _ => (
             "/refresh",
             "pulls Meta, then CRM, then writes yesterday's report (about 2 minutes)",
         ),
     };
-    if !cmd.is_empty() {
-        // "then" sits under the fix's command, as in the refresh cell.
-        let (at, word) = if fixes.is_empty() {
-            (4, "next:  ")
-        } else {
-            (10, "then ")
-        };
-        // With nothing scheduled, /schedule follows under it: both commands
-        // pad to one width so their sentences line up.
-        let offer = !scheduled && !whole_day;
-        let w = if offer { cmd.len().max(9) } else { cmd.len() };
+    // "then" sits under the fix's command, as in the refresh cell; both
+    // commands pad to one width so their sentences line up.
+    let (at, word) = if after_fix {
+        (10, "then ")
+    } else {
+        (4, "next:  ")
+    };
+    let w = if offer_schedule {
+        cmd.len().max(9)
+    } else {
+        cmd.len()
+    };
+    let mut out = vec![Para::new(at, at)
+        .run(word, gray())
+        .run(format!("{:<w$}", cmd), bold(Color::Cyan))
+        .run(format!("   {}", does), gray())];
+    if offer_schedule {
+        let under = at + word.len();
         out.push(
-            Para::new(at, at)
-                .run(word, gray())
-                .run(format!("{:<w$}", cmd), bold(Color::Cyan))
-                .run(format!("   {}", does), gray()),
+            Para::new(under, under)
+                .run(format!("{:<w$}", "/schedule"), bold(Color::Cyan))
+                .run(
+                    "   so it happens every morning before you open this",
+                    gray(),
+                ),
         );
-        if offer {
-            let under = at + word.len();
-            out.push(
-                Para::new(under, under)
-                    .run(format!("{:<w$}", "/schedule"), bold(Color::Cyan))
-                    .run(
-                        "   so it happens every morning before you open this",
-                        gray(),
-                    ),
-            );
-        }
     }
-    if !whole_day {
-        return (out, None);
-    }
-    if !out.is_empty() {
-        out.push(Para::default());
-    }
-    let report = h
-        .snapshot
-        .and_then(|s| daily_report(cfg, &s.format("%Y-%m-%d").to_string()));
-    out.extend(day_block(cfg, h, &day, report.as_ref()));
-    (out, report.map(|(_, html)| html))
+    out
 }
 
 /// R5: the day, when and how it was refreshed, its numbers, the change
@@ -212,24 +220,17 @@ fn day_block(
     report: Option<&(CreativeReport, PathBuf)>,
 ) -> Vec<Para> {
     let mut when = h
-        .pulled_at
+        .refreshed_at
         .map(|t| moneyball_core::status::when(t, h.today))
         .unwrap_or_default();
     if let Some(run) = &h.run {
         let ms = elapsed_ms(run);
-        when.push_str(&format!(
-            " ({}{})",
-            if run.trigger == Trigger::Schedule {
-                "scheduled"
-            } else {
-                "manual"
-            },
-            if ms > 0 {
-                format!(", {}", r::duration(ms))
-            } else {
-                String::new()
-            }
-        ));
+        let took = if ms > 0 {
+            format!(", {}", r::duration(ms))
+        } else {
+            String::new()
+        };
+        when.push_str(&format!(" ({}{})", how(run), took));
     }
     let mut out = vec![Para::new(2, 4)
         .run(
@@ -262,7 +263,7 @@ fn day_block(
         .prior_date
         .as_deref()
         .filter(recent)
-        .and_then(|d| daily_report(cfg, d));
+        .and_then(|d| daily(cfg, d));
     if let Some((before, _)) = prior {
         out.push(versus(rep, &before));
     }
@@ -316,7 +317,7 @@ fn versus(now: &CreativeReport, before: &CreativeReport) -> Para {
 
 fn signed(n: i64, unit: &str) -> String {
     let sign = if n < 0 { "-" } else { "+" };
-    format!("{}{}{}", sign, unit, r::commas(n.unsigned_abs()))
+    format!("{}{}{}", sign, unit, commas(n.unsigned_abs()))
 }
 
 fn headline(head: &str, rest: &str, color: Color) -> Para {
@@ -325,11 +326,10 @@ fn headline(head: &str, rest: &str, color: Color) -> Para {
         .run(rest.to_string(), gray())
 }
 
-fn trigger(run: Option<&RunRecord>) -> &'static str {
-    match run.map(|r| r.trigger) {
-        Some(Trigger::Schedule) => " (scheduled)",
-        Some(Trigger::Manual) => " (manual)",
-        None => "",
+fn how(run: &RunRecord) -> &'static str {
+    match run.trigger {
+        Trigger::Schedule => "scheduled",
+        Trigger::Manual => "manual",
     }
 }
 
@@ -353,13 +353,11 @@ fn missed(snap: NaiveDate, today: NaiveDate) -> String {
 fn crm_behind(h: &Health) -> Option<String> {
     const OFF: &str = "so CRM leads, qualified and every verdict are off until a refresh.";
     if !h.crm_connected {
-        return Some(
-            "No CRM is connected, so CRM leads, qualified and every verdict are off.".into(),
-        );
+        return Some(NOT_CONNECTED.into());
     }
-    match h.crm_snapshot {
+    match h.crm_snap_date {
         None => Some(format!("CRM has never been pulled, {}", OFF)),
-        Some(c) if Some(c) < h.snapshot => Some(format!(
+        Some(c) if Some(c) < h.snap_date => Some(format!(
             "CRM is older still: last pulled {}, {}",
             c.format("%d %b"),
             OFF
@@ -377,22 +375,5 @@ fn elapsed_ms(run: &RunRecord) -> u64 {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn missed_mornings_count_the_days_between() {
-        let d = |s| NaiveDate::parse_from_str(s, "%Y-%m-%d").unwrap();
-        assert_eq!(
-            missed(d("2026-09-28"), d("2026-10-08")),
-            " 9 mornings missed, 29 Sep to 07 Oct."
-        );
-        assert_eq!(
-            missed(d("2026-10-06"), d("2026-10-08")),
-            " 1 morning missed, 07 Oct."
-        );
-        assert_eq!(missed(d("2026-10-07"), d("2026-10-08")), "");
-        assert_eq!(signed(-3532, "Rs."), "-Rs.3,532");
-        assert_eq!(signed(2, ""), "+2");
-    }
-}
+#[path = "landing_tests.rs"]
+mod tests;

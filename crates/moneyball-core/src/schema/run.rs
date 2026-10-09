@@ -66,6 +66,11 @@ pub struct RunStep {
     /// The one command that fixes it.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub fix: Option<String>,
+    /// Carried over from an earlier run today rather than done again (a
+    /// Meta pull reused without --force): its status and counts are that
+    /// run's, so a missing product stays missing on screen.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub reused: bool,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]

@@ -8,11 +8,14 @@ use std::time::Instant;
 use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
 
-use moneyball_core::refresh::{self as r, STEPS};
+use moneyball_core::refresh::{self as r, REUSED_NOTE, STEPS};
 use moneyball_core::schema::{Outcome, RunRecord, RunStep, StepStatus};
 
 use crate::chat::ChatCell;
-use crate::widgets::{bold, dim, fg, fix_does, gray, Para, DOT, LOAD, OK};
+use words::{gaps, message, verdict};
+
+mod words;
+use crate::widgets::{bold, dim, fg, fix_does, gray, Para, DOT, FAIL, LOAD, OK};
 
 const INDENT: usize = 6;
 const LABEL_W: usize = 23;
@@ -20,7 +23,6 @@ const STATUS_W: usize = 9;
 const DETAIL_W: usize = 53;
 /// Where the detail column starts: the indent, "1  ", label, status.
 const DETAIL_AT: usize = INDENT + 3 + LABEL_W + STATUS_W;
-const FAIL: &str = "\u{2716}";
 
 #[derive(Debug, Clone)]
 pub enum Row {
@@ -41,6 +43,8 @@ pub enum End {
         last_good: Option<String>,
     },
     CouldNotStart(String),
+    /// The worker died mid-run (a panic): the rows show how far it got.
+    Stopped(String),
 }
 
 #[derive(Debug, Clone)]
@@ -83,6 +87,7 @@ impl RefreshCell {
                 )
             }
             Some(End::CouldNotStart(_)) => (FAIL, Color::Red, format!("{}could not start", DOT)),
+            Some(End::Stopped(_)) => (FAIL, Color::Red, format!("{}stopped unexpectedly", DOT)),
             Some(End::Finished { run, .. }) => match run.outcome {
                 Outcome::Ok | Outcome::Running => (OK, Color::Green, String::new()),
                 Outcome::Failed => {
@@ -114,9 +119,13 @@ impl RefreshCell {
         );
         let s = match row {
             Row::Pending => {
-                let waits = if STEPS[i] == "report" { "CRM" } else { "Meta" };
+                let waits = match STEPS[i] {
+                    "meta" => "waiting",
+                    "report" => "waits for CRM",
+                    _ => "waits for Meta",
+                };
                 return vec![Line::from(Span::styled(
-                    format!("{}waits for {}", lead, waits),
+                    format!("{}{}", lead, waits),
                     dim(),
                 ))];
             }
@@ -170,12 +179,18 @@ impl RefreshCell {
             ))
         };
         out.extend(pieces[1..].iter().map(|p| under(p.clone(), text_style)));
-        // A finished step's note (a reused pull) sits dim under its counts.
+        // Notes sit dim under the detail: a finished step's message, and
+        // where a carried-over step came from.
+        let mut notes: Vec<&str> = Vec::new();
         if s.status == StepStatus::Done {
-            if let Some(m) = &s.message {
-                let note = moneyball_core::text::wrap_columns(m, room, room);
-                out.extend(note.into_iter().map(|p| under(p, dim())));
-            }
+            notes.extend(s.message.as_deref());
+        }
+        if s.reused && !skipped {
+            notes.push(REUSED_NOTE);
+        }
+        for n in notes {
+            let lines = moneyball_core::text::wrap_columns(n, room, room);
+            out.extend(lines.into_iter().map(|p| under(p, dim())));
         }
         out
     }
@@ -183,13 +198,15 @@ impl RefreshCell {
     fn footer(&self, end: &End) -> Vec<Para> {
         let mut paras = vec![Para::default()];
         let (run, ms, numbers, report, last_good) = match end {
-            End::CouldNotStart(err) => {
+            End::CouldNotStart(err) | End::Stopped(err) => {
+                let head = if matches!(end, End::Stopped(_)) {
+                    "The refresh stopped unexpectedly:"
+                } else {
+                    "The refresh could not start:"
+                };
                 paras.push(
                     Para::new(INDENT, INDENT + 2)
-                        .run(
-                            format!("{} The refresh could not start:", FAIL),
-                            fg(Color::Red),
-                        )
+                        .run(format!("{} {}", FAIL, head), fg(Color::Red))
                         .run(format!(" {}", err), gray()),
                 );
                 return paras;
@@ -225,7 +242,7 @@ impl RefreshCell {
                     .run("/refresh", bold(Color::Cyan))
                     .run(
                         if meta_in {
-                            "   reuses this morning's Meta pull: only CRM and the report run again"
+                            "   reuses today's Meta pull: only CRM and the report run again"
                         } else {
                             ""
                         },
@@ -275,8 +292,11 @@ impl RefreshCell {
 impl ChatCell for RefreshCell {
     fn display_lines(&self, width: u16) -> Vec<Line<'static>> {
         let mut out = vec![self.header(), Line::from("")];
-        for (i, row) in self.rows.iter().enumerate() {
-            out.extend(self.row_lines(i, row, width));
+        // A run that never started has no steps to show.
+        if !matches!(self.end, Some(End::CouldNotStart(_))) {
+            for (i, row) in self.rows.iter().enumerate() {
+                out.extend(self.row_lines(i, row, width));
+            }
         }
         if let Some(end) = &self.end {
             for p in self.footer(end) {
@@ -287,93 +307,5 @@ impl ChatCell for RefreshCell {
     }
 }
 
-fn message(s: &RunStep) -> String {
-    s.message.clone().unwrap_or_default()
-}
-
-fn step<'a>(run: &'a RunRecord, name: &str) -> Option<&'a RunStep> {
-    run.steps.iter().find(|s| s.name == name)
-}
-
-/// The header's few words for a degraded run.
-fn gaps(run: &RunRecord) -> String {
-    if run
-        .steps
-        .iter()
-        .any(|s| s.message.as_deref() == Some("cancelled"))
-    {
-        return "cancelled".into();
-    }
-    let no_crm = step(run, "report").is_some_and(|s| s.error_kind.as_deref() == Some("no_crm"));
-    if no_crm || step(run, "crm").is_some_and(|s| s.status == StepStatus::Failed) {
-        return "finished without CRM".into();
-    }
-    match step(run, "meta").and_then(|s| s.counts.get("products_failed")) {
-        Some(1) => "one product missing".into(),
-        Some(n) => format!("{} products missing", n),
-        None => "finished with gaps".into(),
-    }
-}
-
-/// The first sentence after a run that did not go cleanly: what happened,
-/// then what it means for the numbers.
-fn verdict(run: &RunRecord, last_good: Option<&str>, day: &str) -> Option<Para> {
-    let (head, rest, color) = match run.outcome {
-        Outcome::Ok | Outcome::Running => return None,
-        Outcome::Failed => (
-            format!("{} Nothing was written today.", FAIL),
-            last_good
-                .map(|d| format!(" Your last good data ({}) is untouched.", d))
-                .unwrap_or_default(),
-            Color::Red,
-        ),
-        Outcome::Degraded => {
-            let failed =
-                |name: &str| step(run, name).is_some_and(|s| s.status == StepStatus::Failed);
-            let (head, rest) = if let Some(at) = run
-                .steps
-                .iter()
-                .position(|s| s.message.as_deref() == Some("cancelled"))
-            {
-                (
-                    format!("! Cancelled after step {}.", at),
-                    " What finished is kept; /refresh runs the rest.".to_string(),
-                )
-            } else if step(run, "report").is_some_and(|s| s.error_kind.as_deref() == Some("no_crm"))
-            {
-                (
-                    "! The report went out without CRM.".to_string(),
-                    " Meta numbers are complete; verdicts are withheld and its CRM columns \
-                     read 0 - unknown, not zero."
-                        .to_string(),
-                )
-            } else if failed("crm") {
-                (
-                    "! CRM was not refreshed.".to_string(),
-                    " The report uses the CRM data this snapshot already had.".to_string(),
-                )
-            } else if step(run, "meta").is_some_and(|s| s.status == StepStatus::Partial) {
-                (
-                    format!("! Some products have no data for {}.", day),
-                    " The others are complete.".to_string(),
-                )
-            } else if failed("report") {
-                (
-                    "! No report was written.".to_string(),
-                    " The data is in; /report builds one from it.".to_string(),
-                )
-            } else {
-                (
-                    "! Some creatives, leads or ad sets were not captured.".to_string(),
-                    " Spend and Meta leads are complete.".to_string(),
-                )
-            };
-            (head, rest, Color::Yellow)
-        }
-    };
-    Some(
-        Para::new(INDENT, INDENT + 2)
-            .run(head, fg(color))
-            .run(rest, gray()),
-    )
-}
+#[cfg(test)]
+mod tests;

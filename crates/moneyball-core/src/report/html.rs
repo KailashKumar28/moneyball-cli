@@ -339,17 +339,7 @@ pub(super) fn slug(s: &str) -> String {
     out.trim_matches('-').to_string()
 }
 
-pub(super) fn commas(n: u64) -> String {
-    let s = n.to_string();
-    let mut out = String::new();
-    for (i, c) in s.chars().enumerate() {
-        if i > 0 && (s.len() - i).is_multiple_of(3) {
-            out.push(',');
-        }
-        out.push(c);
-    }
-    out
-}
+pub(super) use crate::text::commas;
 
 /// Rupee amount with the sign entity (authored Rust stays ASCII).
 pub(super) fn rupees(v: f64) -> String {

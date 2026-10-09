@@ -166,6 +166,26 @@ fn line(tone: &str, text: String) -> ExecLine {
     }
 }
 
+/// A snapshot's daily report: its report.json and the HTML a client
+/// opens. None until that snapshot has one.
+pub fn daily(
+    cfg: &crate::config::AppConfig,
+    snap_date: &str,
+) -> Option<(CreativeReport, std::path::PathBuf)> {
+    let dir = cfg.mb_dir().join("reports").join(snap_date);
+    let raw = std::fs::read_to_string(dir.join("creative-report.json")).ok()?;
+    let report: CreativeReport = serde_json::from_str(&raw).ok()?;
+    let html = std::fs::read_dir(&dir)
+        .ok()?
+        .filter_map(|e| e.ok().map(|e| e.path()))
+        .find(|p| {
+            p.file_name()
+                .and_then(|n| n.to_str())
+                .is_some_and(|n| n.contains("-Daily-") && n.ends_with(".html"))
+        })?;
+    (report.schema == CREATIVE_REPORT_SCHEMA).then_some((report, html))
+}
+
 /// The prior comparable report: latest reports/<d>/creative-report*.json
 /// with d < report_date and the same window length. Multi-day reports
 /// carry a range suffix in the file name, so every json in the day's

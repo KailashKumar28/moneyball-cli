@@ -80,6 +80,7 @@ mod tests {
                 error_kind: Some("crm_auth".into()),
                 message: Some("LeadZump refused the token (HTTP 401)".into()),
                 fix: Some("moneyball crm secret leadzump_token".into()),
+                reused: false,
             }],
             artifacts: Default::default(),
         };

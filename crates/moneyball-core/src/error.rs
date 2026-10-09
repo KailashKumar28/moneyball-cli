@@ -68,13 +68,14 @@ impl Error {
         }
     }
 
-    /// The sentence alone - no "meta auth:" style prefix, no fix - for a
-    /// record that carries the kind and the fix apart (a run step).
+    /// The sentence without its fix and, for the kinds a run record or a
+    /// screen names apart (meta, crm, config), without its "kind:" prefix.
     pub fn reason(&self) -> String {
         match self {
-            Error::CrmAuth { message, .. } | Error::MetaAuth(message) | Error::Meta(message) => {
-                message.clone()
-            }
+            Error::CrmAuth { message, .. }
+            | Error::MetaAuth(message)
+            | Error::Meta(message)
+            | Error::Config(message) => message.clone(),
             e => e.to_string(),
         }
     }

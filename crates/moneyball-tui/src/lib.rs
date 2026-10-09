@@ -2,6 +2,7 @@
 //! completion, and first-run setup wizard.
 
 mod app;
+mod brief_flow;
 pub mod chat;
 mod commands;
 mod creative_flow;

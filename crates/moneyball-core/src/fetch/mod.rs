@@ -104,20 +104,20 @@ pub fn fetch_snapshot(cfg: &AppConfig, token: &str, days: u32) -> Result<FetchRe
         &assets_root,
     ) {
         Ok(r) => (r, None),
-        Err(e) => (Default::default(), Some(e.to_string())),
+        Err(e) => (Default::default(), Some(e.reason())),
     };
 
     // Per-lead capture (Diff breakdown). Same best-effort contract: a
     // token without leads_retrieval warns, never loses the snapshot.
     let (leads, leads_error) = match leads::fetch_and_write(&client, token, &all_rows, &path) {
         Ok((n, warn)) => (n, warn),
-        Err(e) => (0, Some(e.to_string())),
+        Err(e) => (0, Some(e.reason())),
     };
 
     // Adset facts: learning stage + targeting specs. Best-effort.
     let (adsets_n, adsets_error) = match adsets::fetch_and_write(&client, token, &all_rows, &path) {
         Ok(n) => (n, None),
-        Err(e) => (0, Some(e.to_string())),
+        Err(e) => (0, Some(e.reason())),
     };
 
     Ok(FetchReport {
@@ -157,7 +157,7 @@ fn collect_products(
                 }
             }
             Err(e) => {
-                per.push((p.name.clone(), Err(e.to_string())));
+                per.push((p.name.clone(), Err(e.reason())));
                 first_err.get_or_insert(e);
             }
         }

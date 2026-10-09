@@ -108,6 +108,10 @@
           "description": "`meta`, `assets`, `crm`, `report`.",
           "type": "string"
         },
+        "reused": {
+          "description": "Carried over from an earlier run today rather than done again (a\nMeta pull reused without --force): its status and counts are that\nrun's, so a missing product stays missing on screen.",
+          "type": "boolean"
+        },
         "status": {
           "$ref": "#/$defs/StepStatus"
         }

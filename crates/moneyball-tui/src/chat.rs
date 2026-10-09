@@ -94,10 +94,10 @@ pub mod cells {
     impl ToolStatus {
         pub fn icon(self) -> &'static str {
             match self {
-                ToolStatus::Pending => "\u{25CB}", // circle
-                ToolStatus::Running => "\u{25D0}", // half-filled
-                ToolStatus::Done => "\u{25CF}",    // filled
-                ToolStatus::Failed => "\u{2716}",  // x mark
+                ToolStatus::Pending => crate::widgets::IDLE,
+                ToolStatus::Running => crate::widgets::LOAD,
+                ToolStatus::Done => crate::widgets::OK,
+                ToolStatus::Failed => crate::widgets::FAIL,
             }
         }
         pub fn color(self) -> Color {

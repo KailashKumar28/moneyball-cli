@@ -21,15 +21,15 @@ use crate::config::AppConfig;
 use crate::error::Result;
 use crate::schema::{Outcome, RunRecord, RunStep, StepStatus, Trigger, RUN_SCHEMA};
 
-/// What the caller hears while a refresh runs: a step starting (by name)
-/// and a step finished (its record).
+/// What the caller hears while a refresh runs: a step starting (one of
+/// STEPS) and a step finished (its record).
 pub enum Progress<'a> {
-    Begin(&'a str),
+    Begin(&'static str),
     Done(&'a RunStep),
 }
 
-/// The Meta step's note when today's pull was reused, not repeated.
-pub const REUSED: &str = "reused this morning's Meta pull (--force pulls it again)";
+/// A step skipped because Esc stopped the run (its error_kind).
+pub const CANCELLED: &str = "cancelled";
 
 pub struct Options {
     pub trigger: Trigger,
@@ -56,6 +56,9 @@ pub fn run(
         .date_naive()
         .format("%Y-%m-%d")
         .to_string();
+    // Today's earlier run, read before this one replaces its record: a
+    // reused Meta pull carries that run's steps forward, gaps included.
+    let earlier = crate::runs::read(cfg, &date);
     let mut run = RunRecord {
         schema: RUN_SCHEMA.into(),
         workspace_id: cfg
@@ -77,17 +80,31 @@ pub fn run(
     let snap_dir = cfg.history_dir().join("snap").join(&date);
     let reused = !opts.force && snap_dir.join("ads_daily.json").is_file();
     if reused {
-        let rows = crate::snapshot::load(&snap_dir)
-            .map(|s| s.ads_daily.len() as u64)
-            .unwrap_or(0);
-        let mut step = done("meta", 0, [("rows", rows)]);
-        step.message = Some(REUSED.into());
-        push(&mut run, on_step, step);
-        push(
-            &mut run,
-            on_step,
-            skipped("assets", "reused with this morning's Meta pull"),
-        );
+        let carried = |name: &str| {
+            let s = earlier.as_ref()?.steps.iter().find(|s| s.name == name)?;
+            matches!(s.status, StepStatus::Done | StepStatus::Partial).then(|| RunStep {
+                ms: 0,
+                reused: true,
+                ..s.clone()
+            })
+        };
+        let meta = carried("meta").unwrap_or_else(|| {
+            // No record of the pull (an older binary, or `moneyball fetch`):
+            // say what the snapshot holds.
+            let rows = crate::snapshot::load(&snap_dir)
+                .map(|s| s.ads_daily.len() as u64)
+                .unwrap_or(0);
+            RunStep {
+                reused: true,
+                ..done("meta", 0, [("rows", rows)])
+            }
+        });
+        push(cfg, &mut run, on_step, meta);
+        let assets = carried("assets").unwrap_or_else(|| RunStep {
+            reused: true,
+            ..skipped("assets", "captured with that Meta pull")
+        });
+        push(cfg, &mut run, on_step, assets);
     } else {
         on_step(Progress::Begin("meta"));
         let started = Instant::now();
@@ -99,14 +116,15 @@ pub fn run(
         };
         match fetched {
             Err(e) => {
-                push(&mut run, on_step, failed("meta", started, &e));
-                push(&mut run, on_step, skipped("assets", "Meta failed"));
+                push(cfg, &mut run, on_step, failed("meta", started, &e));
+                push(cfg, &mut run, on_step, skipped("assets", "Meta failed"));
                 push(
+                    cfg,
                     &mut run,
                     on_step,
                     skipped("crm", "so CRM stays matched to the same day as Meta"),
                 );
-                push(&mut run, on_step, skipped("report", "no new data"));
+                push(cfg, &mut run, on_step, skipped("report", "no new data"));
                 return finish(cfg, run, Outcome::Failed);
             }
             Ok(f) => {
@@ -136,7 +154,7 @@ pub fn run(
                     step.error_kind = Some("meta_product".into());
                     step.message = Some(format!("no data for {}", missing.join("; ")));
                 }
-                push(&mut run, on_step, step);
+                push(cfg, &mut run, on_step, step);
                 run.artifacts
                     .insert("snapshot".into(), f.path.display().to_string());
 
@@ -162,7 +180,7 @@ pub fn run(
                     assets.error_kind = Some("capture".into());
                     assets.message = Some(errors.join("; "));
                 }
-                push(&mut run, on_step, assets);
+                push(cfg, &mut run, on_step, assets);
             }
         }
     }
@@ -170,7 +188,9 @@ pub fn run(
     // 3. CRM, into this same snapshot (crm fetch anchors to it).
     let cancelled = |run: &mut RunRecord, on_step: &mut dyn FnMut(Progress), from: usize| {
         for name in &STEPS[from..] {
-            push(run, on_step, skipped(name, "cancelled"));
+            let mut step = skipped(name, "cancelled");
+            step.error_kind = Some(CANCELLED.into());
+            push(cfg, run, on_step, step);
         }
     };
     if is_cancelled(opts) {
@@ -180,7 +200,7 @@ pub fn run(
     if !crate::crm::fetch::spec_path(cfg).is_file() {
         let mut step = skipped("crm", "no CRM connected for this workspace");
         step.fix = Some("moneyball crm connect".into());
-        push(&mut run, on_step, step);
+        push(cfg, &mut run, on_step, step);
     } else {
         on_step(Progress::Begin("crm"));
         let started = Instant::now();
@@ -191,6 +211,7 @@ pub fn run(
         match crate::crm::fetch::fetch_crm(&quiet, opts.days) {
             Ok(r) if r.path.is_some() => {
                 push(
+                    cfg,
                     &mut run,
                     on_step,
                     done(
@@ -209,9 +230,9 @@ pub fn run(
                     r.name,
                     r.check.errors.first().cloned().unwrap_or_default()
                 ));
-                push(&mut run, on_step, step);
+                push(cfg, &mut run, on_step, step);
             }
-            Err(e) => push(&mut run, on_step, failed("crm", started, &e)),
+            Err(e) => push(cfg, &mut run, on_step, failed("crm", started, &e)),
         }
     }
 
@@ -239,13 +260,13 @@ pub fn run(
                         .into(),
                 );
             }
-            push(&mut run, on_step, step);
+            push(cfg, &mut run, on_step, step);
             run.artifacts
                 .insert("report".into(), out.html_path.display().to_string());
             run.artifacts
                 .insert("report_json".into(), out.json_path.display().to_string());
         }
-        Err(e) => push(&mut run, on_step, failed("report", started, &e)),
+        Err(e) => push(cfg, &mut run, on_step, failed("report", started, &e)),
     }
 
     let missing = run
@@ -263,9 +284,12 @@ pub fn run(
     )
 }
 
-fn push(run: &mut RunRecord, on_step: &mut dyn FnMut(Progress), step: RunStep) {
+/// Record a finished step: tell the caller, and rewrite the run record so
+/// a run that dies midway still says how far it got.
+fn push(cfg: &AppConfig, run: &mut RunRecord, on_step: &mut dyn FnMut(Progress), step: RunStep) {
     on_step(Progress::Done(&step));
     run.steps.push(step);
+    let _ = crate::runs::write(cfg, run);
 }
 
 fn is_cancelled(opts: &Options) -> bool {
@@ -293,6 +317,7 @@ fn done<const N: usize>(name: &str, ms: u64, counts: [(&str, u64); N]) -> RunSte
         error_kind: None,
         message: None,
         fix: None,
+        reused: false,
     }
 }
 

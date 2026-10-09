@@ -243,7 +243,7 @@ pub fn footer(cfg: &AppConfig, days: &[Day]) -> Vec<(&'static str, String)> {
                 .find(|s| s.name == name && s.status != StepStatus::Skipped)?;
             // A reused pull asked Meta nothing new: date it by the data it
             // reused, written when Meta last answered.
-            let at = if s.message.as_deref() == Some(crate::refresh::REUSED) {
+            let at = if s.reused {
                 let ads = cfg.snap_dir().join(&r.date).join("ads_daily.json");
                 Some(DateTime::<Local>::from(
                     std::fs::metadata(ads).ok()?.modified().ok()?,
