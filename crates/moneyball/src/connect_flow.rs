@@ -11,7 +11,7 @@ use anyhow::Result;
 use moneyball_core::crm::{connect, fetch as crm_fetch, presets, source};
 use moneyball_core::AppConfig;
 
-use crate::{ask, print_check_lines};
+use crate::crm_cli::{ask, print_check_lines};
 
 pub fn run(cfg: &AppConfig) -> Result<()> {
     let catalog = presets::catalog();
