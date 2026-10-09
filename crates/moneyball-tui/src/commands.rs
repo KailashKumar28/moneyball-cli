@@ -18,6 +18,7 @@ pub(crate) const COMMANDS: &[(&str, &str)] = &[
         "pull Meta, then CRM, then write yesterday's report",
     ),
     ("/status", "the last 14 data days and how each refresh went"),
+    ("/schedule", "refresh every morning; /schedule off stops it"),
     ("/funnel", "per-entity funnel for a product"),
     (
         "/report",
@@ -89,6 +90,7 @@ pub(crate) fn submit(app: &mut App) {
         "/brief" => run_brief(app),
         // /fetch is the old name, kept for muscle memory (unlisted).
         "/status" => crate::status_view::run_status(app),
+        "/schedule" => crate::schedule_view::run_schedule(app, arg),
         "/refresh" | "/fetch" => crate::refresh_flow::run_refresh(app, arg == "--force", false),
         "/setup" => {
             app.chat.push(Cell::AssistantText(cells::AssistantText {

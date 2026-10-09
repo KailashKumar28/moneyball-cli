@@ -4,6 +4,7 @@ mod connect_flow;
 mod crm_cli;
 mod debug_cli;
 mod refresh_cli;
+mod schedule_cli;
 
 use anyhow::{Context, Result};
 use clap::{Parser, Subcommand};
@@ -93,6 +94,19 @@ enum Cmd {
         /// Trailing days to pull, ending yesterday.
         #[arg(long, default_value_t = 28)]
         days: u32,
+        /// Set by the morning schedule, so its run record says so.
+        #[arg(long, hide = true)]
+        scheduled: bool,
+    },
+    /// The morning refresh: --at HH:MM installs it (launchd), --off removes
+    /// it, --print shows the plist without installing; alone, shows it.
+    Schedule {
+        #[arg(long)]
+        at: Option<String>,
+        #[arg(long)]
+        off: bool,
+        #[arg(long)]
+        print: bool,
     },
     /// The last 14 data days: what landed for each and how its refresh went.
     Status,
@@ -215,9 +229,17 @@ fn main() -> Result<()> {
             let strict = AppConfig::resolve(cli.data_root.as_deref(), cli.date.as_deref())?;
             moneyball_core::report::run(&strict, date.as_deref().or(cli.date.as_deref()), window)?;
         }
-        Cmd::Refresh { force, days } => {
+        Cmd::Refresh {
+            force,
+            days,
+            scheduled,
+        } => {
             let strict = AppConfig::resolve(cli.data_root.as_deref(), None)?;
-            refresh_cli::run(&strict, force, days)?;
+            refresh_cli::run(&strict, force, days, scheduled)?;
+        }
+        Cmd::Schedule { at, off, print } => {
+            let strict = AppConfig::resolve(cli.data_root.as_deref(), None)?;
+            schedule_cli::run(&strict, at.as_deref(), off, print)?;
         }
         Cmd::Status => {
             let strict = AppConfig::resolve(cli.data_root.as_deref(), None)?;

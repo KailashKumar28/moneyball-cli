@@ -51,15 +51,18 @@ pub struct RefreshCell {
     /// One row per refresh::STEPS, in order.
     pub rows: Vec<Row>,
     pub end: Option<End>,
+    /// No morning refresh installed: a good run ends by offering one.
+    pub offer_schedule: bool,
 }
 
 impl RefreshCell {
-    pub fn new(day: String) -> Self {
+    pub fn new(day: String, offer_schedule: bool) -> Self {
         RefreshCell {
             day,
             started: Instant::now(),
             rows: vec![Row::Pending; STEPS.len()],
             end: None,
+            offer_schedule,
         }
     }
 
@@ -257,6 +260,14 @@ impl RefreshCell {
         paras.push(
             Para::new(INDENT, INDENT).run(format!("({})", r::duration(*ms)), fg(Color::Green)),
         );
+        if self.offer_schedule && run.outcome != Outcome::Failed {
+            paras.push(Para::default());
+            paras.push(
+                Para::new(2, 2)
+                    .run("Want this every morning?  ", gray())
+                    .run("/schedule", bold(Color::Cyan)),
+            );
+        }
         paras
     }
 }

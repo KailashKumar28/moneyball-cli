@@ -63,12 +63,13 @@ pub struct Day {
 /// The last `n` data days, newest first: yesterday, then back.
 pub fn days(cfg: &AppConfig, n: usize) -> Vec<Day> {
     let today = Local::now().date_naive();
+    let since = crate::schedule::since(cfg);
     (1..=n as i64)
-        .map(|back| day(cfg, today - Duration::days(back)))
+        .map(|back| day(cfg, today - Duration::days(back), since))
         .collect()
 }
 
-fn day(cfg: &AppConfig, date: NaiveDate) -> Day {
+fn day(cfg: &AppConfig, date: NaiveDate, scheduled_since: Option<NaiveDate>) -> Day {
     let snap = (date + Duration::days(1)).format("%Y-%m-%d").to_string();
     let dir = cfg.snap_dir().join(&snap);
     let ads = dir.join("ads_daily.json");
@@ -105,7 +106,14 @@ fn day(cfg: &AppConfig, date: NaiveDate) -> Day {
             }),
             Tone::Normal,
         ),
-        None => ("missed: nothing ran".into(), Tone::Missed),
+        // Its run would have been the morning after the data day.
+        None => match scheduled_since {
+            Some(s) if s <= date + Duration::days(1) => (
+                "missed: the scheduled run never started".into(),
+                Tone::Missed,
+            ),
+            _ => ("missed: nothing scheduled yet".into(), Tone::Missed),
+        },
     };
     Day {
         date,
@@ -262,11 +270,20 @@ pub fn footer(cfg: &AppConfig, days: &[Day]) -> Vec<(&'static str, String)> {
     } else {
         "CRM not connected".into()
     };
+    let schedule = match crate::schedule::installed(cfg) {
+        Some(at) => {
+            let next = crate::schedule::next_from_now(at);
+            format!(
+                "every day {:02}:{:02}  \u{00B7}  next {}",
+                at.0,
+                at.1,
+                next.format("%a %d %b %H:%M")
+            )
+        }
+        None => "none: a refresh runs when you ask for one".to_string(),
+    };
     vec![
-        (
-            "schedule",
-            "none: a refresh runs when you ask for one".to_string(),
-        ),
+        ("schedule", schedule),
         (
             "access",
             format!("{}  \u{00B7}  {}", pull("Meta", "meta"), crm),

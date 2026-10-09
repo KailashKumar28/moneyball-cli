@@ -9,7 +9,7 @@ use moneyball_core::refresh::{self, Options};
 use moneyball_core::schema::{Outcome, StepStatus, Trigger};
 use moneyball_core::AppConfig;
 
-pub(crate) fn run(cfg: &AppConfig, force: bool, days: u32) -> Result<()> {
+pub(crate) fn run(cfg: &AppConfig, force: bool, days: u32, scheduled: bool) -> Result<()> {
     let token = moneyball_core::secrets::load_meta_token();
     if !cfg.agent {
         println!(
@@ -19,7 +19,11 @@ pub(crate) fn run(cfg: &AppConfig, force: bool, days: u32) -> Result<()> {
         );
     }
     let opts = Options {
-        trigger: Trigger::Manual,
+        trigger: if scheduled {
+            Trigger::Schedule
+        } else {
+            Trigger::Manual
+        },
         force,
         days,
         cancel: None,

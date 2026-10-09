@@ -45,8 +45,10 @@ pub(crate) fn run_refresh(app: &mut App, force: bool, then_brief: bool) {
     let short = day
         .rsplit_once(' ')
         .map_or(day.clone(), |(d, _)| d.to_string());
-    app.chat
-        .push(Cell::Refresh(Box::new(RefreshCell::new(short))));
+    app.chat.push(Cell::Refresh(Box::new(RefreshCell::new(
+        short,
+        app.schedule.is_none(),
+    ))));
     let (tx, rx) = std::sync::mpsc::channel::<Ev>();
     let cancel = Arc::new(AtomicBool::new(false));
     let cfg = app.cfg.clone();

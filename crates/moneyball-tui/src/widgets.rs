@@ -50,6 +50,7 @@ pub fn context_line(
     workspace: &str,
     health: Option<&Health>,
     refreshing: bool,
+    next: Option<String>,
     width: u16,
 ) -> Line<'static> {
     let mut tail: Vec<Span<'static>> = Vec::new();
@@ -97,6 +98,9 @@ pub fn context_line(
                 (OK, h.label(), color)
             };
             tail.push(Span::styled(format!("{} {}", glyph, label), fg(color)));
+            if let Some(next) = next {
+                tail.push(Span::styled(format!("{}{}", DOT, next), dim()));
+            }
         }
     }
     // The health is the point of the bar: when it would not fit, the
@@ -104,8 +108,9 @@ pub fn context_line(
     let tail_w: usize = tail.iter().map(|s| s.content.chars().count()).sum();
     let lead = "  \u{2514}\u{2500} workspace: ";
     let room = (width as usize).saturating_sub(lead.chars().count() + tail_w);
-    let home = std::env::var("HOME").unwrap_or_default();
-    let mut path = match workspace.strip_prefix(&home) {
+    let home = moneyball_core::config::home_dir();
+    let home = home.as_deref().and_then(|h| h.to_str()).unwrap_or_default();
+    let mut path = match workspace.strip_prefix(home) {
         Some(rest) if !home.is_empty() => format!("~{}", rest),
         _ => workspace.to_string(),
     };

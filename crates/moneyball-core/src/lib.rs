@@ -22,6 +22,7 @@ pub mod provider;
 pub mod refresh;
 pub mod report;
 pub mod runs;
+pub mod schedule;
 pub mod schema;
 pub mod secrets;
 pub mod session;

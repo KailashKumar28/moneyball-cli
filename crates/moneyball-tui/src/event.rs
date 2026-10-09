@@ -233,6 +233,9 @@ fn handle_key(app: &mut App, k: KeyEvent) {
     {
         return crate::refresh_flow::open_report(app);
     }
+    if crate::schedule_view::on_key(app, k) {
+        return;
+    }
     if k.modifiers.contains(KeyModifiers::CONTROL) && k.code == KeyCode::Char('c') {
         // Double-press to quit: a single stray Ctrl+C clears the input
         // instead of killing the session (and the wizard) instantly.

@@ -16,8 +16,13 @@ use crate::widgets::{bold, day_numbers, dim, fg, fix_does, gray, Para, DOT};
 
 const DAY: &str = "%a %d %b";
 
-/// The landing's paragraphs, and the report ctrl+o opens (when there is one).
-pub(crate) fn landing(cfg: &AppConfig, h: &Health) -> (Vec<Para>, Option<PathBuf>) {
+/// The landing's paragraphs, and the report ctrl+o opens (when there is
+/// one). `scheduled`: a morning refresh is installed.
+pub(crate) fn landing(
+    cfg: &AppConfig,
+    h: &Health,
+    scheduled: bool,
+) -> (Vec<Para>, Option<PathBuf>) {
     let mut out = Vec::new();
     let day = h
         .data_day()
@@ -51,6 +56,9 @@ pub(crate) fn landing(cfg: &AppConfig, h: &Health) -> (Vec<Para>, Option<PathBuf
             ));
             if let Some(why) = crm_behind(h) {
                 out.push(Para::new(4, 4).run(why, gray()));
+            }
+            if !scheduled {
+                out.push(Para::new(4, 4).run("Nothing refreshes on its own yet.", gray()));
             }
         }
         State::Failed => {
@@ -160,12 +168,27 @@ pub(crate) fn landing(cfg: &AppConfig, h: &Health) -> (Vec<Para>, Option<PathBuf
         } else {
             (10, "then ")
         };
+        // With nothing scheduled, /schedule follows under it: both commands
+        // pad to one width so their sentences line up.
+        let offer = !scheduled && !whole_day;
+        let w = if offer { cmd.len().max(9) } else { cmd.len() };
         out.push(
             Para::new(at, at)
                 .run(word, gray())
-                .run(cmd, bold(Color::Cyan))
+                .run(format!("{:<w$}", cmd), bold(Color::Cyan))
                 .run(format!("   {}", does), gray()),
         );
+        if offer {
+            let under = at + word.len();
+            out.push(
+                Para::new(under, under)
+                    .run(format!("{:<w$}", "/schedule"), bold(Color::Cyan))
+                    .run(
+                        "   so it happens every morning before you open this",
+                        gray(),
+                    ),
+            );
+        }
     }
     if !whole_day {
         return (out, None);
@@ -248,7 +271,10 @@ fn day_block(
             .run("report  ", gray())
             .run(html.display().to_string(), fg(Color::Cyan)),
     );
-    out.push(Para::new(10, 10).run("ctrl+o open it", dim()));
+    out.push(Para::new(10, 10).run(
+        format!("ctrl+o open it{}/status for the last 14 mornings", DOT),
+        dim(),
+    ));
     out
 }
 

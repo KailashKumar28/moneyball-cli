@@ -58,7 +58,10 @@ check items off in the same commit that ships them.
   generation writes only `reports/<date>/`; never mutate a prior date's
   snapshot from the report path. (`~/.moneyball/bug-reports/` = user bug
   reports; `<workspace>/.moneyball/reports/` = creative reports - two
-  different things.)
+  different things.) The one exception: `/schedule` (and `moneyball
+  schedule --at`) writes `~/Library/LaunchAgents/ai.moneyball.refresh.<id>.plist`,
+  only after the user confirms, and `--off` / `/schedule off` removes it
+  (core `schedule.rs` is the only writer).
 - Do NOT fix "Stattic Ad" Meta typo (breaks LeadZump ad-id join). Do NOT bucket
   CRM by `created_at` for short windows - use `delivery_time`.
 - Do NOT use `AppConfig::resolve()` in `main.rs`. Use `resolve_optional()`;

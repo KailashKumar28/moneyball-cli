@@ -14,6 +14,7 @@ mod refresh_cell;
 mod refresh_flow;
 mod render;
 mod report;
+mod schedule_view;
 mod setup;
 mod status_view;
 pub mod widgets;

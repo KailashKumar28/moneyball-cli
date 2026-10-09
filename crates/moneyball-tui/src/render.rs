@@ -33,6 +33,11 @@ pub(crate) fn render(f: &mut ratatui::Frame, app: &App) {
         &app.cfg.data_root.display().to_string(),
         app.health.as_ref().filter(|_| app.cfg.has_workspace()),
         app.refresh.is_some(),
+        app.schedule.map(|at| {
+            moneyball_core::schedule::next_from_now(at)
+                .format("next %H:%M %a")
+                .to_string()
+        }),
         outer[1].width,
     );
     f.render_widget(Paragraph::new(ctx_line), outer[1]);

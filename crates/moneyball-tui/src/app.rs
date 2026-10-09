@@ -37,6 +37,10 @@ pub struct App {
     pub(crate) refresh: Option<crate::refresh_flow::RefreshJob>,
     /// The newest daily report, for ctrl+o.
     pub report_path: Option<std::path::PathBuf>,
+    /// The morning refresh's time, when one is installed (launchd).
+    pub schedule: Option<(u32, u32)>,
+    /// A /schedule confirm waiting for its key.
+    pub(crate) schedule_ask: Option<crate::schedule_view::Ask>,
     /// First Ctrl+C timestamp - a second within 2s quits (codex/Claude
     /// Code pattern: one stray Ctrl+C never kills the session).
     pub ctrl_c_armed: Option<std::time::Instant>,
@@ -160,6 +164,7 @@ impl App {
                 "no workspace yet - run /setup to configure.".into(),
             )));
         }
+        let schedule = moneyball_core::schedule::installed(&cfg);
         Self {
             cfg,
             view,
@@ -174,6 +179,8 @@ impl App {
             health: None,
             refresh: None,
             report_path: None,
+            schedule,
+            schedule_ask: None,
             ctrl_c_armed: None,
             quit: false,
             quit_emoji: String::new(),
@@ -286,7 +293,7 @@ impl App {
         let Some(health) = &self.health else {
             return;
         };
-        let (paras, report) = crate::landing::landing(&self.cfg, health);
+        let (paras, report) = crate::landing::landing(&self.cfg, health, self.schedule.is_some());
         self.report_path = report;
         self.chat.push(chat::Cell::Rich(chat::cells::Rich(paras)));
     }

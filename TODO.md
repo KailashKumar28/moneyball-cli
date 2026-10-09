@@ -40,7 +40,9 @@ bottom after a release-sized batch.)
         numbers and report when all is well.
   - [x] /status and moneyball status (2026-10-09): the last 14 data days,
         missed days as rows, how Meta and the CRM last answered (frame R6).
-  - [ ] /schedule: the morning run via launchd, confirmed in-app (R4).
+  - [x] /schedule and moneyball schedule (2026-10-09): the morning refresh as
+        a launchd agent, confirmed in-app before anything is written (R4);
+        fired live, recorded trigger schedule, removed by /schedule off.
 - [ ] **Daily creative report** (plan: docs/CLOUD_PLAN.md, agreed
       2026-08-07 - report.json is the product, HTML is a renderer;
       reimplements pipeline/creative_report.py, never imports it):

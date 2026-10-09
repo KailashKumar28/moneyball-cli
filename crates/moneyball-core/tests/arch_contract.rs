@@ -75,13 +75,17 @@ fn network_boundary() {
 /// docs/CLOUD_PLAN.md hedge: no ambient state in core. HOME/USERPROFILE
 /// and current_dir reads live ONLY in config.rs (`config::home_dir` is
 /// the sanctioned seam), so a future multi-tenant server can instantiate
-/// N cores in one process without implicit "there is one user" bugs.
+/// N cores in one process without implicit "there is one user" bugs. The
+/// TUI goes through the same seam; only the binary resolves cwd.
 #[test]
 fn ambient_state_only_in_config() {
     let root = workspace_root();
     let needles = ["\"HOME\"", "\"USERPROFILE\"", "current_dir("];
     let mut violations = Vec::new();
-    for f in rust_sources(&root.join("crates/moneyball-core/src")) {
+    let sources = rust_sources(&root.join("crates/moneyball-core/src"))
+        .into_iter()
+        .chain(rust_sources(&root.join("crates/moneyball-tui/src")));
+    for f in sources {
         let r = rel(&root, &f);
         if r == "crates/moneyball-core/src/config.rs" {
             continue;
