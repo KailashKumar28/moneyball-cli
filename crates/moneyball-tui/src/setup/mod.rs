@@ -556,10 +556,16 @@ fn advance_save(app: &mut App, s: &mut SetupState) {
     }
     app.cfg.workspace = Some(cfg);
     // The startup chat log said "no workspace yet - run /setup"; that's now
-    // stale. Tell the user setup landed and what to do next.
-    app.chat.push(chat::Cell::System(chat::cells::System(
-        "workspace configured. try /brief, /funnel <product>, /ask or anything you want.".into(),
-    )));
+    // stale. Tell the user setup landed and what to do next - a CRM too,
+    // which setup itself does not connect.
+    let crm = match moneyball_core::crm::fetch::spec_path(&app.cfg).is_file() {
+        true => "",
+        false => "\n  /connect crm   adds your CRM: qualified leads and every verdict come from it",
+    };
+    app.chat.push(chat::Cell::System(chat::cells::System(format!(
+        "workspace configured. next:\n  /refresh       pulls Meta's numbers and writes yesterday's report{}\n  /schedule      runs the refresh every morning",
+        crm
+    ))));
     app.view = View::Brief;
     app.load_brief();
 }

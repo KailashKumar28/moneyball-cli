@@ -252,8 +252,11 @@ bottom after a release-sized batch.)
       predictions to `ledger.jsonl`, show hit-rate over time.
 - [x] **Scheduled CRM fetch**: superseded (2026-10-09) - /schedule runs
       `moneyball refresh`, which pulls Meta then CRM into the same day.
-- [ ] **Setup wizard: CRM step**: offer `crm init` + contract pointer at
-      the end of /setup instead of leaving CRM discovery to docs.
+- [x] **Setup wizard: CRM step** (2026-10-10): setup's last word lists
+      what is next - /refresh, /connect crm when no CRM is connected
+      (qualified leads and verdicts come from it), /schedule - instead of
+      "try /brief". (Not driven end to end: finishing setup needs a pasted
+      model key.)
 - [ ] **MB_AGENT output coverage**: machine-readable JSON for `brief`,
       `crm check`, `crm fetch` (exists for some sub-commands only).
 - [ ] **Auto-compaction**: real history compaction (LLM summary of old
