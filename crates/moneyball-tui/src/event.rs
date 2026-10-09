@@ -200,16 +200,11 @@ fn handle_paste(app: &mut App, text: String) {
     }
     match &mut app.view {
         View::Setup(state) => {
-            // Strip whitespace and newlines so paste of a token works even if
-            // it was wrapped or had trailing whitespace in the clipboard.
-            let clean: String = text.chars().filter(|c| !c.is_control()).collect();
-            match (state.step, state.meta_substep) {
-                (1, 0) => state.meta_input.push_str(&clean),
-                (1, 2) => state.meta_rename_input.push_str(&clean),
-                (2, _) => state.product_input.push_str(&clean),
-                (3, _) => state.goals_input.push_str(&clean),
-                (0, _) => state.workspace_path.push_str(&clean),
-                _ => {}
+            // A paste is typing, one character at a time, through the same
+            // insert every step uses (a per-step list here dropped the model
+            // key). Newlines and controls go: a wrapped token still pastes.
+            for c in text.chars().filter(|c| !c.is_control()) {
+                setup::insert_setup(state, c);
             }
         }
         View::Brief => {
