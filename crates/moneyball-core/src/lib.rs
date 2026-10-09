@@ -18,6 +18,7 @@ pub mod logo;
 pub mod meta;
 pub mod product;
 pub mod provider;
+pub mod refresh;
 pub mod report;
 pub mod runs;
 pub mod schema;

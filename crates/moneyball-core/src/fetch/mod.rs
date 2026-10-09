@@ -202,11 +202,7 @@ fn fetch_account_rows(
         let status = resp.status();
         let body: serde_json::Value = resp.json().map_err(|e| crate::meta::net_err("json", e))?;
         if !status.is_success() {
-            let msg = body
-                .pointer("/error/message")
-                .and_then(|m| m.as_str())
-                .unwrap_or("unknown error");
-            return Err(Error::Meta(format!("Meta {} for {}: {}", status, act, msg)));
+            return Err(crate::meta::api_error(status, &body, &act));
         }
         if let Some(rows) = body.get("data").and_then(|d| d.as_array()) {
             out.extend(rows.iter().cloned());

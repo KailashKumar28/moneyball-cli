@@ -3,6 +3,7 @@
 mod connect_flow;
 mod crm_cli;
 mod debug_cli;
+mod refresh_cli;
 
 use anyhow::{Context, Result};
 use clap::{Parser, Subcommand};
@@ -82,6 +83,16 @@ enum Cmd {
         /// before the snapshot date).
         #[arg(long, default_value_t = 1)]
         window: u32,
+    },
+    /// Daily refresh: pull Meta, then CRM for the same day, then write
+    /// yesterday's report. Exit 0 ok, 2 degraded, 1 failed.
+    Refresh {
+        /// Pull Meta again even when today's snapshot already has it.
+        #[arg(long)]
+        force: bool,
+        /// Trailing days to pull, ending yesterday.
+        #[arg(long, default_value_t = 28)]
+        days: u32,
     },
     /// Dump a saved session transcript with an invariant audit; file,
     /// review, and archive bug reports (see debug_cli.rs).
@@ -201,6 +212,10 @@ fn main() -> Result<()> {
         Cmd::Report { date, window } => {
             let strict = AppConfig::resolve(cli.data_root.as_deref(), cli.date.as_deref())?;
             moneyball_core::report::run(&strict, date.as_deref().or(cli.date.as_deref()), window)?;
+        }
+        Cmd::Refresh { force, days } => {
+            let strict = AppConfig::resolve(cli.data_root.as_deref(), None)?;
+            refresh_cli::run(&strict, force, days)?;
         }
         Cmd::Debug(args) => debug_cli::run(args, root)?,
         Cmd::Crm { cmd } => crm_cli::run(cmd, &cfg, cli.data_root.as_deref())?,

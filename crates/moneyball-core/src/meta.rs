@@ -50,7 +50,7 @@ pub fn validate_token(token: &str) -> Result<()> {
     let status = resp.status();
     let body: serde_json::Value = resp.json().map_err(|e| crate::meta::net_err("json", e))?;
     if !status.is_success() {
-        return Err(Error::Meta(parse_error(&body, status)));
+        return Err(api_error(status, &body, "the token check"));
     }
     Ok(())
 }
@@ -71,7 +71,7 @@ pub fn list_ad_accounts(token: &str) -> Result<Vec<AdAccount>> {
     let status = resp.status();
     let body: serde_json::Value = resp.json().map_err(|e| crate::meta::net_err("json", e))?;
     if !status.is_success() {
-        return Err(Error::Meta(parse_error(&body, status)));
+        return Err(api_error(status, &body, "the ad account list"));
     }
     let parsed: ApiResponse =
         serde_json::from_value(body).map_err(|e| Error::Meta(format!("decode: {}", e)))?;
@@ -92,14 +92,32 @@ pub(crate) fn net_err(what: &str, e: reqwest::Error) -> Error {
     Error::Meta(format!("{}: {}", what, e.without_url()))
 }
 
-fn parse_error(body: &serde_json::Value, status: reqwest::StatusCode) -> String {
-    if let Ok(env) = serde_json::from_value::<ErrorEnvelope>(body.clone()) {
-        format!(
-            "Meta {}: {} (code {:?})",
-            status, env.error.message, env.error.code
-        )
-    } else {
-        format!("Meta {}: {}", status, body)
+/// Every non-success Meta response becomes one of two errors: code 190
+/// (the token expired or was revoked) is MetaAuth, which the refresh and
+/// every screen treat as "connect Meta again"; anything else is Meta with
+/// Meta's own sentence. `what` says which call failed.
+pub(crate) fn api_error(
+    status: reqwest::StatusCode,
+    body: &serde_json::Value,
+    what: &str,
+) -> Error {
+    let env = serde_json::from_value::<ErrorEnvelope>(body.clone()).ok();
+    let code = env.as_ref().and_then(|e| e.error.code);
+    let message = env
+        .map(|e| e.error.message)
+        .unwrap_or_else(|| body.to_string());
+    if code == Some(190) {
+        return Error::MetaAuth(format!(
+            "Meta refused the access token (code 190): it expired or was revoked ({})",
+            message
+        ));
+    }
+    match code {
+        Some(c) => Error::Meta(format!(
+            "Meta {} for {}: {} (code {})",
+            status, what, message, c
+        )),
+        None => Error::Meta(format!("Meta {} for {}: {}", status, what, message)),
     }
 }
 
@@ -126,5 +144,21 @@ mod tests {
         );
         let msg = super::net_err("leads network", e).to_string();
         assert!(!msg.contains("SECRET123"), "{}", msg);
+    }
+
+    #[test]
+    fn code_190_is_meta_auth_everything_else_meta() {
+        let expired =
+            serde_json::json!({"error": {"message": "Error validating access token", "code": 190}});
+        let e = super::api_error(reqwest::StatusCode::BAD_REQUEST, &expired, "act_1");
+        assert_eq!(e.kind(), "meta_auth", "{}", e);
+        let denied = serde_json::json!({"error": {"message": "(#200) no permission", "code": 200}});
+        let e = super::api_error(reqwest::StatusCode::FORBIDDEN, &denied, "act_1");
+        assert_eq!(e.kind(), "meta");
+        assert!(
+            e.to_string().contains("(code 200)") && !e.to_string().contains("Some("),
+            "{}",
+            e
+        );
     }
 }

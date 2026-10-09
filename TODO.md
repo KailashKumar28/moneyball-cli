@@ -23,6 +23,11 @@ bottom after a release-sized batch.)
         fetch really writes into.
   - [x] Account isolation (2026-10-09): one ad account failing marks its
         product "no data" with Meta's reason; the others still land.
+  - [x] moneyball refresh (2026-10-09): Meta, then CRM anchored to the
+        same snapshot, then the report, under one lock, with a run record
+        (moneyball.run/1) written whatever happens; exit 0/2/1; MB_AGENT
+        JSON. Live: the 08 Oct report written, CRM degraded on the expired
+        LeadZump token with its exact fix. Typed MetaAuth / CrmAuth errors.
 - [ ] **Daily creative report** (plan: docs/CLOUD_PLAN.md, agreed
       2026-08-07 - report.json is the product, HTML is a renderer;
       reimplements pipeline/creative_report.py, never imports it):

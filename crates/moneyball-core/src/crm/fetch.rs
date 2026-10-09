@@ -428,13 +428,16 @@ fn status_error(status: reqwest::StatusCode, bytes: &[u8], secrets: &[String]) -
                 .collect::<Vec<_>>()
                 .join(" and "),
         };
-        Error::Secrets(format!(
-            "CRM rejected the credentials (HTTP {}){} - the stored token has likely \
-             expired. Store a fresh one with: {}",
-            status.as_u16(),
-            tail,
-            fix
-        ))
+        Error::CrmAuth {
+            message: format!(
+                "CRM rejected the credentials (HTTP {}){} - the stored token has likely \
+                 expired. Store a fresh one with: {}",
+                status.as_u16(),
+                tail,
+                fix
+            ),
+            fix,
+        }
     } else {
         Error::Config(format!("CRM returned {}{}", status, tail))
     }
