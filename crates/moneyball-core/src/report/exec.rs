@@ -282,7 +282,7 @@ mod tests {
             leads: None,
             crm_contacts: None,
             regions: serde_json::json!([]),
-            changes: serde_json::json!([]),
+            changes: None,
             campaigns: serde_json::json!([]),
         };
         let days = (chrono::NaiveDate::parse_from_str(until, "%Y-%m-%d").unwrap()

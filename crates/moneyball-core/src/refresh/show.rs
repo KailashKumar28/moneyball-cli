@@ -51,7 +51,7 @@ pub fn status_word(s: &RunStep) -> String {
 pub fn counts_detail(s: &RunStep) -> String {
     let order: &[&str] = match s.name.as_str() {
         "meta" => &["products", "rows"],
-        "assets" => &["creatives", "leads", "adsets"],
+        "assets" => &["creatives", "leads", "adsets", "changes"],
         "crm" => &["tickets", "pages"],
         "report" => &["creatives"],
         _ => &[],

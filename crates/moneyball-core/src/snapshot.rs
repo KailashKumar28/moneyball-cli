@@ -109,7 +109,8 @@ pub struct Snapshot {
     /// Organic-ticket contacts (crm_contacts.json), when captured.
     pub crm_contacts: Option<crate::schema::CrmContactsFile>,
     pub regions: serde_json::Value,
-    pub changes: serde_json::Value,
+    /// The ad accounts' change log (changes.json), when captured.
+    pub changes: Option<crate::schema::ChangesFile>,
     pub campaigns: serde_json::Value,
 }
 
@@ -162,7 +163,7 @@ pub fn load(snap_path: &Path) -> Result<Snapshot> {
     let mut leads = None;
     let mut crm_contacts = None;
     let mut regions = serde_json::Value::Array(vec![]);
-    let mut changes = serde_json::Value::Array(vec![]);
+    let mut changes = None;
     let mut campaigns = serde_json::Value::Array(vec![]);
     for name in SNAPSHOT_FILES {
         let f = snap_path.join(format!("{}.json", name));
@@ -191,7 +192,11 @@ pub fn load(snap_path: &Path) -> Result<Snapshot> {
                     .flatten()
             }
             "regions" => regions = v,
-            "changes" => changes = v,
+            "changes" => {
+                changes = same_major(&v, crate::schema::CHANGES_SCHEMA)
+                    .then(|| serde_json::from_value(v).ok())
+                    .flatten()
+            }
             "campaigns" => campaigns = v,
             _ => unreachable!(),
         }

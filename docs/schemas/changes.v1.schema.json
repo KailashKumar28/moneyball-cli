@@ -1,0 +1,72 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ChangesFile",
+  "description": "`snap/<date>/changes.json` - each ad account's change log\n(`act_X/activities`) over the fetched window, newest first: what was\ncreated, paused, re-budgeted or re-targeted, and when.",
+  "type": "object",
+  "properties": {
+    "fetched_at": {
+      "type": "string"
+    },
+    "rows": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/ChangeRow"
+      }
+    },
+    "schema": {
+      "description": "`moneyball.changes/<major>`.",
+      "type": "string"
+    }
+  },
+  "required": [
+    "schema",
+    "fetched_at",
+    "rows"
+  ],
+  "$defs": {
+    "ChangeRow": {
+      "description": "One change Meta logged.",
+      "type": "object",
+      "properties": {
+        "account": {
+          "description": "The ad account, `act_<id>`.",
+          "type": "string"
+        },
+        "event": {
+          "description": "Meta's words for it, e.g. \"Ad set budget updated\".",
+          "type": "string",
+          "default": ""
+        },
+        "event_type": {
+          "description": "Meta's event id, e.g. `update_ad_set_budget`.",
+          "type": "string"
+        },
+        "new": {
+          "default": null
+        },
+        "object_name": {
+          "type": "string",
+          "default": ""
+        },
+        "object_type": {
+          "description": "\"campaign\", \"ad set\" or \"ad\" (Meta says CAMPAIGN_GROUP, CAMPAIGN\nand ADGROUP).",
+          "type": "string",
+          "default": ""
+        },
+        "old": {
+          "description": "The value before and after, as Meta gives it: a status string, or\nfor money `{type: payment_amount, currency, new_value}` in minor\nunits.",
+          "default": null
+        },
+        "time": {
+          "description": "RFC3339 with offset, as Meta returns it.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "account",
+        "time",
+        "event_type"
+      ]
+    }
+  }
+}

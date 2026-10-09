@@ -22,7 +22,7 @@ fn snap_with_ads(ids: &[&str]) -> Snapshot {
         crm_contacts: None,
         crm: Value::Object(Default::default()),
         regions: Value::Array(vec![]),
-        changes: Value::Array(vec![]),
+        changes: None,
         campaigns: Value::Array(vec![]),
     }
 }

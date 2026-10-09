@@ -26,7 +26,8 @@ Network boundary: the read/analysis path (brief, funnel, advisor math)
 never touches the network. Network lives in exactly four core modules:
 `meta.rs` (every Graph GET, with its retry; tests in `meta_tests.rs`
 against a loopback server), `fetch/` (explicit snapshot pull:
-`mod.rs` insights + `creatives.rs` per-ad creative identity), `llm.rs`
+`mod.rs` insights + `creatives.rs` per-ad creative identity, `leads.rs`,
+`adsets.rs`, `changes.rs` the accounts' change log), `llm.rs`
 (model calls), `crm/fetch.rs` (explicit CRM pull driven by the
 declarative crm.toml spec). Nothing ever writes to Meta or the CRM.
 Enforced by `tests/arch_contract.rs` (this is the canonical statement;

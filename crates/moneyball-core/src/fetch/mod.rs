@@ -8,10 +8,12 @@
 //! It reads from Meta only (GET insights + creative metadata); it never
 //! mutates anything on the ad account. `creatives.rs` owns the per-ad
 //! creative identity pull (slice A1, docs/CLOUD_PLAN.md); `assets.rs`
-//! is the pure content-addressed image cache it fills (slice A2).
+//! is the pure content-addressed image cache it fills (slice A2);
+//! `changes.rs` pulls each account's change log for /diagnose.
 
 pub mod adsets;
 pub mod assets;
+pub mod changes;
 pub mod creatives;
 pub mod leads;
 pub(crate) mod map;
@@ -51,6 +53,9 @@ pub struct FetchReport {
     /// Adsets captured into adsets.json (learning stage + targeting).
     pub adsets: usize,
     pub adsets_error: Option<String>,
+    /// The accounts' change log rows in changes.json.
+    pub changes: usize,
+    pub changes_error: Option<String>,
 }
 
 /// Pull `days` of per-ad daily insights for every configured product and
@@ -120,8 +125,22 @@ pub fn fetch_snapshot(cfg: &AppConfig, token: &str, days: u32) -> Result<FetchRe
         Err(e) => (0, Some(e.reason())),
     };
 
+    // The accounts' change log, for /diagnose. Best-effort.
+    let since_epoch = since
+        .and_hms_opt(0, 0, 0)
+        .and_then(|t| t.and_local_timezone(Local).single())
+        .map_or(0, |t| t.timestamp());
+    let distinct: std::collections::BTreeSet<String> = accounts.values().cloned().collect();
+    let (changes_n, changes_error) =
+        match changes::fetch_and_write(&client, token, &distinct, since_epoch, &path) {
+            Ok(n) => (n, None),
+            Err(e) => (0, Some(e.reason())),
+        };
+
     Ok(FetchReport {
         date,
+        changes: changes_n,
+        changes_error,
         path,
         per_product,
         adsets: adsets_n,

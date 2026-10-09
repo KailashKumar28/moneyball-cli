@@ -106,7 +106,7 @@ pub fn base64(data: &[u8]) -> String {
 
 /// A plain-text table: header, dashed rule, rows, each line ending "\n".
 /// Widths count chars, as `{:<w$}` pads (names carry dashes like U+2013),
-/// and a column whose every cell is a number right-aligns.
+/// and a column whose every cell is a number ("1,234", "-12%") right-aligns.
 pub fn table(headers: &[&str], rows: &[Vec<String>]) -> String {
     let widths: Vec<usize> = (0..headers.len())
         .map(|i| {
@@ -122,7 +122,7 @@ pub fn table(headers: &[&str], rows: &[Vec<String>]) -> String {
             rows.iter().all(|row| {
                 row[i]
                     .chars()
-                    .all(|c| c.is_ascii_digit() || matches!(c, ',' | '.' | '-'))
+                    .all(|c| c.is_ascii_digit() || matches!(c, ',' | '.' | '-' | '+' | '%'))
             })
         })
         .collect();

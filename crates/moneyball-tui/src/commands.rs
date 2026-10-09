@@ -19,6 +19,10 @@ pub(crate) const COMMANDS: &[(&str, &str)] = &[
     ("/schedule", "refresh every morning; /schedule off stops it"),
     ("/funnel", "per-entity funnel for a product"),
     (
+        "/diagnose",
+        "before cutting a product: where leads die, tired ads, trend, changes",
+    ),
+    (
         "/report",
         "creative report (per-creative funnel) as HTML + summary",
     ),
@@ -132,6 +136,9 @@ pub(crate) fn submit(app: &mut App) {
         }
         "/funnel" => {
             crate::funnel_flow::run_funnel(app, arg);
+        }
+        "/diagnose" => {
+            crate::diagnose_flow::run_diagnose(app, arg);
         }
         "/debug" => {
             crate::report::run_debug_report(app, arg);
@@ -273,7 +280,7 @@ pub(crate) fn submit(app: &mut App) {
 /// System prompt for the free-form chat agent. Same persona, but the
 /// user is asking a free-form question rather than triggering /brief.
 const AGENT_SYSTEM_PROMPT: &str = "You are moneyball's portfolio advisor for Meta ads.\n\
-You have two tools that read the on-disk snapshot: brief (7-day per-product summary plus feasibility math) and funnel (per-adset 7-day table for one product). Call them whenever the user asks about portfolio numbers - never answer from memory or invent figures.\n\
+You have three tools that read the on-disk snapshot: brief (7-day per-product summary plus feasibility math), funnel (7-day table for one product, per adset, campaign or ad) and diagnose (for one product: where its CRM leads die, tired ads, the last 7 days against the days before, what changed in its ad account). Call them whenever the user asks about portfolio numbers - never answer from memory or invent figures. Before recommending a cut, pause or kill, call diagnose for that product.\n\
 If a tool reports missing data (no snapshot, no CRM), relay its suggested fix to the user instead of guessing.\n\
 Keep the answer focused and concrete. Cite the numbers you use. 3-6 sentences unless the user explicitly asks for more.";
 
@@ -283,7 +290,8 @@ visits v, Rs/qualified, kill flags). Give a per-entity read: SCALE (efficient + 
 volume), KILL (kill flag true and not immature), or WAIT (immature, learning, or not enough \
 spend). Cite the numbers that justify each call. Never recommend killing an immature or \
 learning entity. kill = spend passed the kill table with <=2 qualified; immature = leads \
-still inside the 72h maturation lag. 3-8 sentences, no preamble.";
+still inside the 72h maturation lag. Before any KILL, call the diagnose tool for this product \
+and say what it shows. 3-8 sentences, no preamble.";
 
 /// Live app state injected into every LLM system prompt so the model
 /// never hallucinates about setup/data (codex + claude code both ground
@@ -447,6 +455,7 @@ pub(crate) fn call_agent(app: &mut App, system: &str, turn: Vec<moneyball_core::
         let tools = vec![
             moneyball_core::tools::brief_tool(),
             moneyball_core::tools::funnel_tool(),
+            moneyball_core::tools::diagnose_tool(),
         ];
         moneyball_core::agent::run_turn(
             &pid, &pinfo, &model, &sys, history, &tools, &exec, &cancel, &etx,
@@ -491,6 +500,15 @@ impl moneyball_core::agent::ToolExec for SnapshotTools {
                     &self.snap()?,
                     &product,
                     by,
+                ))
+            }
+            "diagnose" => {
+                let name = args.get("product").and_then(|v| v.as_str()).unwrap_or("");
+                let product = crate::funnel_flow::resolve(&self.cfg, name)?;
+                Ok(crate::diagnose_flow::diagnose_output(
+                    &self.cfg,
+                    &self.snap()?,
+                    &product,
                 ))
             }
             other => Err(format!(

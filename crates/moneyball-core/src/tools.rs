@@ -86,6 +86,25 @@ pub fn funnel_tool() -> Tool {
     )
 }
 
+/// `diagnose` - the checks for one product before cutting anything
+/// (diagnose::text).
+pub fn diagnose_tool() -> Tool {
+    Tool::new(
+        "diagnose",
+        "Return four checks for ONE product: where its CRM leads die by campaign (lost before contact = form or audience; unreachable = phone data; reached but not visiting = sales follow-up), which ads are tiring (link CTR, frequency, age), its last 7 days against the days before (spend, leads, cost per lead, qualified, cost per qualified), and what changed in its ad account in the last 7 days (budgets, pauses, new ads, targeting). Call it before recommending a cut, pause or kill, and when the user asks why a product got worse.",
+        json!({
+            "type": "object",
+            "properties": {
+                "product": {
+                    "type": "string",
+                    "description": "Product name exactly as it appears in config.json."
+                }
+            },
+            "required": ["product"]
+        }),
+    )
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

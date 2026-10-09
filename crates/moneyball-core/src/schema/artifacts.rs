@@ -1,5 +1,5 @@
 //! Snapshot-side artifact contracts: creatives.json, leads.json,
-//! crm_contacts.json. See mod.rs for the versioning policy.
+//! crm_contacts.json, changes.json. See mod.rs for the versioning policy.
 
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -142,4 +142,44 @@ pub struct ContactRow {
     pub phone: Option<String>,
     #[serde(default)]
     pub email: Option<String>,
+}
+
+// ---------- changes.json (snapshot artifact, written by /fetch) ----------
+
+/// `snap/<date>/changes.json` - each ad account's change log
+/// (`act_X/activities`) over the fetched window, newest first: what was
+/// created, paused, re-budgeted or re-targeted, and when.
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+pub struct ChangesFile {
+    /// `moneyball.changes/<major>`.
+    pub schema: String,
+    pub fetched_at: String,
+    pub rows: Vec<ChangeRow>,
+}
+
+/// One change Meta logged.
+#[derive(Debug, Clone, Default, Serialize, Deserialize, JsonSchema)]
+pub struct ChangeRow {
+    /// The ad account, `act_<id>`.
+    pub account: String,
+    /// RFC3339 with offset, as Meta returns it.
+    pub time: String,
+    /// Meta's event id, e.g. `update_ad_set_budget`.
+    pub event_type: String,
+    /// Meta's words for it, e.g. "Ad set budget updated".
+    #[serde(default)]
+    pub event: String,
+    /// "campaign", "ad set" or "ad" (Meta says CAMPAIGN_GROUP, CAMPAIGN
+    /// and ADGROUP).
+    #[serde(default)]
+    pub object_type: String,
+    #[serde(default)]
+    pub object_name: String,
+    /// The value before and after, as Meta gives it: a status string, or
+    /// for money `{type: payment_amount, currency, new_value}` in minor
+    /// units.
+    #[serde(default)]
+    pub old: Option<serde_json::Value>,
+    #[serde(default)]
+    pub new: Option<serde_json::Value>,
 }

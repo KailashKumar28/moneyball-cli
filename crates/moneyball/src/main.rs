@@ -69,6 +69,12 @@ enum Cmd {
         #[arg(long, default_value_t = 7)]
         window: u32,
     },
+    /// Before cutting a product: where its CRM leads die, tired ads, the
+    /// last 7 days against the days before, what changed in its account.
+    Diagnose {
+        /// Product name (as configured in the workspace).
+        product: String,
+    },
     /// Connect CRM data - print the crm.json contract, validate an export.
     Crm {
         #[command(subcommand)]
@@ -214,6 +220,10 @@ fn main() -> Result<()> {
                 ),
                 Some(e) => println!("  warn: adsets capture failed ({})", e),
             }
+            match &report.changes_error {
+                None => println!("  account changes captured: {}", report.changes),
+                Some(e) => println!("  warn: account change log failed ({})", e),
+            }
             match &report.leads_error {
                 None => println!("  leads captured: {} (leads.json, 0600)", report.leads),
                 Some(e) => println!(
@@ -230,6 +240,10 @@ fn main() -> Result<()> {
         } => {
             let strict = AppConfig::resolve(cli.data_root.as_deref(), cli.date.as_deref())?;
             moneyball_core::funnel::run(&strict, &product, &by, window, cli.date.as_deref())?;
+        }
+        Cmd::Diagnose { product } => {
+            let strict = AppConfig::resolve(cli.data_root.as_deref(), cli.date.as_deref())?;
+            moneyball_core::diagnose::run(&strict, &product, cli.date.as_deref())?;
         }
         Cmd::Report { date, window } => {
             let strict = AppConfig::resolve(cli.data_root.as_deref(), cli.date.as_deref())?;

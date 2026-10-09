@@ -42,7 +42,7 @@ fn snap() -> Snapshot {
         crm_contacts: None,
         crm,
         regions: json!([]),
-        changes: json!([]),
+        changes: None,
         campaigns: json!([]),
     }
 }

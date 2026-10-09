@@ -11,6 +11,7 @@ pub mod config;
 pub mod connections;
 pub mod crm;
 pub mod debug;
+pub mod diagnose;
 pub mod error;
 pub mod fetch;
 pub mod funnel;

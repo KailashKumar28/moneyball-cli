@@ -198,8 +198,18 @@ bottom after a release-sized batch.)
       WhatsApp-forwardable filename (Fincity-Daily-09-Aug-2026.html).
       Deferred to weekly: fatigue + overlap verdicts (need reach /
       geo-circle math), budget reallocation modeling, cross-read B.
-- [ ] **/diagnose <product>**: the 5 diagnostic checks over a snapshot,
-      one summary cell + per-check detail. Headless first.
+- [x] **/diagnose <product>** (2026-10-10): mb.py's checks before a
+      cut, natively, over one snapshot - where CRM leads die by campaign
+      (form / phone data / sales follow-up), ad fatigue (each ad's link
+      CTR against its own earlier days, and how often a person sees it;
+      mb.py's fixed 1% floor called every ad on this account "watch"),
+      the last 7 days against the 21 before, and what changed in the ad
+      account (new pull: act_X/activities -> changes.json,
+      moneyball.changes/1). moneyball diagnose, /diagnose (tool cell +
+      advisor), and a diagnose tool the advisor must call before any
+      kill. mb.py's geo-leak check is left out: Meta reports Indian
+      delivery by state only (all Karnataka here), not the targeted
+      pincodes.
 
 ## Next
 

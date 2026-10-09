@@ -46,6 +46,7 @@ fn network_boundary() {
         "crates/moneyball-core/src/meta_tests.rs",
         "crates/moneyball-core/src/fetch/mod.rs",
         "crates/moneyball-core/src/fetch/adsets.rs",
+        "crates/moneyball-core/src/fetch/changes.rs",
         "crates/moneyball-core/src/fetch/creatives.rs",
         "crates/moneyball-core/src/fetch/leads.rs",
         "crates/moneyball-core/src/llm.rs",

@@ -162,6 +162,7 @@ pub fn run(
                     ("creatives", &f.creatives_error),
                     ("leads", &f.leads_error),
                     ("adsets", &f.adsets_error),
+                    ("changes", &f.changes_error),
                 ]
                 .into_iter()
                 .filter_map(|(what, e)| e.as_ref().map(|e| format!("{}: {}", what, e)))
@@ -173,6 +174,7 @@ pub fn run(
                         ("creatives", f.creatives as u64),
                         ("leads", f.leads as u64),
                         ("adsets", f.adsets as u64),
+                        ("changes", f.changes as u64),
                     ],
                 );
                 if !errors.is_empty() {
