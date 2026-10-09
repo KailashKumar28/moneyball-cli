@@ -85,7 +85,7 @@ impl Error {
     pub fn fix(&self) -> Option<String> {
         match self {
             Error::CrmAuth { fix, .. } => Some(fix.clone()),
-            Error::MetaAuth(_) => Some("/setup".into()),
+            Error::MetaAuth(_) => Some("/setup meta".into()),
             _ => None,
         }
     }

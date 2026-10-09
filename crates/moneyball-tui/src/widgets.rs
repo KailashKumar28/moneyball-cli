@@ -164,7 +164,7 @@ pub fn day_numbers(report: &moneyball_core::schema::CreativeReport) -> String {
 
 /// What a fix command does, said once next to it.
 pub fn fix_does(fix: &str) -> &'static str {
-    if fix == "/setup" {
+    if fix == "/setup meta" {
         "paste a fresh Meta token; products and settings stay"
     } else if fix.contains("crm secret") {
         "in a shell; it asks for the new token"

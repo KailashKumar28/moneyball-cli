@@ -147,7 +147,7 @@ fn file_size_ratchet() {
         ("crates/moneyball-tui/src/chat.rs", 500),
         ("crates/moneyball-tui/src/commands.rs", 750),
         ("crates/moneyball-tui/src/event.rs", 750),
-        ("crates/moneyball-tui/src/setup/mod.rs", 1000),
+        ("crates/moneyball-tui/src/setup/mod.rs", 850),
         ("crates/moneyball-tui/src/setup/render_steps.rs", 650),
     ];
     let mut violations = Vec::new();

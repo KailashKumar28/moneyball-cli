@@ -36,7 +36,10 @@ pub(crate) const COMMANDS: &[(&str, &str)] = &[
     ("/snapshot", "list or validate snapshots"),
     ("/clear", "start a fresh conversation (new session file)"),
     ("/keychain", "show which providers have API keys configured"),
-    ("/setup", "re-run the setup wizard"),
+    (
+        "/setup",
+        "re-run the setup wizard; /setup meta replaces the Meta token",
+    ),
     ("/help", "list slash commands"),
     ("/quit", "exit moneyball"),
 ];
@@ -102,20 +105,28 @@ pub(crate) fn submit(app: &mut App) {
         "/schedule" => crate::schedule_view::run_schedule(app, arg),
         "/refresh" | "/fetch" => crate::refresh_flow::run_refresh(app, arg == "--force", false),
         "/setup" => {
-            app.chat.push(Cell::AssistantText(cells::AssistantText {
-                text:
-                    "opening setup wizard (Enter to keep current values, edit + Enter to change)."
-                        .into(),
-                streaming: false,
-            }));
-            // Pre-populate from existing config so /setup re-runs as
-            // an "edit current settings" flow (Enter keeps values).
-            // The Meta token + LLM key are still re-required since
-            // they're not in memory - we keep them in the keychain.
-            let state = match app.cfg.workspace.as_ref() {
+            // Prefilled from the saved config, so /setup re-runs as "edit
+            // current settings" (Enter keeps values).
+            let mut state = match app.cfg.workspace.as_ref() {
                 Some(w) => SetupState::prefilled_from(w, &app.cfg.data_root),
                 None => SetupState::new(app.cfg.data_root.clone()),
             };
+            // `/setup meta`: straight to the token paste, nothing else
+            // re-asked (a configured workspace otherwise opens at the model).
+            // The saved token shows as bullets: enter re-checks it against
+            // every product, typing replaces it.
+            let token_only = arg == "meta" && !state.products.is_empty();
+            if token_only {
+                state.step = 1;
+                state.meta_substep = 0;
+                state.token_only = true;
+                state.meta_input = "\u{2022}".repeat(state.meta_token_len);
+            }
+            app.chat.note(if token_only {
+                "replacing the Meta token: paste the new one, or enter to re-check the saved one."
+            } else {
+                "opening setup wizard (Enter to keep current values, edit + Enter to change)."
+            });
             app.view = View::Setup(state);
         }
         "/funnel" => {

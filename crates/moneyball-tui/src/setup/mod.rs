@@ -6,8 +6,11 @@ use std::path::PathBuf;
 
 use crossterm::event::{KeyCode, KeyEvent};
 
+use meta::{advance_meta, meta_backspace, meta_insert};
 use moneyball_core::provider::{built_in_presets, models_for, ModelProviderInfo};
-use moneyball_core::{list_ad_accounts, validate_token, AdAccount, WorkspaceConfig};
+use moneyball_core::{AdAccount, WorkspaceConfig};
+
+mod meta;
 use std::path::Path;
 
 // Two chrono types collide on import name; alias the plain Utc.
@@ -38,6 +41,9 @@ pub struct SetupState {
     /// Length of the validated token in characters. Captured before
     /// `meta_input` is cleared so the collapsed summary can show "••••• (N chars)".
     pub meta_token_len: usize,
+    /// `/setup meta`: only replace the Meta token, keeping products and
+    /// settings; the new token must read every configured account.
+    pub token_only: bool,
     /// Step 2 entry buffer: "Name AdAccount" (space- or comma-separated).
     pub product_input: String,
     pub products: Vec<(String, String)>, // (name, ad_account)
@@ -81,6 +87,7 @@ impl SetupState {
             meta_selected: Vec::new(),
             meta_connected: false,
             meta_token_len: 0,
+            token_only: false,
             product_input: String::new(),
             products: Vec::new(),
             goals_input: String::new(),
@@ -132,6 +139,10 @@ impl SetupState {
         // Meta: connected if products exist (meaning setup was completed
         // at some point). Token itself must be re-pasted.
         s.meta_connected = !cfg.products.is_empty();
+        // A saved token shows as its length in bullets, never "(0 chars)".
+        s.meta_token_len = moneyball_core::secrets::load_meta_token()
+            .map(|t| t.chars().count())
+            .unwrap_or(0);
         // LLM
         if let Some(provider) = &cfg.model_provider {
             s.llm_provider_id = provider.clone();
@@ -461,34 +472,6 @@ fn backspace_setup(s: &mut SetupState) {
     }
 }
 
-fn meta_insert(s: &mut SetupState, c: char) {
-    match s.meta_substep {
-        0 => {
-            s.meta_input.push(c);
-        }
-        // substep 1 is keyboard-driven (Up/Down/Space/'a'/Enter); ignore chars.
-        1 => {}
-        2 => {
-            s.meta_rename_input.push(c);
-        }
-        _ => {}
-    }
-}
-
-fn meta_backspace(s: &mut SetupState) {
-    match s.meta_substep {
-        0 => {
-            s.meta_input.pop();
-        }
-        // substep 1 ignored.
-        1 => {}
-        2 => {
-            s.meta_rename_input.pop();
-        }
-        _ => {}
-    }
-}
-
 fn advance_setup(app: &mut App, s: &mut SetupState) {
     s.error = None;
     match s.step {
@@ -521,146 +504,6 @@ fn advance_workspace(app: &mut App, s: &mut SetupState) {
     std::fs::create_dir_all(p.join(moneyball_core::config::DOT_DIR)).ok();
     app.cfg.data_root = p;
     s.step = 1;
-}
-
-fn advance_meta(_app: &mut App, s: &mut SetupState) {
-    match s.meta_substep {
-        // Substep 0: paste token. Mandatory.
-        0 => {
-            let raw = s.meta_input.trim();
-            if raw.is_empty() {
-                s.error =
-                    Some("a Meta Marketing API access token is required (paste it above)".into());
-                return;
-            }
-            // Old wizards accepted the literal word "skip" here. Catch it
-            // before it goes to Meta as a (masked) token and fails cryptically.
-            if raw.eq_ignore_ascii_case("skip") {
-                s.error = Some("'skip' is no longer supported - moneyball now requires a Meta token to discover your ad accounts".into());
-                return;
-            }
-            // Validate token + list ad accounts.
-            if let Err(e) = validate_token(raw) {
-                s.error = Some(format!("token rejected: {}", e));
-                return;
-            }
-            match list_ad_accounts(raw) {
-                Ok(accounts) => {
-                    if accounts.is_empty() {
-                        s.error = Some("token is valid but no ad accounts found (need ads_read + an ad account assigned to you)".into());
-                        return;
-                    }
-                    // Persist token to keychain immediately; we'll move it out of memory after.
-                    if let Err(e) = moneyball_core::secrets::store_meta_token(raw) {
-                        s.error = Some(format!(
-                            "token accepted but keychain write failed: {}. \
-On macOS, allow moneyball-cli in Keychain Access (or run /setup again after granting).",
-                            e
-                        ));
-                        return;
-                    }
-                    // Round-trip verify: macOS Keychain ACLs (or an ad-hoc
-                    // binary signature) can make set_password report success
-                    // while the item never lands in the user keychain. Reject
-                    // early so the user knows to retry.
-                    if moneyball_core::secrets::load_meta_token().as_deref() != Some(raw) {
-                        s.error = Some(
-                            "keychain write did not persist (likely macOS denied access). \
-On macOS, re-run /setup and approve the Keychain prompt, or sign the moneyball binary."
-                                .into(),
-                        );
-                        let _ = moneyball_core::secrets::clear_meta_token();
-                        return;
-                    }
-                    // Capture token length for the collapsed summary ("••••• (N chars)")
-                    // BEFORE clearing the buffer.
-                    s.meta_token_len = s.meta_input.chars().count();
-                    s.meta_discovered = accounts;
-                    s.meta_selections = vec![false; s.meta_discovered.len()];
-                    s.meta_highlight = 0;
-                    s.meta_scroll = 0;
-                    s.meta_input.clear();
-                    s.meta_substep = 1;
-                }
-                Err(e) => {
-                    s.error = Some(format!("couldn't list ad accounts: {}", e));
-                }
-            }
-        }
-        // Substep 1: multi-select list. Enter handler lives in handle_select_keys.
-        // (advance_setup is called for Enter; substep 1's Enter is handled there.)
-        1 => {
-            // Shouldn't usually hit this path (Enter is routed via handle_select_keys).
-            // Fall through: confirm whatever is currently selected.
-            let chosen: Vec<usize> = (0..s.meta_discovered.len())
-                .filter(|&i| s.meta_selections[i])
-                .collect();
-            if chosen.is_empty() {
-                s.error = Some("select at least one account (Space to toggle, 'a' for all)".into());
-                return;
-            }
-            s.meta_selected = chosen;
-            s.meta_substep = 2;
-        }
-        // Substep 2: rename overrides (or blank = use account names).
-        2 => {
-            let raw = s.meta_rename_input.trim();
-            // Build overrides from input.
-            let overrides = parse_renames(raw);
-            if let Err(e) = overrides {
-                s.error = Some(e);
-                return;
-            }
-            let overrides = overrides.unwrap_or_default();
-            // Build final products list.
-            let mut new_products: Vec<(String, String)> = Vec::new();
-            for (i, &idx) in s.meta_selected.iter().enumerate() {
-                let acct = &s.meta_discovered[idx];
-                // Default to the Meta account's display name; let the user
-                // override via "1=Name 2=OtherName" syntax in the rename input.
-                let name = overrides
-                    .get(&(idx + 1))
-                    .cloned()
-                    .unwrap_or_else(|| acct.name.clone());
-                let id = moneyball_core::meta::account_id_for_storage(&acct.id);
-                if new_products.iter().any(|(n, _)| n == &name) {
-                    s.error = Some(format!("duplicate product name '{}'", name));
-                    return;
-                }
-                new_products.push((name, id));
-                let _ = i;
-            }
-            // If user explicitly typed 'all' and used demo, skip auto-fills.
-            s.products = new_products;
-            s.meta_connected = true;
-            s.error = None;
-            s.meta_rename_input.clear();
-            s.step = 3; // skip the manual "add products" step; go to goals.
-        }
-        _ => {}
-    }
-}
-
-fn parse_renames(
-    raw: &str,
-) -> std::result::Result<std::collections::HashMap<usize, String>, String> {
-    let mut out = std::collections::HashMap::new();
-    for part in raw.split_whitespace() {
-        let (idx_s, name) = part
-            .split_once('=')
-            .ok_or_else(|| format!("bad rename '{}': expected N=Name", part))?;
-        let idx: usize = idx_s
-            .parse()
-            .map_err(|_| format!("bad index '{}'", idx_s))?;
-        if idx < 1 {
-            return Err(format!("index must be >= 1 (got {})", idx));
-        }
-        if name.is_empty() {
-            return Err(format!("empty name at index {}", idx));
-        }
-        out.insert(idx, name.to_string());
-    }
-    Ok(out)
 }
 
 fn advance_products(s: &mut SetupState) {

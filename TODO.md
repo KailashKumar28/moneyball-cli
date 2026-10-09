@@ -52,6 +52,10 @@ bottom after a release-sized batch.)
   - [x] Funnel view (2026-10-09): people get frame S4's table (name, spend,
         meta, cpl, crm, qual, rs_per_q, one verdict) in ~85 columns; the
         model keeps the full table with ids and kill flags.
+  - [x] /setup meta (2026-10-09): the Meta token fix that works today - the
+        wizard opens at the token paste, a new token replaces the saved one
+        only if it reads every configured account, products stay. Before,
+        /setup jumped to the model step and the token could not be reached.
   - [ ] Token expiry for /status ("Meta valid to ...") waits on the
         connect work.
 - [ ] **Daily creative report** (plan: docs/CLOUD_PLAN.md, agreed
