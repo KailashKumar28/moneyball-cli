@@ -23,9 +23,8 @@ use crate::error::{Error, Result};
 use crate::provider::{ModelProviderInfo, WireApi};
 use crate::tools::{Tool, ToolCall};
 
-/// Default max_tokens for Anthropic (it's required). 4096 is enough
-/// for a brief commentary; bump if /ask starts producing longer replies.
-const DEFAULT_MAX_TOKENS: u32 = 4096;
+mod wire;
+use wire::*;
 
 /// max_tokens for full agent turns on the Messages wire: an analysis
 /// plus tool calls routinely outgrows the one-shot commentary budget,
@@ -52,8 +51,6 @@ pub fn stream_blocking(
     let api_key = provider
         .api_key(provider_id)
         .ok_or_else(|| Error::LlmAuth(format!("no API key for provider '{}'", provider_id)))?;
-    let url = endpoint_for(provider);
-
     let mut body = match provider.wire_api {
         WireApi::Responses => build_responses_body(model, system, user),
         WireApi::ChatCompletions => build_chat_body(model, system, user),
@@ -66,12 +63,7 @@ pub fn stream_blocking(
         .timeout(Duration::from_secs(300)) // whole stream, not per-chunk
         .build()
         .map_err(|e| Error::Llm(format!("client: {}", e)))?;
-    let mut req = client.post(&url);
-    for (k, v) in request_headers(provider, &api_key) {
-        req = req.header(&k, &v);
-    }
-
-    let resp = req
+    let resp = request(&client, provider, &api_key)
         .json(&body)
         .send()
         .map_err(|e| Error::Llm(format!("transport: {}", e)))?;
@@ -292,11 +284,7 @@ pub fn stream_turn(
         .timeout(Duration::from_secs(300))
         .build()
         .map_err(|e| Error::Llm(format!("client: {}", e)))?;
-    let mut req = client.post(endpoint_for(provider));
-    for (k, v) in request_headers(provider, &api_key) {
-        req = req.header(&k, &v);
-    }
-    let resp = req
+    let resp = request(&client, provider, &api_key)
         .json(&body)
         .send()
         .map_err(|e| Error::Llm(format!("transport: {}", e)))?;
@@ -459,139 +447,35 @@ fn parse_args(s: &str) -> Value {
     serde_json::from_str(s).unwrap_or_else(|_| json!({}))
 }
 
-/// Anthropic Messages history: consecutive same-role blocks coalesce
-/// into one message (required - tool_use must live in an assistant
-/// message's content array, tool_result in the following user message).
-fn messages_history(history: &[Item]) -> Vec<Value> {
-    let mut msgs: Vec<Value> = Vec::new();
-    let push = |role: &str, block: Value, msgs: &mut Vec<Value>| {
-        if let Some(last) = msgs.last_mut() {
-            if last.get("role").and_then(|r| r.as_str()) == Some(role) {
-                if let Some(arr) = last.get_mut("content").and_then(|c| c.as_array_mut()) {
-                    arr.push(block);
-                    return;
-                }
-            }
-        }
-        msgs.push(json!({"role": role, "content": [block]}));
+/// One provider call: its endpoint with the provider's query params
+/// (Azure's api-version), content type, the wire's auth (x-api-key and
+/// anthropic-version, or Bearer), literal http_headers, env-backed ones.
+fn request(
+    client: &reqwest::blocking::Client,
+    provider: &ModelProviderInfo,
+    api_key: &str,
+) -> reqwest::blocking::RequestBuilder {
+    let mut req = client
+        .post(endpoint_for(provider))
+        .header("Content-Type", "application/json");
+    if let Some(q) = &provider.query_params {
+        req = req.query(q);
+    }
+    req = match provider.wire_api {
+        WireApi::Messages => req
+            .header("x-api-key", api_key)
+            .header("anthropic-version", "2023-06-01"),
+        _ => req.bearer_auth(api_key),
     };
-    for item in history {
-        match item {
-            Item::User { text } => push("user", json!({"type": "text", "text": text}), &mut msgs),
-            Item::Assistant { text } => push(
-                "assistant",
-                json!({"type": "text", "text": text}),
-                &mut msgs,
-            ),
-            Item::ToolCall {
-                call_id,
-                name,
-                args,
-            } => push(
-                "assistant",
-                json!({"type": "tool_use", "id": call_id, "name": name,
-                       "input": if args.is_null() { json!({}) } else { args.clone() }}),
-                &mut msgs,
-            ),
-            Item::ToolOutput {
-                call_id,
-                output,
-                is_error,
-            } => push(
-                "user",
-                json!({"type": "tool_result", "tool_use_id": call_id,
-                       "content": output, "is_error": is_error}),
-                &mut msgs,
-            ),
+    for (k, v) in provider.http_headers.iter().flatten() {
+        req = req.header(k, v);
+    }
+    for (k, var) in provider.env_http_headers.iter().flatten() {
+        if let Some(v) = std::env::var(var).ok().filter(|v| !v.is_empty()) {
+            req = req.header(k, v);
         }
     }
-    msgs
-}
-
-/// OpenAI Chat Completions history: tool calls ride on assistant
-/// messages, results are role:"tool" messages.
-fn chat_history(system: &str, history: &[Item]) -> Vec<Value> {
-    let mut msgs = vec![json!({"role": "system", "content": system})];
-    for item in history {
-        match item {
-            Item::User { text } => msgs.push(json!({"role": "user", "content": text})),
-            Item::Assistant { text } => msgs.push(json!({"role": "assistant", "content": text})),
-            Item::ToolCall {
-                call_id,
-                name,
-                args,
-            } => {
-                let call = json!({"id": call_id, "type": "function",
-                    "function": {"name": name, "arguments": args.to_string()}});
-                let attach = msgs
-                    .last_mut()
-                    .filter(|m| m.get("tool_calls").is_some())
-                    .and_then(|m| m.get_mut("tool_calls"))
-                    .and_then(|t| t.as_array_mut());
-                match attach {
-                    Some(arr) => arr.push(call),
-                    None => msgs
-                        .push(json!({"role": "assistant", "content": null, "tool_calls": [call]})),
-                }
-            }
-            Item::ToolOutput {
-                call_id, output, ..
-            } => msgs.push(json!({"role": "tool", "tool_call_id": call_id, "content": output})),
-        }
-    }
-    msgs
-}
-
-/// OpenAI Responses history: typed input items.
-fn responses_history(history: &[Item]) -> Vec<Value> {
-    history
-        .iter()
-        .map(|item| match item {
-            Item::User { text } => json!({"type": "message", "role": "user",
-                "content": [{"type": "input_text", "text": text}]}),
-            Item::Assistant { text } => json!({"type": "message", "role": "assistant",
-                "content": [{"type": "output_text", "text": text}]}),
-            Item::ToolCall {
-                call_id,
-                name,
-                args,
-            } => json!({"type": "function_call", "call_id": call_id,
-                "name": name, "arguments": args.to_string()}),
-            Item::ToolOutput {
-                call_id, output, ..
-            } => json!({"type": "function_call_output", "call_id": call_id, "output": output}),
-        })
-        .collect()
-}
-
-/// All request headers for a provider call: content type, wire-specific
-/// auth (x-api-key+anthropic-version vs Bearer), literal http_headers,
-/// env-backed headers. Returned as pairs so the async and blocking reqwest
-/// builders (distinct types) share one source of truth.
-fn request_headers(provider: &ModelProviderInfo, api_key: &str) -> Vec<(String, String)> {
-    let mut h: Vec<(String, String)> = vec![("Content-Type".into(), "application/json".into())];
-    match provider.wire_api {
-        WireApi::Messages => {
-            h.push(("x-api-key".into(), api_key.to_string()));
-            h.push(("anthropic-version".into(), "2023-06-01".into()));
-        }
-        _ => h.push(("Authorization".into(), format!("Bearer {}", api_key))),
-    }
-    if let Some(hh) = &provider.http_headers {
-        for (k, v) in hh {
-            h.push((k.clone(), v.clone()));
-        }
-    }
-    if let Some(eh) = &provider.env_http_headers {
-        for (k, var) in eh {
-            if let Ok(v) = std::env::var(var) {
-                if !v.is_empty() {
-                    h.push((k.clone(), v));
-                }
-            }
-        }
-    }
-    h
+    req
 }
 
 /// Compute the full URL for a provider's request endpoint.
@@ -602,42 +486,6 @@ pub fn endpoint_for(provider: &ModelProviderInfo) -> String {
         WireApi::ChatCompletions => format!("{}/chat/completions", base),
         WireApi::Messages => format!("{}/messages", base),
     }
-}
-
-// ---------- request body builders ----------
-
-/// OpenAI Responses API. `instructions` is the system role; `input` is
-/// a single user turn as a string.
-fn build_responses_body(model: &str, system: Option<&str>, user: &str) -> Value {
-    json!({
-        "model": model,
-        "instructions": system.unwrap_or(""),
-        "input": user,
-    })
-}
-
-/// OpenAI Chat Completions API. system -> system message.
-fn build_chat_body(model: &str, system: Option<&str>, user: &str) -> Value {
-    let mut messages = Vec::new();
-    if let Some(s) = system {
-        messages.push(json!({ "role": "system", "content": s }));
-    }
-    messages.push(json!({ "role": "user", "content": user }));
-    json!({
-        "model": model,
-        "messages": messages,
-    })
-}
-
-/// Anthropic Messages API. system is top-level (not a message); max_tokens
-/// is required.
-fn build_messages_body(model: &str, system: Option<&str>, user: &str) -> Value {
-    json!({
-        "model": model,
-        "system": system.unwrap_or(""),
-        "max_tokens": DEFAULT_MAX_TOKENS,
-        "messages": [{"role": "user", "content": user}],
-    })
 }
 
 #[cfg(test)]
@@ -811,5 +659,26 @@ mod turn_tests {
     fn bad_args_become_empty_object_not_panic() {
         assert_eq!(parse_args("{broken"), json!({}));
         assert_eq!(parse_args(""), json!({}));
+    }
+
+    #[test]
+    fn a_call_carries_the_providers_query_params_and_auth() {
+        let p = ModelProviderInfo {
+            base_url: "https://x.openai.azure.com/openai".into(),
+            wire_api: WireApi::ChatCompletions,
+            query_params: Some(std::collections::HashMap::from([(
+                "api-version".into(),
+                "2025-01-01".into(),
+            )])),
+            ..Default::default()
+        };
+        let req = request(&reqwest::blocking::Client::new(), &p, "k")
+            .build()
+            .unwrap();
+        assert_eq!(
+            req.url().as_str(),
+            "https://x.openai.azure.com/openai/chat/completions?api-version=2025-01-01"
+        );
+        assert_eq!(req.headers()["authorization"], "Bearer k");
     }
 }
