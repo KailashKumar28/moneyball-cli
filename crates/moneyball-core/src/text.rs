@@ -147,6 +147,15 @@ pub fn table(headers: &[&str], rows: &[Vec<String>]) -> String {
     out
 }
 
+/// A path under the home directory as `~/...`; anything else in full.
+pub fn tilde(path: &std::path::Path) -> String {
+    match crate::config::home_dir().and_then(|h| path.strip_prefix(h).ok().map(|r| r.to_path_buf()))
+    {
+        Some(rest) => format!("~/{}", rest.display()),
+        None => path.display().to_string(),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

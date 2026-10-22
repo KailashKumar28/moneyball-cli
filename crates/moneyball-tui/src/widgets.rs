@@ -177,15 +177,7 @@ pub fn fix_does(fix: &str) -> &'static str {
     }
 }
 
-/// A path as the user would write it: under home, "~/...".
-pub fn tilde(path: &std::path::Path) -> String {
-    match moneyball_core::config::home_dir()
-        .and_then(|h| path.strip_prefix(h).ok().map(|r| r.to_path_buf()))
-    {
-        Some(rest) => format!("~/{}", rest.display()),
-        None => path.display().to_string(),
-    }
-}
+pub use moneyball_core::text::tilde;
 
 /// A paragraph of styled runs that word-wraps to the width it is drawn
 /// at: `indent` columns lead the first line, `hang` the rest. Spaces

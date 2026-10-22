@@ -112,7 +112,7 @@ fn day(cfg: &AppConfig, date: NaiveDate, scheduled_since: Option<NaiveDate>) -> 
                 "missed: the scheduled run never started".into(),
                 Tone::Missed,
             ),
-            _ => ("missed: nothing scheduled yet".into(), Tone::Missed),
+            _ => ("missed: no schedule yet".into(), Tone::Missed),
         },
     };
     Day {
@@ -302,7 +302,7 @@ pub fn footer(cfg: &AppConfig, days: &[Day], shell: bool) -> Vec<(&'static str, 
             "access",
             format!("{}  \u{00B7}  {}", pull("Meta", "meta"), crm),
         ),
-        ("records", cfg.runs_dir().display().to_string()),
+        ("records", crate::text::tilde(&cfg.runs_dir())),
     ]
 }
 

@@ -260,7 +260,7 @@ const FRAMES = [
 		note: '<b>Every day, what came in and what didn\'t,</b> with missed days as rows, the schedule, and token health.',
 		details: { 'How it\'s built': ['One row per runs/<date>.json; days with no record are "missed"', 'Token line: Meta expiry from debug_token (decision 6); LeadZump from the last pull'] },
 		pins: [
-			['content', '~missed: nothing scheduled yet', 'Missed', 'Gaps are rows, never silence.'],
+			['content', '~missed: no schedule yet', 'Missed', 'Gaps are rows, never silence.'],
 			['content', '~Meta valid to 19 Nov', 'Token health', 'Expiry before it bites.'],
 		] },
 

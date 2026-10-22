@@ -121,8 +121,8 @@ ${tool(OK, 'status')}
 [dim]       data for     Meta   CRM    leads  report    ran[/]
 [gray]       Thu 08 Oct   [/][green]ok[/][gray]     [/][green]ok[/][gray]     [/][green]ok[/][gray]     [/][green]ok[/][gray]        Fri 07:30 scheduled, 1m 18s[/]
 [gray]       Wed 07 Oct   [/][green]ok[/][gray]     [/][green]ok[/][gray]     [/][green]ok[/][gray]     [/][green]ok[/][gray]        Thu 07:31 manual, 1m 21s[/]
-[gray]       Tue 06 Oct   [/][dim]--     --     --     --        missed: nothing scheduled yet[/]
-[gray]       Mon 05 Oct   [/][dim]--     --     --     --        missed: nothing scheduled yet[/]
+[gray]       Tue 06 Oct   [/][dim]--     --     --     --        missed: no schedule yet[/]
+[gray]       Mon 05 Oct   [/][dim]--     --     --     --        missed: no schedule yet[/]
 [dim]       ... 7 more missed days, 28 Sep to 04 Oct[/]
 [gray]       Sun 27 Sep   [/][green]ok[/][gray]     [/][red]none[/][gray]   [/][green]ok[/][gray]     [/][yellow]no CRM[/][gray]    Mon 23:41 manual: Meta only, crm fetch never ran[/]
 
