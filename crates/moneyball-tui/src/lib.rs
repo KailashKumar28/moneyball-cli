@@ -2,6 +2,7 @@
 //! completion, and first-run setup wizard.
 
 mod agent_tools;
+mod agent_turn;
 mod app;
 mod brief_flow;
 pub mod chat;

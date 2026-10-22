@@ -1,7 +1,7 @@
 //! /funnel flow - product resolution, funnel table cell, and the LLM
 //! commentary hand-off. Split from commands.rs (size cap).
 
-use crate::commands::{app_state_block, call_agent, typed_tool_turn, FUNNEL_SYSTEM_PROMPT};
+use crate::agent_turn::{app_state_block, call_agent, typed_tool_turn, FUNNEL_SYSTEM_PROMPT};
 use crate::*;
 use moneyball_core::funnel::{self, By};
 

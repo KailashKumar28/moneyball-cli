@@ -2,7 +2,7 @@
 //! advisor's reading of them. The agent's `diagnose` tool returns the
 //! same text.
 
-use crate::commands::{app_state_block, call_agent, typed_tool_turn};
+use crate::agent_turn::{app_state_block, call_agent, typed_tool_turn};
 use crate::*;
 use moneyball_core::diagnose;
 

@@ -234,9 +234,9 @@ bottom after a release-sized batch.)
       needs the person's earlier submissions), no time_created window.
 
 - [ ] **Audit package G remainder** (structure P1/P2s from the 2026-07
-      architecture audit): split `submit()` and bring commands.rs (485)
-      / llm.rs (684) / agent.rs (586) / chat.rs (460) / crm/fetch.rs
-      (489) / crm/mod.rs (434) under the 400-line cap; remaining P2 hygiene (ASCII strings, busy
+      architecture audit): bring llm.rs (684) / agent.rs (586) / chat.rs
+      (460) / crm/fetch.rs (489) / crm/mod.rs (434) under the 400-line
+      cap; remaining P2 hygiene (ASCII strings, busy
       indicator, IST vs Local snapshot dating, query_params support,
       usage/cost parsing, render examples for new cells). Done since:
       the CRM connect flow moved into core behind a Prompter
@@ -247,7 +247,9 @@ bottom after a release-sized batch.)
       `Client`, `moneyball/config.json` or `~/.moneyball/reports/`
       (2026-10-10); event.rs 716 -> 301 (stream_drain.rs, its tests
       beside it) and setup/mod.rs 658 -> 194 (keys.rs, steps.rs,
-      render_meta.rs) (2026-10-22).
+      render_meta.rs), commands.rs 485 -> 285 with submit() a 91-line
+      dispatcher (agent_turn.rs, named fns for /setup /snapshot /clear
+      /help) (2026-10-22).
 
 - [x] **/brief and /funnel open as tool rounds** (2026-10-09): the turn
       is the typed command, the tool call it stands for and that tool's
