@@ -9,10 +9,20 @@ use moneyball_core::refresh::{self, Options};
 use moneyball_core::schema::{Outcome, StepStatus, Trigger};
 use moneyball_core::AppConfig;
 
+/// A line to stdout that a closed stdout cannot stop: println! panics on
+/// a broken pipe (`moneyball refresh | head`), which killed the refresh
+/// mid-pull and left its run record "running".
+macro_rules! say {
+    ($($arg:tt)*) => {{
+        use std::io::Write as _;
+        let _ = writeln!(std::io::stdout(), $($arg)*);
+    }};
+}
+
 pub(crate) fn run(cfg: &AppConfig, force: bool, days: u32, scheduled: bool) -> Result<()> {
     let token = moneyball_core::secrets::load_meta_token();
     if !cfg.agent {
-        println!(
+        say!(
             "refresh for {}  (workspace {})",
             refresh::data_day_label(),
             cfg.data_root.display()
@@ -34,13 +44,13 @@ pub(crate) fn run(cfg: &AppConfig, force: bool, days: u32, scheduled: bool) -> R
         if let refresh::Progress::Done(step) = p {
             n += 1;
             if !agent {
-                println!("{}", refresh::step_line(n, step));
+                say!("{}", refresh::step_line(n, step));
             }
         }
     })?;
 
     if agent {
-        println!("{}", serde_json::to_string(&run)?);
+        say!("{}", serde_json::to_string(&run)?);
     } else {
         let failed: Vec<&str> = run
             .steps
@@ -60,19 +70,19 @@ pub(crate) fn run(cfg: &AppConfig, force: bool, days: u32, scheduled: bool) -> R
                 failed.join(", ")
             ),
         };
-        println!("outcome: {}", outcome);
+        say!("outcome: {}", outcome);
         for step in &run.steps {
             if let Some(fix) = &step.fix {
-                println!(
+                say!(
                     "fix: {}   then: moneyball refresh",
                     moneyball_core::connections::fix_in_shell(fix)
                 );
             }
         }
         if let Some(report) = run.artifacts.get("report") {
-            println!("report: {}", report);
+            say!("report: {}", report);
         }
-        println!(
+        say!(
             "run record: {}",
             cfg.runs_dir().join(format!("{}.json", run.date)).display()
         );
