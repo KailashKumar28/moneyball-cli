@@ -192,7 +192,7 @@ pub(crate) fn unstored_secrets(cfg: &AppConfig, request: Option<&RequestSpec>) -
 }
 
 /// The last pull's CRM step, when the CRM refused its key.
-fn refused_on_last_pull(cfg: &AppConfig) -> Option<crate::schema::RunStep> {
+pub(crate) fn refused_on_last_pull(cfg: &AppConfig) -> Option<crate::schema::RunStep> {
     crate::runs::latest(cfg)?
         .steps
         .into_iter()

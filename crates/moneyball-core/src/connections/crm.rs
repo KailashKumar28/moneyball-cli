@@ -65,11 +65,18 @@ fn preset(cfg: &AppConfig, ws: &str, c: &presets::Preset, p: &mut dyn Prompter) 
         // Re-runs (e.g. after fixing a stage map) keep the stored
         // credential on an empty answer instead of re-demanding it.
         let stored = crate::secrets::load_crm_key(Some(ws), &c.secret_name(s)).is_some();
+        // A key the CRM refused on the last pull: keeping it changes nothing.
+        let refused = crate::crm::status::refused_on_last_pull(cfg)
+            .and_then(|step| step.fix)
+            .is_some_and(|fix| fix.contains(&c.secret_name(s)));
         p.show(&format!("{}: {}", s.label, s.help));
-        let prompt = if stored {
-            format!("{} [enter keeps the stored one]: ", s.label)
-        } else {
-            format!("{}: ", s.label)
+        let prompt = match (stored, refused) {
+            (true, true) => format!(
+                "{} [the stored one was refused on the last pull - paste a fresh one]: ",
+                s.label
+            ),
+            (true, false) => format!("{} [enter keeps the stored one]: ", s.label),
+            (false, _) => format!("{}: ", s.label),
         };
         let v = answer!(p, prompt, true);
         if v.is_empty() {
