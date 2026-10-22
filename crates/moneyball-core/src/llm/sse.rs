@@ -193,8 +193,10 @@ pub(super) fn parse_args(s: &str) -> Value {
 /// The usage an event reports, into `u`. Messages: message_start and
 /// message_delta both may carry it (Anthropic puts input in the first,
 /// MiniMax in the second; output is cumulative) - input counts cache
-/// reads and writes. Chat Completions: a last chunk, when asked for
-/// (stream_options.include_usage). Responses: response.completed.
+/// reads and writes. Chat Completions: a last chunk, from servers that
+/// send it unasked (asking with stream_options fails on strict ones, and
+/// in moneyball this wire is Ollama and custom providers). Responses:
+/// response.completed.
 pub(super) fn usage_in(wire: WireApi, v: &Value, u: &mut Usage) {
     let n = |ptr: &str| v.pointer(ptr).and_then(Value::as_u64).unwrap_or(0);
     let at = match (wire, v.get("type").and_then(Value::as_str)) {

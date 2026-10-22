@@ -183,8 +183,6 @@ pub fn stream_turn(
                 "type": "function",
                 "function": {"name": t.name, "description": t.description, "parameters": t.parameters}
             })).collect::<Vec<_>>(),
-            // Usage arrives only when asked for, in a last chunk.
-            "stream_options": {"include_usage": true},
         }),
         WireApi::Responses => json!({
             "model": model,
