@@ -14,7 +14,8 @@ use moneyball_core::AppConfig;
 #[derive(Parser, Debug)]
 #[command(name = "moneyball", version, about = "Read-only Meta-ads advisor CLI")]
 struct Cli {
-    /// Path to the data workspace (sibling fin_campaign_analysis/ by default).
+    /// Path to the data workspace (default: the current directory when it
+    /// holds one, else the one setup saved).
     #[arg(long, global = true)]
     data_root: Option<String>,
 
@@ -40,7 +41,7 @@ struct Cli {
 
 #[derive(Subcommand, Debug)]
 enum Cmd {
-    /// Start the interactive REPL (default if no sub-command).
+    /// Open the moneyball app (what plain `moneyball` does).
     Repl,
     /// 7-day portfolio brief - per-product summary + feasibility math.
     Brief {
@@ -52,7 +53,8 @@ enum Cmd {
         #[arg(long)]
         check: bool,
     },
-    /// Pull daily ad insights from Meta and write today's snapshot.
+    /// Pull today's Meta snapshot only - no CRM, no report (refresh is the
+    /// daily path).
     Fetch {
         /// How many trailing days of daily rows to pull (ending yesterday).
         #[arg(long, default_value_t = 28)]
@@ -75,13 +77,14 @@ enum Cmd {
         /// Product name (as configured in the workspace).
         product: String,
     },
-    /// Connect CRM data - print the crm.json contract, validate an export.
+    /// The CRM: its status, connecting one, pulling or importing leads,
+    /// checking a crm.json against the contract.
     Crm {
         #[command(subcommand)]
         cmd: crm_cli::CrmCmd,
     },
-    /// Compute the creative report from a snapshot (no network):
-    /// per-creative delivery + CRM funnel, written as report.json.
+    /// Build the daily report from a snapshot, no network: report.json and
+    /// the HTML page beside it.
     Report {
         /// Snapshot date YYYY-MM-DD (default: latest).
         #[arg(long)]
@@ -122,8 +125,8 @@ enum Cmd {
         #[command(subcommand)]
         what: Option<connect_cli::Connect>,
     },
-    /// Dump a saved session transcript with an invariant audit; file,
-    /// review, and archive bug reports (see debug_cli.rs).
+    /// Saved sessions: replay one with an audit of its invariants; file,
+    /// list and archive bug reports.
     Debug(debug_cli::DebugArgs),
 }
 

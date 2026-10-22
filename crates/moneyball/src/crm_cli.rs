@@ -25,8 +25,9 @@ pub(crate) enum CrmCmd {
         #[arg(long, default_value_t = 28)]
         days: u32,
     },
-    /// Guided setup: probe your CRM, let the LLM draft crm.toml once,
-    /// validate against a live sample, save on your approval.
+    /// Guided setup: pick a listed CRM and give its keys, or paste any
+    /// CRM's curl and let the model draft crm.toml; a live test pull gates
+    /// the save (same as `moneyball connect crm`).
     Connect,
     /// Import a CSV lead export through the crm.toml [map] (column names).
     Import {
