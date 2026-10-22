@@ -69,6 +69,8 @@ pub struct App {
     /// name, started). Set on ToolBegin, taken on ToolEnd so the
     /// result cell carries the real name and elapsed time.
     pub running_tool: Option<(String, String, std::time::Instant)>,
+    /// When the turn in flight started (meaningful while turn_active).
+    pub turn_started: std::time::Instant,
     /// Live worker events, drained by the event loop each tick.
     /// `Some` while a turn or /report is in flight.
     pub stream: Option<std::sync::mpsc::Receiver<StreamEvent>>,
@@ -196,6 +198,7 @@ impl App {
             cancel: Arc::new(AtomicBool::new(false)),
             turn_active: false,
             running_tool: None,
+            turn_started: std::time::Instant::now(),
             stream: None,
         }
     }

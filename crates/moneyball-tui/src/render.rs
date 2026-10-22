@@ -61,7 +61,9 @@ fn render_chat_view(f: &mut ratatui::Frame, area: Rect, app: &App) {
     // While a refresh runs (and nothing else needs the line) the status
     // row says which step it is on - the cell may have scrolled away.
     let busy = app.refresh.as_ref().map(|j| j.step);
-    let status_h: u16 = if app.status.is_some() || busy.is_some() {
+    // A turn in flight says so, and for how long (codex's "Working").
+    let turn = app.turn_active.then(|| app.turn_started.elapsed());
+    let status_h: u16 = if app.status.is_some() || busy.is_some() || turn.is_some() {
         1
     } else {
         0
@@ -217,6 +219,8 @@ fn render_chat_view(f: &mut ratatui::Frame, area: Rect, app: &App) {
         "  \u{2191}\u{2193} choose  \u{00B7}  \u{21B5} run  \u{00B7}  \u{21E5} complete  \u{00B7}  esc clear"
     } else if asking.is_some() {
         "  \u{21B5} answer  \u{00B7}  esc cancel the connect"
+    } else if turn.is_some() {
+        "  esc interrupt the answer  \u{00B7}  \u{2191}\u{2193} scroll"
     } else if busy.is_some() && app.input.is_empty() && !app.turn_active && app.stream.is_none() {
         "  esc cancel refresh (after the current step)  \u{00B7}  other commands still work"
     } else {
@@ -230,12 +234,13 @@ fn render_chat_view(f: &mut ratatui::Frame, area: Rect, app: &App) {
 
     // 6. Status hint (when something notable happened)
     if status_h > 0 {
-        let line = match (&app.status, busy) {
-            (Some(msg), _) => Line::from(Span::styled(
+        let line = match (&app.status, turn, busy) {
+            (Some(msg), ..) => Line::from(Span::styled(
                 format!("  {}", msg),
                 Style::default().fg(Color::Yellow),
             )),
-            (None, Some(step)) => Line::from(vec![
+            (None, Some(elapsed), _) => working(app, elapsed),
+            (None, None, Some(step)) => Line::from(vec![
                 Span::styled(
                     format!("  {}", crate::widgets::LOAD),
                     Style::default().fg(Color::Cyan),
@@ -249,10 +254,29 @@ fn render_chat_view(f: &mut ratatui::Frame, area: Rect, app: &App) {
                     Style::default().fg(Color::DarkGray),
                 ),
             ]),
-            (None, None) => Line::from(""),
+            (None, None, None) => Line::from(""),
         };
         f.render_widget(Paragraph::new(line), chunks[status_idx]);
     }
+}
+
+/// "◐ working 4s  ·  running diagnose": the spinner turns each tick.
+fn working(app: &App, elapsed: std::time::Duration) -> Line<'static> {
+    const FRAMES: [&str; 4] = ["\u{25D0}", "\u{25D3}", "\u{25D1}", "\u{25D2}"];
+    let frame = FRAMES[(elapsed.as_millis() / 150) as usize % FRAMES.len()];
+    let tool = app
+        .running_tool
+        .as_ref()
+        .map_or(String::new(), |(_, name, _)| {
+            format!("  \u{00B7}  running {}", name)
+        });
+    Line::from(vec![
+        Span::styled(format!("  {}", frame), Style::default().fg(Color::Cyan)),
+        Span::styled(
+            format!(" working {}s{}", elapsed.as_secs(), tool),
+            Style::default().fg(Color::DarkGray),
+        ),
+    ])
 }
 
 fn sep_str(width: usize) -> String {

@@ -234,9 +234,10 @@ bottom after a release-sized batch.)
       needs the person's earlier submissions), no time_created window.
 
 - [ ] **Audit package G remainder** (structure P1/P2s from the 2026-07
-      architecture audit): remaining P2 hygiene (ASCII strings, busy
-      indicator, IST vs Local snapshot dating, usage/cost parsing,
-      render examples for new cells). Done since: every source file is
+      architecture audit): remaining P2 hygiene (IST vs Local snapshot dating, usage/cost
+      parsing, render examples for new cells; ASCII strings is enforced by
+      arch_contract). A turn in flight now shows "working Ns" with the
+      tool it is running, and the footer says esc interrupts (2026-10-22). Done since: every source file is
       under the 400-line cap and the frozen ceilings are gone (2026-10-22:
       event, setup, commands, chat, agent, llm, crm/fetch and crm/mod
       split along their seams, tests beside their modules); submit() is a
