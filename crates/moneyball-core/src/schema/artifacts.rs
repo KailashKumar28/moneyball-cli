@@ -1,5 +1,6 @@
 //! Snapshot-side artifact contracts: creatives.json, leads.json,
-//! crm_contacts.json, changes.json. See mod.rs for the versioning policy.
+//! crm_contacts.json, changes.json, ads_7d.json. See mod.rs for the
+//! versioning policy.
 
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -182,4 +183,30 @@ pub struct ChangeRow {
     pub old: Option<serde_json::Value>,
     #[serde(default)]
     pub new: Option<serde_json::Value>,
+}
+
+// ---------- ads_7d.json (snapshot artifact, written by /fetch) ----------
+
+/// `snap/<date>/ads_7d.json` - each ad's totals over the 7 days before
+/// the snapshot day, as Meta counts them across the week: reach is
+/// people, deduplicated, so frequency is how often each saw the ad -
+/// which daily rows cannot add up to.
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+pub struct Ads7dFile {
+    /// `moneyball.ads_7d/<major>`.
+    pub schema: String,
+    pub fetched_at: String,
+    /// The days covered, YYYY-MM-DD, both included.
+    pub since: String,
+    pub until: String,
+    pub rows: Vec<Ad7dRow>,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize, JsonSchema)]
+pub struct Ad7dRow {
+    pub ad_id: String,
+    pub reach: u64,
+    pub impressions: u64,
+    /// Impressions per person reached over the 7 days.
+    pub frequency: f64,
 }

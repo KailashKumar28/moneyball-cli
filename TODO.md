@@ -207,7 +207,11 @@ bottom after a release-sized batch.)
       mb.py's fixed 1% floor called every ad on this account "watch"),
       the last 7 days against the 21 before, and what changed in the ad
       account (new pull: act_X/activities -> changes.json,
-      moneyball.changes/1). moneyball diagnose, /diagnose (tool cell +
+      moneyball.changes/1). 2026-10-22: frequency is Meta's own 7-day
+      count per ad (new pull -> ads_7d.json, moneyball.ads_7d/1; daily
+      reach summed said 1.4 where Meta says 2.4); both new pulls cover
+      only that week and run the accounts in parallel (the 28-day change
+      log had added ~30s). moneyball diagnose, /diagnose (tool cell +
       advisor), and a diagnose tool the advisor must call before any
       kill. mb.py's geo-leak check is left out: Meta reports Indian
       delivery by state only (all Karnataka here), not the targeted

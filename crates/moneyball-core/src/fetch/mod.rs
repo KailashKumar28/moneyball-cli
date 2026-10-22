@@ -17,6 +17,7 @@ pub mod changes;
 pub mod creatives;
 pub mod leads;
 pub(crate) mod map;
+pub mod reach;
 
 use std::path::{Path, PathBuf};
 
@@ -56,6 +57,9 @@ pub struct FetchReport {
     /// The accounts' change log rows in changes.json.
     pub changes: usize,
     pub changes_error: Option<String>,
+    /// Ads with a 7-day reach and frequency in ads_7d.json.
+    pub ads_7d: usize,
+    pub ads_7d_error: Option<String>,
 }
 
 /// Pull `days` of per-ad daily insights for every configured product and
@@ -125,8 +129,10 @@ pub fn fetch_snapshot(cfg: &AppConfig, token: &str, days: u32) -> Result<FetchRe
         Err(e) => (0, Some(e.reason())),
     };
 
-    // The accounts' change log, for /diagnose. Best-effort.
-    let since_epoch = since
+    // The accounts' change log and each ad's week, for /diagnose: only
+    // the 7 days it reads. Best-effort.
+    let week_start = until - Duration::days(6);
+    let since_epoch = week_start
         .and_hms_opt(0, 0, 0)
         .and_then(|t| t.and_local_timezone(Local).earliest())
         .map_or(0, |t| t.timestamp());
@@ -137,10 +143,19 @@ pub fn fetch_snapshot(cfg: &AppConfig, token: &str, days: u32) -> Result<FetchRe
             Err(e) => (0, Some(e.reason())),
         };
 
+    let week = week_start.format("%Y-%m-%d").to_string();
+    let (ads_7d, ads_7d_error) =
+        match reach::fetch_and_write(&client, token, &distinct, (&week, &until_s), &path) {
+            Ok(got) => got,
+            Err(e) => (0, Some(e.reason())),
+        };
+
     Ok(FetchReport {
         date,
         changes: changes_n,
         changes_error,
+        ads_7d,
+        ads_7d_error,
         path,
         per_product,
         adsets: adsets_n,
@@ -194,6 +209,30 @@ pub(super) fn in_parallel<T: Sync, R: Send>(
         out[i] = Some(r);
     }
     out
+}
+
+/// The rows every account's pull gave, each mapped by `row`, and why
+/// the accounts that failed did (the others still land). Err when every
+/// account failed: then nothing was pulled.
+pub(super) fn per_account<R>(
+    accounts: &[&String],
+    pulled: Vec<Option<Result<Vec<serde_json::Value>>>>,
+    row: impl Fn(&str, &serde_json::Value) -> R,
+) -> Result<(Vec<R>, Option<String>)> {
+    let (mut rows, mut failed, mut first_err) = (Vec::new(), Vec::new(), None);
+    for (act, got) in accounts.iter().zip(pulled) {
+        match got.unwrap_or_else(|| Err(Error::Meta("its pull stopped unexpectedly".into()))) {
+            Ok(page) => rows.extend(page.iter().map(|e| row(act, e))),
+            Err(e) => {
+                failed.push(format!("{}: {}", act, e.reason()));
+                first_err.get_or_insert(e);
+            }
+        }
+    }
+    match first_err {
+        Some(e) if failed.len() == accounts.len() => Err(e),
+        _ => Ok((rows, (!failed.is_empty()).then(|| failed.join("; ")))),
+    }
 }
 
 /// Every product's rows, tagged with `_product`. One account failing marks
@@ -301,6 +340,30 @@ mod collect_tests {
             i * 2
         });
         assert_eq!(out, items.iter().map(|i| Some(i * 2)).collect::<Vec<_>>());
+    }
+
+    #[test]
+    fn per_account_keeps_what_landed_and_fails_only_when_nothing_did() {
+        let (a, b) = ("act_1".to_string(), "act_2".to_string());
+        let accounts = [&a, &b];
+        let got = |first: Result<Vec<serde_json::Value>>| {
+            per_account(
+                &accounts,
+                vec![Some(first), Some(Ok(vec![serde_json::json!(2)]))],
+                |act, v| format!("{}:{}", act, v),
+            )
+        };
+        let (rows, failed) = got(Err(Error::Meta("no access".into()))).unwrap();
+        assert_eq!(rows, vec!["act_2:2"]);
+        assert_eq!(failed.as_deref(), Some("act_1: no access"));
+        let (rows, failed) = got(Ok(vec![serde_json::json!(1)])).unwrap();
+        assert_eq!((rows.len(), failed), (2, None));
+        let both = per_account(
+            &accounts,
+            vec![Some(Err(Error::Meta("x".into()))), None],
+            |_, v| v.clone(),
+        );
+        assert!(both.is_err());
     }
 
     #[test]

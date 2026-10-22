@@ -14,7 +14,8 @@ use crate::schema::{ChangeRow, ChangesFile, CHANGES_SCHEMA};
 const FIELDS: &str =
     "event_type,translated_event_type,event_time,object_name,object_type,extra_data";
 
-/// Pull every account's log from `since` (epoch seconds) and write
+/// Pull every account's log from `since` (epoch seconds; the week
+/// /diagnose reads, not the whole fetch window) and write
 /// `<snap_dir>/changes.json`. Returns the row count and, when some
 /// account's log could not be read, why (the others still land). Err
 /// when no account's could, or the file cannot be written; the caller
@@ -27,8 +28,9 @@ pub fn fetch_and_write(
     snap_dir: &Path,
 ) -> Result<(usize, Option<String>)> {
     let since = since.to_string();
-    let (mut rows, mut failed) = (Vec::new(), Vec::new());
-    for act in accounts {
+    let accounts: Vec<&String> = accounts.iter().collect();
+    // Accounts at once: one account's log can take 15s to answer.
+    let pulled = super::in_parallel(&accounts, |act| {
         let first = client
             .get(format!("{}/{}/activities", super::META_GRAPH_BASE, act))
             .query(&[
@@ -37,12 +39,9 @@ pub fn fetch_and_write(
                 ("since", &since),
                 ("limit", "500"),
             ]);
-        match crate::meta::get_all(client, first, "the change log", crate::meta::PULL) {
-            Ok(log) => rows.extend(log.iter().map(|e| row_of(act, e))),
-            Err(e) if failed.len() + 1 == accounts.len() => return Err(e),
-            Err(e) => failed.push(format!("{}: {}", act, e.reason())),
-        }
-    }
+        crate::meta::get_all(client, first, "the change log", crate::meta::PULL)
+    });
+    let (mut rows, failed) = super::per_account(&accounts, pulled, row_of)?;
     // RFC3339 with one offset sorts as text.
     rows.sort_by(|a, b| b.time.cmp(&a.time));
     let file = ChangesFile {
@@ -53,10 +52,7 @@ pub fn fetch_and_write(
     let tmp = snap_dir.join("changes.json.tmp");
     std::fs::write(&tmp, serde_json::to_string_pretty(&file)?)?;
     std::fs::rename(&tmp, snap_dir.join("changes.json"))?;
-    Ok((
-        file.rows.len(),
-        (!failed.is_empty()).then(|| failed.join("; ")),
-    ))
+    Ok((file.rows.len(), failed))
 }
 
 fn row_of(account: &str, e: &Value) -> ChangeRow {

@@ -163,6 +163,7 @@ pub fn run(
                     ("leads", &f.leads_error),
                     ("adsets", &f.adsets_error),
                     ("changes", &f.changes_error),
+                    ("7-day reach", &f.ads_7d_error),
                 ]
                 .into_iter()
                 .filter_map(|(what, e)| e.as_ref().map(|e| format!("{}: {}", what, e)))

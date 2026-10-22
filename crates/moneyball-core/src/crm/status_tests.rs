@@ -69,6 +69,7 @@ fn crm_health_says_fetch_not_connect_when_connected() {
         crm_contacts: None,
         regions: serde_json::json!([]),
         changes: None,
+        ads_7d: None,
         campaigns: serde_json::json!([]),
     };
 

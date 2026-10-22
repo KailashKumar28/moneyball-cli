@@ -224,6 +224,10 @@ fn main() -> Result<()> {
                 None => println!("  account changes captured: {}", report.changes),
                 Some(e) => println!("  warn: account change log failed ({})", e),
             }
+            match &report.ads_7d_error {
+                None => println!("  7-day reach captured: {} ads", report.ads_7d),
+                Some(e) => println!("  warn: 7-day reach failed ({})", e),
+            }
             match &report.leads_error {
                 None => println!("  leads captured: {} (leads.json, 0600)", report.leads),
                 Some(e) => println!(

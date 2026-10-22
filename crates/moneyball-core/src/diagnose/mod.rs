@@ -15,7 +15,7 @@ use crate::schema::ChangeRow;
 use crate::snapshot::{AdsDailyRow, Snapshot};
 
 mod print;
-pub use print::text;
+pub use print::{run, text};
 
 /// The recent window, in complete days before the snapshot day.
 pub const RECENT_DAYS: i64 = 7;
@@ -75,7 +75,8 @@ pub struct AdRow {
     /// (when it had the impressions to say).
     pub ctr: Option<f64>,
     pub ctr_before: Option<f64>,
-    /// How many times a day each person reached saw it, on average.
+    /// How many times each person saw it over the 7 days, as Meta counts
+    /// the week (ads_7d.json); None in a snapshot without it.
     pub freq: Option<f64>,
     pub age_days: Option<i64>,
     pub call: Fatigue,
@@ -84,9 +85,9 @@ pub struct AdRow {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Fatigue {
     /// Clicked 30%+ less than in its own earlier days while each person
-    /// sees it twice a day or more.
+    /// saw it twice or more in the week.
     Fatigued,
-    /// Clicked 30%+ less than before, or seen three times a day or more.
+    /// Clicked 30%+ less than before, or seen three times or more.
     Watch,
     Ok,
     /// No impressions to judge by.
@@ -300,7 +301,6 @@ fn ads(snap: &Snapshot, rows: &[&AdsDailyRow], from: &str, day: NaiveDate) -> Ve
         m: u64,
         impressions: [u64; 2],
         clicks: [u64; 2],
-        reach: u64,
     }
     let mut by: HashMap<&str, Agg> = HashMap::new();
     for r in rows {
@@ -313,9 +313,14 @@ fn ads(snap: &Snapshot, rows: &[&AdsDailyRow], from: &str, day: NaiveDate) -> Ve
         if recent {
             a.spend += r.spend_num();
             a.m += crate::brief::count_m_leads(&r.actions);
-            a.reach += r.reach.trim().parse::<u64>().unwrap_or(0);
         }
     }
+    let week: HashMap<&str, f64> = snap
+        .ads_7d
+        .iter()
+        .flat_map(|w| &w.rows)
+        .map(|r| (r.ad_id.as_str(), r.frequency))
+        .collect();
     let created: HashMap<&str, &str> = snap
         .creatives
         .iter()
@@ -331,7 +336,7 @@ fn ads(snap: &Snapshot, rows: &[&AdsDailyRow], from: &str, day: NaiveDate) -> Ve
                     .then(|| a.clicks[i] as f64 / a.impressions[i] as f64 * 100.0)
             };
             let (ctr_shown, ctr_before) = (ctr(0, 0), ctr(1, MIN_IMPRESSIONS));
-            let freq = (a.reach > 0).then(|| a.impressions[0] as f64 / a.reach as f64);
+            let freq = week.get(id).copied();
             AdRow {
                 name: if a.name.is_empty() { id } else { a.name }.to_string(),
                 adset: a.adset.to_string(),
@@ -370,10 +375,6 @@ fn fatigue(ctr: Option<f64>, before: Option<f64>, freq: Option<f64>) -> Fatigue 
         return Fatigue::Unknown;
     };
     let fell = before.is_some_and(|b| ctr < 0.7 * b);
-    // ponytail: frequency here is impressions over summed DAILY reach (a
-    // daily average, 1.1-1.6 on this account), so "2+ a day" is rare and
-    // a falling CTR makes most calls; a true 7-day frequency needs 7-day
-    // reach (one insights GET per account with time_increment=all_days).
     let freq = freq.unwrap_or(0.0);
     if fell && freq >= 2.0 {
         Fatigue::Fatigued
@@ -382,18 +383,6 @@ fn fatigue(ctr: Option<f64>, before: Option<f64>, freq: Option<f64>) -> Fatigue 
     } else {
         Fatigue::Ok
     }
-}
-
-/// Headless runner: load the snapshot, diagnose, print.
-pub fn run(cfg: &AppConfig, product: &str, date: Option<&str>) -> crate::error::Result<()> {
-    let snap = crate::snapshot::load(&cfg.snap_for(date)?)?;
-    let product =
-        crate::product::resolve_configured(cfg, product).map_err(crate::error::Error::Config)?;
-    print!("{}", text(&compute(&snap, cfg, &product)));
-    if let Some(note) = crm::status::CrmHealth::of(cfg, &snap).note() {
-        println!("!! {}", note);
-    }
-    Ok(())
 }
 
 #[cfg(test)]

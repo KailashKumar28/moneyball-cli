@@ -1,0 +1,66 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Ads7dFile",
+  "description": "`snap/<date>/ads_7d.json` - each ad's totals over the 7 days before\nthe snapshot day, as Meta counts them across the week: reach is\npeople, deduplicated, so frequency is how often each saw the ad -\nwhich daily rows cannot add up to.",
+  "type": "object",
+  "properties": {
+    "fetched_at": {
+      "type": "string"
+    },
+    "rows": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/Ad7dRow"
+      }
+    },
+    "schema": {
+      "description": "`moneyball.ads_7d/<major>`.",
+      "type": "string"
+    },
+    "since": {
+      "description": "The days covered, YYYY-MM-DD, both included.",
+      "type": "string"
+    },
+    "until": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "schema",
+    "fetched_at",
+    "since",
+    "until",
+    "rows"
+  ],
+  "$defs": {
+    "Ad7dRow": {
+      "type": "object",
+      "properties": {
+        "ad_id": {
+          "type": "string"
+        },
+        "frequency": {
+          "description": "Impressions per person reached over the 7 days.",
+          "type": "number",
+          "format": "double"
+        },
+        "impressions": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "reach": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "ad_id",
+        "reach",
+        "impressions",
+        "frequency"
+      ]
+    }
+  }
+}

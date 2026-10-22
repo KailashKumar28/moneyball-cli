@@ -29,6 +29,7 @@ pub const LEADS_SCHEMA: &str = "moneyball.leads/1";
 pub const CRM_CONTACTS_SCHEMA: &str = "moneyball.crm_contacts/1";
 pub const RUN_SCHEMA: &str = "moneyball.run/1";
 pub const CHANGES_SCHEMA: &str = "moneyball.changes/1";
+pub const ADS_7D_SCHEMA: &str = "moneyball.ads_7d/1";
 
 #[cfg(test)]
 mod tests {

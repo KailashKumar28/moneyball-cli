@@ -125,7 +125,7 @@ fn ads(d: &Diagnosis) -> String {
         .collect();
     out.push_str(&table(
         &[
-            "ad", "ad set", "spend", "meta", "cpl", "ctr%", "was%", "freq/d", "age_d", "call",
+            "ad", "ad set", "spend", "meta", "cpl", "ctr%", "was%", "freq", "age_d", "call",
         ],
         &cells,
     ));
@@ -138,10 +138,10 @@ fn ads(d: &Diagnosis) -> String {
         ));
     }
     out.push_str(
-        "ctr% = link clicks per impression, was% = the ad's own before these days; freq/d = \
-         times a day each person saw it. fatigued = clicked 30%+ less than before while seen \
-         2+ times a day; watch = clicked 30%+ less, or seen 3+ times a day; age_d = days \
-         since it was made\n",
+        "ctr% = link clicks per impression, was% = the ad's own before these days; freq = \
+         times each person saw it in these 7 days (Meta's count). fatigued = clicked 30%+ \
+         less than before while seen 2+ times; watch = clicked 30%+ less, or seen 3+ times; \
+         age_d = days since it was made\n",
     );
     out
 }
@@ -320,4 +320,20 @@ fn logged_value(v: &Value, key: &str) -> Option<String> {
         }
         _ => None,
     }
+}
+
+/// Headless runner: load the snapshot, diagnose, print.
+pub fn run(
+    cfg: &crate::config::AppConfig,
+    product: &str,
+    date: Option<&str>,
+) -> crate::error::Result<()> {
+    let snap = crate::snapshot::load(&cfg.snap_for(date)?)?;
+    let product =
+        crate::product::resolve_configured(cfg, product).map_err(crate::error::Error::Config)?;
+    print!("{}", text(&super::compute(&snap, cfg, &product)));
+    if let Some(note) = crate::crm::status::CrmHealth::of(cfg, &snap).note() {
+        println!("!! {}", note);
+    }
+    Ok(())
 }

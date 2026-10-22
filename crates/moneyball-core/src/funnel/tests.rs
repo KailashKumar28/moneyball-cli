@@ -43,6 +43,7 @@ fn snap() -> Snapshot {
         crm,
         regions: json!([]),
         changes: None,
+        ads_7d: None,
         campaigns: json!([]),
     }
 }

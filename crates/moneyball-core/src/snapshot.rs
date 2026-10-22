@@ -16,6 +16,7 @@ pub const SNAPSHOT_FILES: &[&str] = &[
     "regions",
     "changes",
     "campaigns",
+    "ads_7d",
 ];
 
 /// A single ad's daily metrics. Mirrors the Fincity fetch shape; other
@@ -111,6 +112,8 @@ pub struct Snapshot {
     pub regions: serde_json::Value,
     /// The ad accounts' change log (changes.json), when captured.
     pub changes: Option<crate::schema::ChangesFile>,
+    /// Each ad's 7-day reach and frequency (ads_7d.json), when captured.
+    pub ads_7d: Option<crate::schema::Ads7dFile>,
     pub campaigns: serde_json::Value,
 }
 
@@ -164,6 +167,7 @@ pub fn load(snap_path: &Path) -> Result<Snapshot> {
     let mut crm_contacts = None;
     let mut regions = serde_json::Value::Array(vec![]);
     let mut changes = None;
+    let mut ads_7d = None;
     let mut campaigns = serde_json::Value::Array(vec![]);
     for name in SNAPSHOT_FILES {
         let f = snap_path.join(format!("{}.json", name));
@@ -198,6 +202,11 @@ pub fn load(snap_path: &Path) -> Result<Snapshot> {
                     .flatten()
             }
             "campaigns" => campaigns = v,
+            "ads_7d" => {
+                ads_7d = same_major(&v, crate::schema::ADS_7D_SCHEMA)
+                    .then(|| serde_json::from_value(v).ok())
+                    .flatten()
+            }
             _ => unreachable!(),
         }
     }
@@ -213,6 +222,7 @@ pub fn load(snap_path: &Path) -> Result<Snapshot> {
         regions,
         changes,
         campaigns,
+        ads_7d,
     })
 }
 

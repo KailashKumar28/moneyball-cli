@@ -11,7 +11,7 @@
 use std::path::{Path, PathBuf};
 
 use moneyball_core::schema::{
-    ChangesFile, CreativeReport, CreativesFile, CrmContactsFile, LeadsFile, RunRecord,
+    Ads7dFile, ChangesFile, CreativeReport, CreativesFile, CrmContactsFile, LeadsFile, RunRecord,
 };
 
 fn schemas_dir() -> PathBuf {
@@ -26,6 +26,7 @@ fn generated(name: &str) -> (PathBuf, String) {
         "crm_contacts.v1" => schemars::schema_for!(CrmContactsFile),
         "run.v1" => schemars::schema_for!(RunRecord),
         "changes.v1" => schemars::schema_for!(ChangesFile),
+        "ads_7d.v1" => schemars::schema_for!(Ads7dFile),
         _ => unreachable!(),
     };
     let json = serde_json::to_string_pretty(&schema).expect("schema serializes");
@@ -43,6 +44,7 @@ fn committed_schemas_match_the_structs() {
         "crm_contacts.v1",
         "run.v1",
         "changes.v1",
+        "ads_7d.v1",
     ] {
         let (path, json) = generated(name);
         if update {

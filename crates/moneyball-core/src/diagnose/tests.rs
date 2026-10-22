@@ -2,7 +2,7 @@
 //! log filter, and the text every surface prints.
 
 use super::*;
-use crate::schema::{ChangesFile, CHANGES_SCHEMA};
+use crate::schema::{Ad7dRow, Ads7dFile, ChangesFile, ADS_7D_SCHEMA, CHANGES_SCHEMA};
 use serde_json::json;
 use std::path::PathBuf;
 
@@ -82,6 +82,18 @@ fn snap(crm: serde_json::Value) -> Snapshot {
             ],
         }),
         campaigns: json!([]),
+        ads_7d: Some(Ads7dFile {
+            schema: ADS_7D_SCHEMA.into(),
+            fetched_at: String::new(),
+            since: "2026-09-22".into(),
+            until: "2026-09-28".into(),
+            rows: vec![Ad7dRow {
+                ad_id: "a1".into(),
+                reach: 2100,
+                impressions: 7000,
+                frequency: 3.3,
+            }],
+        }),
     }
 }
 

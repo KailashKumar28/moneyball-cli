@@ -24,6 +24,7 @@ fn snap_with_ads(ids: &[&str]) -> Snapshot {
         crm: Value::Object(Default::default()),
         regions: Value::Array(vec![]),
         changes: None,
+        ads_7d: None,
         campaigns: Value::Array(vec![]),
     }
 }
