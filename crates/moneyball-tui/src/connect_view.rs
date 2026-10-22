@@ -36,9 +36,11 @@ pub(crate) fn run_connect(app: &mut App) {
                 .run(format!("{} {:<11}", OK, word), fg(color))
                 .run(s.detail, gray()),
         );
+        // The fix starts under the name, not the detail: a command
+        // that wraps mid-way cannot be copied whole.
         if let Some(fix) = s.fix {
             paras.push(
-                Para::new(DETAIL_AT, DETAIL_AT + 6)
+                Para::new(6 + 10, 6 + 10 + 6)
                     .run("fix:  ", gray())
                     .run(fix.clone(), bold(Color::Cyan))
                     .run(format!("   {}", fix_does(&fix)), gray()),
