@@ -234,7 +234,7 @@ fn render_card(out: &mut String, rank: usize, pslug: &str, c: &CreativeCard, his
         ads,
         c.created
             .as_deref()
-            .map(|d| format!(" &middot; since {}", esc(d)))
+            .map(|d| format!(" &middot; since {}", esc(&day(d, "%d %b"))))
             .unwrap_or_default(),
         targeting_chips(c),
     );
@@ -338,6 +338,12 @@ pub(super) fn slug(s: &str) -> String {
 pub(super) use crate::text::commas;
 
 /// Rupee amount with the sign entity (authored Rust stays ASCII).
+/// A YYYY-MM-DD date in `fmt` ("%d %b" -> "18 Aug"); anything else as is.
+pub(super) fn day(iso: &str, fmt: &str) -> String {
+    chrono::NaiveDate::parse_from_str(iso, "%Y-%m-%d")
+        .map_or_else(|_| iso.to_string(), |d| d.format(fmt).to_string())
+}
+
 pub(super) fn rupees(v: f64) -> String {
     format!("&#8377;{}", commas(v.round().max(0.0) as u64))
 }

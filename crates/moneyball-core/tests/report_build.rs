@@ -445,8 +445,9 @@ fn crm_columns_sit_where_the_css_hides_them() {
     assert!(page.contains("Meta Ads only (no CRM data for this day)"));
     assert!(!page.contains("Meta Ads + your CRM"));
 
-    // template.html hides creative-table columns 9+, targeting 5-8,
-    // project 3+: those must be exactly the CRM ones, and only them.
+    // template.html hides creative-table columns 9+, targeting 5+ (the
+    // CRM ones and the verdict, which needs them), project 4+: those must
+    // be exactly those, and only them.
     let crm = |h: &str| {
         [
             "crm",
@@ -473,6 +474,6 @@ fn crm_columns_sit_where_the_css_hides_them() {
     assert_eq!(targeting[8], "verdict");
     let project = header_cells(&page, "ptable");
     if !project.is_empty() {
-        assert!(project[..2].iter().all(|h| !crm(h)) && project[2..].iter().all(|h| crm(h)));
+        assert!(project[..3].iter().all(|h| !crm(h)) && project[3..].iter().all(|h| crm(h)));
     }
 }

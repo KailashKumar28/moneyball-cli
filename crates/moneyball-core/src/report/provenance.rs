@@ -10,7 +10,7 @@ use crate::crm::status::CrmHealth;
 use crate::schema::CreativeReport;
 use crate::snapshot::Snapshot;
 
-use super::html::esc;
+use super::html::{day, esc};
 
 /// Fill `source.meta_fetched_at`, `crm_fetched_at` and `crm_status`.
 pub(super) fn stamp(
@@ -76,7 +76,10 @@ pub(super) fn freshness(
             "Meta Ads only (no CRM data for this day)"
         },
         prior
-            .map(|p| format!(" &middot; compared with {}", esc(&p.window.until)))
+            .map(|p| format!(
+                " &middot; compared with {}",
+                esc(&day(&p.window.until, "%a %d %b"))
+            ))
             .unwrap_or_else(|| format!(
                 " &middot; no comparable day in the last {}",
                 super::exec::PRIOR_DAYS

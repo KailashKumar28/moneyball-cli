@@ -204,10 +204,15 @@ pub(super) fn targeting_block(p: &ProductSection) -> String {
                     let _ = write!(facts, r#"<span class="fact">{}</span>"#, esc(f));
                 }
             }
-            if let Some(l) = sp.learning.as_deref() {
-                if l != "SUCCESS" {
-                    let _ = write!(facts, r#"<span class="fact">{}</span>"#, esc(l));
-                }
+            // Meta's learning states in the cards' words, not its codes.
+            let learning = match sp.learning.as_deref() {
+                Some("FAIL") => Some("learning limited"),
+                Some("LEARNING") => Some("learning"),
+                Some("SUCCESS") | None => None,
+                Some(other) => Some(other),
+            };
+            if let Some(l) = learning {
+                let _ = write!(facts, r#"<span class="fact">{}</span>"#, esc(l));
             }
         }
         let chips: String = t

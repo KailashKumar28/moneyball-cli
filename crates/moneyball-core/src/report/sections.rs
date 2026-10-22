@@ -36,10 +36,30 @@ pub(super) fn exec_brief(r: &CreativeReport) -> String {
             class,
             tagc,
             tag,
-            esc(&l.text)
+            marks(&esc(&l.text))
         );
     }
     out.push_str("</ul></div></section></div>");
+    out
+}
+
+/// Escaped brief text in the page's typography: the rupee sign for "Rs "
+/// before a number, an arrow for "->" (report.json keeps the plain text).
+fn marks(escaped: &str) -> String {
+    let arrows = escaped.replace(" -&gt; ", " &rarr; ");
+    let mut out = String::with_capacity(arrows.len());
+    let mut rest = arrows.as_str();
+    while let Some(at) = rest.find("Rs ") {
+        let (head, tail) = rest.split_at(at);
+        out.push_str(head);
+        let after = tail.strip_prefix("Rs ").unwrap_or(tail);
+        match after.starts_with(|c: char| c.is_ascii_digit()) {
+            true => out.push_str("&#8377;"),
+            false => out.push_str("Rs "),
+        }
+        rest = after;
+    }
+    out.push_str(rest);
     out
 }
 
@@ -100,7 +120,7 @@ fn delta_cell(cur: f64, prior: Option<f64>, money: bool, up_is_good: bool) -> St
     let good = (d > 0.0) == up_is_good;
     let class = if good { "up" } else { "down" };
     let val = if money {
-        format!("Rs {}", commas(mag))
+        rupees(mag as f64)
     } else {
         commas(mag)
     };
@@ -281,7 +301,7 @@ pub(super) fn glance(r: &CreativeReport) -> String {
         return String::new();
     }
     let mut out = String::from(
-        r#"<div class="ttable"><table class="ptable"><thead><tr><th>project</th><th>spend</th><th>crm leads</th><th>qualified</th><th>cost / qualified</th><th>missing</th></tr></thead><tbody>"#,
+        r#"<div class="ttable"><table class="ptable"><thead><tr><th>project</th><th>spend</th><th>meta leads</th><th>crm leads</th><th>qualified</th><th>cost / qualified</th><th>missing</th></tr></thead><tbody>"#,
     );
     for p in &r.products {
         let k = &p.kpis;
@@ -297,10 +317,11 @@ pub(super) fn glance(r: &CreativeReport) -> String {
             .unwrap_or_else(|| "-".into());
         let _ = write!(
             out,
-            r##"<tr><td class="nm"><a href="#p-{}">{}</a></td><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td{}>{}</td></tr>"##,
+            r##"<tr><td class="nm"><a href="#p-{}">{}</a></td><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td{}>{}</td></tr>"##,
             slug(&p.product),
             esc(&p.product),
             rupees(k.spend),
+            k.funnel.m_leads,
             k.funnel.l_leads,
             k.funnel.qualified,
             cpq,
@@ -314,4 +335,16 @@ pub(super) fn glance(r: &CreativeReport) -> String {
     }
     out.push_str("</tbody></table></div>");
     out
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn brief_text_gets_the_rupee_sign_and_arrow_only_before_numbers() {
+        let text = super::esc("Rs 101,159 across 4 projects -> 41 leads; Rs a word stays");
+        assert_eq!(
+            super::marks(&text),
+            "&#8377;101,159 across 4 projects &rarr; 41 leads; Rs a word stays"
+        );
+    }
 }

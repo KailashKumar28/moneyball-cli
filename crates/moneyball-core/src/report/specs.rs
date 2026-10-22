@@ -48,8 +48,13 @@ pub(super) fn specs_for(snap: &Snapshot, adset_ids: &[String]) -> Option<Targeti
                 .into_iter()
                 .flatten()
             {
+                // Meta gives ISO codes; "IN" on a chip reads as a word.
                 if let Some(n) = c.as_str() {
-                    names.push(n.to_string());
+                    names.push(if n == "IN" {
+                        "India".into()
+                    } else {
+                        n.to_string()
+                    });
                 }
             }
         }
