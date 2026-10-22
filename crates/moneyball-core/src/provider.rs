@@ -72,7 +72,12 @@ impl ModelProviderInfo {
     /// (`llm:<provider_id>`), falls back to the `env_key` env var.
     /// Returns `None` if neither source has a non-empty value.
     pub fn api_key(&self, provider_id: &str) -> Option<String> {
-        if let Some(k) = crate::secrets::load_llm_key(provider_id) {
+        self.key_or_env(crate::secrets::load_llm_key(provider_id))
+    }
+
+    /// The stored key when it is not blank, else the env_key variable's.
+    fn key_or_env(&self, stored: Option<String>) -> Option<String> {
+        if let Some(k) = stored {
             if !k.trim().is_empty() {
                 return Some(k);
             }
@@ -291,12 +296,13 @@ mod tests {
     }
 
     #[test]
-    fn api_key_falls_back_to_env_when_no_key_is_stored() {
+    fn a_stored_key_wins_and_a_blank_one_falls_back_to_env() {
+        // key_or_env, not api_key: tests never read the real auth.json.
         let mut p = ModelProviderInfo::openai();
         p.env_key = Some("MONEYBALL_TEST_NONEXISTENT_VAR_XYZ".into());
-        // No key was stored for "openai", so it must fall back
-        // to the env var - which is unset, so the result is None.
-        assert!(p.api_key("openai").is_none());
+        assert!(p.key_or_env(None).is_none());
+        assert!(p.key_or_env(Some("  ".into())).is_none());
+        assert_eq!(p.key_or_env(Some("sk-1".into())).as_deref(), Some("sk-1"));
     }
 
     #[test]
@@ -304,7 +310,7 @@ mod tests {
         std::env::set_var("MONEYBALL_TEST_PROVIDER_KEY", "sk-test-abc");
         let mut p = ModelProviderInfo::openai();
         p.env_key = Some("MONEYBALL_TEST_PROVIDER_KEY".into());
-        let k = p.api_key("openai");
+        let k = p.key_or_env(None);
         std::env::remove_var("MONEYBALL_TEST_PROVIDER_KEY");
         assert_eq!(k.as_deref(), Some("sk-test-abc"));
     }
