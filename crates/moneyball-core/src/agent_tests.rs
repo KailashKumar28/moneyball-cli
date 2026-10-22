@@ -49,10 +49,18 @@ fn loop_runs_tools_and_emits_items_as_they_complete() {
     let script = std::cell::RefCell::new(vec![
         TurnResponse {
             text: "answer".into(),
+            usage: Usage {
+                input: 300,
+                output: 20,
+            },
             ..Default::default()
         },
         TurnResponse {
             tool_calls: vec![call("c1", "brief")],
+            usage: Usage {
+                input: 200,
+                output: 10,
+            },
             ..Default::default()
         },
     ]);
@@ -67,6 +75,9 @@ fn loop_runs_tools_and_emits_items_as_they_complete() {
         &tx,
     );
     let evs = drain(rx);
+    // The turn's size: the last call's context, both calls' output.
+    assert!(matches!(evs.last(), Some(Ev::TurnComplete { usage, .. })
+            if *usage == Usage { input: 300, output: 30 }));
     // Items emitted in order, each the moment it completed.
     let items: Vec<&Item> = evs
         .iter()

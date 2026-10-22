@@ -183,6 +183,8 @@ pub fn stream_turn(
                 "type": "function",
                 "function": {"name": t.name, "description": t.description, "parameters": t.parameters}
             })).collect::<Vec<_>>(),
+            // Usage arrives only when asked for, in a last chunk.
+            "stream_options": {"include_usage": true},
         }),
         WireApi::Responses => json!({
             "model": model,
@@ -253,6 +255,7 @@ pub fn stream_turn(
             }
         }
         acc.feed(provider.wire_api, &v);
+        usage_in(provider.wire_api, &v, &mut out.usage);
     }
     out.tool_calls = acc.finish();
     // Empty and terminal-less = a failure dressed as success (200 with

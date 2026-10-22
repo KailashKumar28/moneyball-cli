@@ -92,6 +92,66 @@ fn status_error_keeps_llm_auth_contract() {
     ));
 }
 
+#[test]
+fn each_wire_reports_its_usage() {
+    use crate::agent::Usage;
+    let mut u = Usage::default();
+    for ev in [
+        json!({"type": "message_start", "message": {"usage": {"input_tokens": 100, "cache_read_input_tokens": 900}}}),
+        json!({"type": "message_delta", "usage": {"output_tokens": 42}}),
+    ] {
+        usage_in(WireApi::Messages, &ev, &mut u);
+    }
+    assert_eq!(
+        u,
+        Usage {
+            input: 1000,
+            output: 42
+        }
+    );
+    // MiniMax: input arrives with the delta, cache reads too.
+    let mut u = Usage::default();
+    for ev in [
+        json!({"type": "message_start", "message": {"usage": {"input_tokens": 0, "output_tokens": 0}}}),
+        json!({"type": "message_delta", "usage": {"input_tokens": 46, "output_tokens": 5, "cache_read_input_tokens": 128}}),
+    ] {
+        usage_in(WireApi::Messages, &ev, &mut u);
+    }
+    assert_eq!(
+        u,
+        Usage {
+            input: 174,
+            output: 5
+        }
+    );
+    let mut u = Usage::default();
+    usage_in(
+        WireApi::ChatCompletions,
+        &json!({"choices": [], "usage": {"prompt_tokens": 7, "completion_tokens": 3}}),
+        &mut u,
+    );
+    assert_eq!(
+        u,
+        Usage {
+            input: 7,
+            output: 3
+        }
+    );
+    let mut u = Usage::default();
+    usage_in(
+        WireApi::Responses,
+        &json!({"type": "response.completed", "response": {"usage": {"input_tokens": 5, "output_tokens": 1}}}),
+        &mut u,
+    );
+    assert_eq!(
+        u,
+        Usage {
+            input: 5,
+            output: 1
+        }
+    );
+}
+
 mod turn_tests {
     use super::*;
 

@@ -4,6 +4,7 @@
 
 use serde_json::{json, Value};
 
+use crate::agent::Usage;
 use crate::provider::WireApi;
 use crate::tools::ToolCall;
 
@@ -187,4 +188,38 @@ pub(super) fn parse_args(s: &str) -> Value {
         return json!({});
     }
     serde_json::from_str(s).unwrap_or_else(|_| json!({}))
+}
+
+/// The usage an event reports, into `u`. Messages: message_start and
+/// message_delta both may carry it (Anthropic puts input in the first,
+/// MiniMax in the second; output is cumulative) - input counts cache
+/// reads and writes. Chat Completions: a last chunk, when asked for
+/// (stream_options.include_usage). Responses: response.completed.
+pub(super) fn usage_in(wire: WireApi, v: &Value, u: &mut Usage) {
+    let n = |ptr: &str| v.pointer(ptr).and_then(Value::as_u64).unwrap_or(0);
+    let at = match (wire, v.get("type").and_then(Value::as_str)) {
+        (WireApi::Messages, Some("message_start")) => "/message/usage",
+        (WireApi::Messages, Some("message_delta")) => "/usage",
+        (WireApi::ChatCompletions, _) if v.pointer("/usage/prompt_tokens").is_some() => {
+            u.input = n("/usage/prompt_tokens");
+            u.output = n("/usage/completion_tokens");
+            return;
+        }
+        (WireApi::Responses, Some("response.completed")) => {
+            u.input = n("/response/usage/input_tokens");
+            u.output = n("/response/usage/output_tokens");
+            return;
+        }
+        _ => return,
+    };
+    let field = |name: &str| n(&format!("{}/{}", at, name));
+    let input = field("input_tokens")
+        + field("cache_read_input_tokens")
+        + field("cache_creation_input_tokens");
+    if input > 0 {
+        u.input = input;
+    }
+    if field("output_tokens") > 0 {
+        u.output = field("output_tokens");
+    }
 }

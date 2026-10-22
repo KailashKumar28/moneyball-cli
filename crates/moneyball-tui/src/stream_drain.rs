@@ -68,11 +68,28 @@ pub(crate) fn drain(app: &mut App) {
                         // loses at most the item in flight.
                         app.record(item);
                     }
-                    Ev::TurnComplete { ms, provider } => {
+                    Ev::TurnComplete {
+                        ms,
+                        provider,
+                        usage,
+                    } => {
                         app.chat.finish_streaming();
-                        // Latency/provider is status metadata, never
-                        // part of the persisted message text.
-                        app.status = Some(format!("{}ms via {}", ms, provider));
+                        // Latency, size and provider are status metadata,
+                        // never part of the persisted message text.
+                        let size = match usage.input + usage.output {
+                            0 => String::new(),
+                            _ => format!(
+                                "  \u{00B7}  context {} tokens, {} out",
+                                moneyball_core::text::commas(usage.input),
+                                moneyball_core::text::commas(usage.output)
+                            ),
+                        };
+                        app.status = Some(format!(
+                            "{:.1}s{}  \u{00B7}  via {}",
+                            ms as f64 / 1000.0,
+                            size,
+                            provider
+                        ));
                         app.turn_active = false;
                         app.stream = None;
                         return;

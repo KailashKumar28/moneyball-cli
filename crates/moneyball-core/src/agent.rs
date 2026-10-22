@@ -64,10 +64,12 @@ pub enum Ev {
     /// One transcript item is final - record it (history + session
     /// JSONL) immediately.
     ItemDone(Item),
-    /// Turn ended normally.
+    /// Turn ended normally. `usage`: what its last call read (the
+    /// context as it now stands) and everything its calls wrote.
     TurnComplete {
         ms: u64,
         provider: String,
+        usage: Usage,
     },
     /// User interrupted (cancel flag). A <turn_aborted> marker item
     /// has already been emitted via ItemDone.
@@ -211,6 +213,7 @@ fn run_turn_with(
     // can appear - each ToolCall is answered inline or the loop
     // returns - so once is enough.
     heal_history(&mut history);
+    let mut usage = Usage::default();
     loop {
         let resp = stream(&history, &mut |d| {
             let _ = tx.send(Ev::AssistantDelta(d.to_string()));
@@ -233,6 +236,12 @@ fn run_turn_with(
                 }
                 return;
             }
+        };
+        // Each call re-reads the whole history: the last one's input is
+        // the context's size, not their sum.
+        usage = Usage {
+            input: resp.usage.input,
+            output: usage.output + resp.usage.output,
         };
         let mut text = resp.text;
         if resp.truncated && resp.tool_calls.is_empty() {
@@ -288,6 +297,7 @@ fn run_turn_with(
             let _ = tx.send(Ev::TurnComplete {
                 ms: started.elapsed().as_millis() as u64,
                 provider: provider_id.to_string(),
+                usage,
             });
             return;
         }
@@ -340,6 +350,15 @@ fn run_turn_with(
 }
 
 /// What one model request returned: streamed text plus any tool calls.
+/// Tokens a model call read and wrote, as the provider reported them
+/// (zero when it reports none). Input counts the whole prompt, cached
+/// parts included: it is how full the context is.
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
+pub struct Usage {
+    pub input: u64,
+    pub output: u64,
+}
+
 #[derive(Debug, Default)]
 pub struct TurnResponse {
     pub text: String,
@@ -348,6 +367,7 @@ pub struct TurnResponse {
     /// finish_reason length): text is incomplete and any tool-call args
     /// may be cut mid-JSON - they must not be executed as-is.
     pub truncated: bool,
+    pub usage: Usage,
 }
 
 #[cfg(test)]
