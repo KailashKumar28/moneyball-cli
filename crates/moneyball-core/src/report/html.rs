@@ -100,7 +100,7 @@ pub fn render(
         .replace(
             "{{PIPELINE}}",
             if r.source.crm_present {
-                "Meta Ads -&gt; CRM -&gt; Qualified"
+                "Meta Ads &rarr; CRM &rarr; Qualified"
             } else {
                 "Meta Ads (CRM not in this report)"
             },
@@ -108,6 +108,14 @@ pub fn render(
         .replace(
             "{{BODYCLASS}}",
             if r.source.crm_present { "" } else { "nocrm" },
+        )
+        .replace(
+            "{{RECORDS}}",
+            if r.source.crm_present {
+                "Meta Ads and CRM records"
+            } else {
+                "Meta Ads records"
+            },
         )
         .replace("{{PRODUCTS_LINE}}", &products_line)
         .replace("{{FRESHNESS}}", &freshness)
