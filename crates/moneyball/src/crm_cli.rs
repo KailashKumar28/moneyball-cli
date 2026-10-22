@@ -76,6 +76,9 @@ pub(crate) fn run(cmd: CrmCmd, cfg: &AppConfig, data_root: Option<&str>) -> Resu
             let strict = AppConfig::resolve(data_root, None)?;
             let r = moneyball_core::crm::fetch::fetch_crm(&strict, days)
                 .with_context(|| "crm fetch failed")?;
+            if strict.agent {
+                return ingest_json(&r);
+            }
             println!(
                 "crm fetch ({}): {} ad-attributed ticket(s) over {} page(s){}",
                 r.name,
@@ -100,6 +103,9 @@ pub(crate) fn run(cmd: CrmCmd, cfg: &AppConfig, data_root: Option<&str>) -> Resu
             let strict = AppConfig::resolve(data_root, None)?;
             let r = moneyball_core::crm::fetch::import_csv(&strict, &file)
                 .with_context(|| "crm import failed")?;
+            if strict.agent {
+                return ingest_json(&r);
+            }
             println!(
                 "crm import ({}): {} ad-attributed ticket(s) from {}{}",
                 r.name,
@@ -142,11 +148,21 @@ fn run_crm_check(cfg: &AppConfig, file: &std::path::Path) -> Result<bool> {
     let parsed: serde_json::Value = match serde_json::from_str(&raw) {
         Ok(v) => v,
         Err(e) => {
-            println!("FAIL: {} is not valid JSON: {}", file.display(), e);
+            let why = format!("{} is not valid JSON: {}", file.display(), e);
+            match cfg.agent {
+                true => println!("{}", serde_json::json!({"passed": false, "errors": [why]})),
+                false => println!("FAIL: {}", why),
+            }
             return Ok(false);
         }
     };
     let report = moneyball_core::crm::check_with_workspace(cfg, &parsed);
+    if cfg.agent {
+        let mut v = serde_json::to_value(&report)?;
+        v["passed"] = report.passed().into();
+        println!("{}", v);
+        return Ok(report.passed());
+    }
     println!("crm check: {} ({} tickets)", file.display(), report.tickets);
     print_check_lines(&report);
     if report.passed() {
@@ -222,6 +238,16 @@ pub(crate) fn ask_secret(prompt: &str) -> Result<Option<String>> {
     rl.set_color_mode(rustyline::ColorMode::Forced);
     rl.set_auto_add_history(false);
     readline(rl.readline(prompt))
+}
+
+/// MB_AGENT=1: the pull or import as JSON; exit 1 when crm.json was not
+/// written, as in the text path.
+fn ingest_json(r: &moneyball_core::crm::fetch::CrmFetchReport) -> Result<()> {
+    println!("{}", serde_json::to_string(r)?);
+    if r.path.is_none() {
+        std::process::exit(1);
+    }
+    Ok(())
 }
 
 fn print_ingest_outcome(r: &moneyball_core::crm::fetch::CrmFetchReport) {

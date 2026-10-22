@@ -9,7 +9,7 @@ use serde_json::Value;
 use super::*;
 use crate::snapshot::Snapshot;
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, serde::Serialize)]
 pub struct CheckReport {
     pub tickets: usize,
     pub errors: Vec<String>,

@@ -24,6 +24,7 @@ use super::source::{self, PagingMode};
 pub use super::ingest::import_csv;
 use super::CheckReport;
 
+#[derive(serde::Serialize)]
 pub struct CrmFetchReport {
     pub name: String,
     pub tickets: usize,

@@ -128,3 +128,53 @@ pub fn cpl_order(rows: &[ProductRow]) -> Option<String> {
         .collect();
     Some(parts.join(" < "))
 }
+
+/// The brief for a machine (MB_AGENT=1): every number a field, and the
+/// CRM-derived ones null - unknown, not zero - when the snapshot has no
+/// CRM data. `crm_note` says why and what fixes it.
+pub fn brief_json(r: &ProductRowsAndFeasibility, crm_note: Option<String>) -> serde_json::Value {
+    use serde_json::json;
+    let crm = |v: serde_json::Value| {
+        if r.has_crm {
+            v
+        } else {
+            serde_json::Value::Null
+        }
+    };
+    let rows: Vec<serde_json::Value> = r
+        .rows
+        .iter()
+        .map(|p| {
+            json!({
+                "product": p.product,
+                "spend_per_day": p.spend_per_day,
+                "meta_leads_7d": p.m7d,
+                "cost_per_meta_lead": p.cpl,
+                "crm_leads_7d": crm(json!(p.l7d)),
+                "qualified_7d": crm(json!(p.q7d)),
+                "qualified_per_day": crm(json!(p.q_per_day)),
+                "cost_per_qualified": p.rs_per_q,
+                "lead_to_qualified_pct": p.l_to_q,
+                "goal_per_day": p.goal,
+                "gap_per_day": crm(json!(p.gap)),
+            })
+        })
+        .collect();
+    let f = &r.feasibility;
+    json!({
+        "snapshot_date": r.snapshot_date,
+        "has_crm": r.has_crm,
+        "crm_note": crm_note,
+        "products": rows,
+        "feasibility": crm(json!({
+            "qualified_per_day": f.tot_q_per_day,
+            "spend_per_day": f.tot_spend_per_day,
+            "goal_per_day": f.tot_goal_per_day,
+            "cost_per_qualified": f.cur_rpq,
+            "spend_needed_at_current": f.required_at_cur,
+            "best_cost_per_qualified": f.best_rpq,
+            "spend_needed_at_best": f.required_at_best,
+        })),
+        "setup_debt": f.open_debt,
+    })
+}

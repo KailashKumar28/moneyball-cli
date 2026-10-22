@@ -127,9 +127,32 @@ enum Cmd {
     Debug(debug_cli::DebugArgs),
 }
 
-fn main() -> Result<()> {
+fn main() {
     let cli = Cli::parse();
+    let agent = AppConfig::resolve_optional(cli.data_root.as_deref(), None).agent;
+    if let Err(e) = run(cli) {
+        // MB_AGENT=1 reads stdout as JSON: a failure is JSON too, with
+        // its kind and the one command that fixes it when there is one.
+        if agent {
+            let core = e
+                .chain()
+                .find_map(|c| c.downcast_ref::<moneyball_core::Error>());
+            println!(
+                "{}",
+                serde_json::json!({"error": {
+                    "kind": core.map_or("other", |c| c.kind()),
+                    "message": core.map_or_else(|| format!("{:#}", e), |c| c.reason()),
+                    "fix": core.and_then(|c| c.fix()),
+                }})
+            );
+        } else {
+            eprintln!("Error: {:?}", e);
+        }
+        std::process::exit(1);
+    }
+}
 
+fn run(cli: Cli) -> Result<()> {
     // Workspace first: sessions live in <workspace>/.moneyball/sessions/,
     // so every session flag needs the resolved config. Owned so the
     // borrow doesn't pin cfg (the REPL arm moves cfg into the TUI).

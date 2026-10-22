@@ -353,8 +353,13 @@ pub fn run(cfg: &AppConfig, date: Option<&str>) -> Result<()> {
     let snap = crate::snapshot::load(&snap_path)?;
     let history = load_history(&cfg.history_dir().join("scoreboard.csv"));
     let result = compute(&snap, cfg, &history);
+    let note = crate::crm::status::CrmHealth::of(cfg, &snap).note();
+    if cfg.agent {
+        println!("{}", print::brief_json(&result, note));
+        return Ok(());
+    }
     print_brief(&result);
-    if let Some(note) = crate::crm::status::CrmHealth::of(cfg, &snap).note() {
+    if let Some(note) = note {
         println!("!! {}", note);
     }
     Ok(())

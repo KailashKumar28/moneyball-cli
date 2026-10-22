@@ -267,8 +267,10 @@ bottom after a release-sized batch.)
       (qualified leads and verdicts come from it), /schedule - instead of
       "try /brief". (Not driven end to end: finishing setup needs a pasted
       model key.)
-- [ ] **MB_AGENT output coverage**: machine-readable JSON for `brief`,
-      `crm check`, `crm fetch` (exists for some sub-commands only).
+- [x] **MB_AGENT output coverage** (2026-10-22): brief (CRM-derived
+      fields null, never 0, without CRM data), crm check, crm fetch and
+      crm import print JSON; any failure in agent mode prints
+      {"error": {kind, message, fix}} and exits 1.
 - [ ] **Auto-compaction**: real history compaction (LLM summary of old
       turns) once sessions regularly outgrow the context window - /clear
       is the manual escape hatch shipped 2026-07-17; codex's /compact is
