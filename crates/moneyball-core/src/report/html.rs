@@ -150,12 +150,19 @@ fn render_section(
         if is_dead_tail(c, p.kpis.spend) {
             continue; // lives only in the table's collapsed tail
         }
-        render_card(out, i + 1, &slug(&p.product), c, history_dir);
+        render_card(out, i + 1, &slug(&p.product), c, report_date, history_dir);
     }
     let _ = write!(out, "</div></section></div>");
 }
 
-fn render_card(out: &mut String, rank: usize, pslug: &str, c: &CreativeCard, history_dir: &Path) {
+fn render_card(
+    out: &mut String,
+    rank: usize,
+    pslug: &str,
+    c: &CreativeCard,
+    report_date: &str,
+    history_dir: &Path,
+) {
     let img = c
         .image
         .as_ref()
@@ -239,7 +246,7 @@ fn render_card(out: &mut String, rank: usize, pslug: &str, c: &CreativeCard, his
         ads,
         c.created
             .as_deref()
-            .map(|d| format!(" &middot; since {}", esc(&day(d, "%d %b"))))
+            .map(|d| format!(" &middot; since {}", esc(&since(d, report_date))))
             .unwrap_or_default(),
         targeting_chips(c),
     );
@@ -348,6 +355,16 @@ pub(super) fn day(iso: &str, fmt: &str) -> String {
         .map_or_else(|_| iso.to_string(), |d| d.format(fmt).to_string())
 }
 
+/// "18 Aug", with the year when it is not the report's: an ad running for
+/// over a year must not read as recent.
+fn since(created: &str, report_date: &str) -> String {
+    let year = |d: &str| d.split('-').next().map(String::from);
+    match year(created) == year(report_date) {
+        true => day(created, "%d %b"),
+        false => day(created, "%d %b %Y"),
+    }
+}
+
 /// Rupee amount with the sign entity (authored Rust stays ASCII).
 pub(super) fn rupees(v: f64) -> String {
     format!("&#8377;{}", commas(v.round().max(0.0) as u64))
@@ -356,6 +373,12 @@ pub(super) fn rupees(v: f64) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn since_says_the_year_only_when_it_differs() {
+        assert_eq!(since("2026-08-18", "2026-10-21"), "18 Aug");
+        assert_eq!(since("2025-08-18", "2026-10-21"), "18 Aug 2025");
+    }
 
     #[test]
     fn commas_slug_esc_rupees() {

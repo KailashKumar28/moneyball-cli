@@ -242,8 +242,7 @@ bottom after a release-sized batch.)
       needs per-model prices, render examples for new cells; ASCII strings is enforced by
       arch_contract; report.json's Delivery.reach sums daily reach - exact
       for a 1-day report, overstated for a multi-day window, as diagnose's
-      frequency was; a card's "since 18 Aug" has no year for ads older
-      than a year). A turn in flight now shows "working Ns" with the
+      frequency was). A turn in flight now shows "working Ns" with the
       tool it is running, and the footer says esc interrupts; a finished
       turn says its context size and output tokens, per wire (2026-10-22). Done since: every source file is
       under the 400-line cap and the frozen ceilings are gone (2026-10-22:
