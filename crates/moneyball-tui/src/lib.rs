@@ -22,6 +22,7 @@ mod report;
 mod schedule_view;
 mod setup;
 mod status_view;
+mod stream_drain;
 pub mod widgets;
 pub(crate) use app::snapshot_load;
 pub(crate) use app::View;
@@ -41,8 +42,6 @@ use ratatui::Terminal;
 
 use moneyball_core::session::SessionLog;
 use moneyball_core::AppConfig;
-
-// Two chrono types collide on import name; alias the plain Utc.
 
 pub type Tui = Terminal<CrosstermBackend<Stdout>>;
 

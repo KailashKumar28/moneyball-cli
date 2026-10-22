@@ -39,7 +39,7 @@ fn render_llm_pick_provider(s: &SetupState) -> Vec<Line<'static>> {
         Line::from("  Custom lets you point at any OpenAI/Anthropic-compatible URL."),
         Line::from(""),
         Line::from(Span::styled(
-            "  \u{2191}\u{2193} move  Enter=select  Esc=back",
+            "  \u{2191}\u{2193} move  \u{00B7}  enter select",
             Style::default().fg(Color::DarkGray),
         )),
         Line::from(""),
@@ -62,7 +62,7 @@ fn render_llm_pick_provider(s: &SetupState) -> Vec<Line<'static>> {
         .collect();
     rows.push((
         "custom".to_string(),
-        "  custom - your own URL (OpenAI Responses API)".to_string(),
+        "  custom - your own URL (Chat, unless it ends /responses or /messages)".to_string(),
     ));
 
     for (i, (id, text)) in rows.iter().enumerate().skip(start).take(end - start) {
@@ -137,7 +137,7 @@ fn render_llm_pick_model(s: &SetupState) -> Vec<Line<'static>> {
         Line::from(""),
         Line::from("  Pick the model. /brief and /ask will use it."),
         Line::from(Span::styled(
-            "  \u{2191}\u{2193} move  Enter=select  Esc=back",
+            "  \u{2191}\u{2193} move  \u{00B7}  enter select",
             Style::default().fg(Color::DarkGray),
         )),
         Line::from(""),

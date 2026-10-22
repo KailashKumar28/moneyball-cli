@@ -8,8 +8,6 @@ use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::Paragraph;
 
-// Two chrono types collide on import name; alias the plain Utc.
-
 pub(crate) fn render(f: &mut ratatui::Frame, app: &App) {
     let area = f.area();
     // Layout (top to bottom):

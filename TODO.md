@@ -105,7 +105,9 @@ bottom after a release-sized batch.)
         status) names why and its fix - it said "Fix: /refresh" after a
         refresh had just failed on an expired key.
   - [ ] Token expiry for /status ("Meta valid to ...") waits on the
-        connect work.
+        connect work. Checked 2026-10-22: the token in use reports no
+        expiry (oauth/access_token_info has no expires_in; debug_token
+        needs an app token), so there is nothing to show yet.
 - [ ] **Daily creative report** (plan: docs/CLOUD_PLAN.md, agreed
       2026-08-07 - report.json is the product, HTML is a renderer;
       reimplements pipeline/creative_report.py, never imports it):
@@ -232,9 +234,9 @@ bottom after a release-sized batch.)
       needs the person's earlier submissions), no time_created window.
 
 - [ ] **Audit package G remainder** (structure P1/P2s from the 2026-07
-      architecture audit): split `submit()` and bring commands.rs (539)
-      / setup/mod.rs (658) / llm.rs / event.rs / chat.rs / agent.rs back
-      under the 400-line cap; remaining P2 hygiene (ASCII strings, busy
+      architecture audit): split `submit()` and bring commands.rs (485)
+      / llm.rs (684) / agent.rs (586) / chat.rs (460) / crm/fetch.rs
+      (489) / crm/mod.rs (434) under the 400-line cap; remaining P2 hygiene (ASCII strings, busy
       indicator, IST vs Local snapshot dating, query_params support,
       usage/cost parsing, render examples for new cells). Done since:
       the CRM connect flow moved into core behind a Prompter
@@ -243,7 +245,9 @@ bottom after a release-sized batch.)
       atomic config.json and crm.toml writes (2026-10-09); snap_dir() at
       every call site (2026-10-10); module docs no longer say keychain, a
       `Client`, `moneyball/config.json` or `~/.moneyball/reports/`
-      (2026-10-10).
+      (2026-10-10); event.rs 716 -> 301 (stream_drain.rs, its tests
+      beside it) and setup/mod.rs 658 -> 194 (keys.rs, steps.rs,
+      render_meta.rs) (2026-10-22).
 
 - [x] **/brief and /funnel open as tool rounds** (2026-10-09): the turn
       is the typed command, the tool call it stands for and that tool's
