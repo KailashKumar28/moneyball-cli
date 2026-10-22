@@ -258,7 +258,8 @@ bottom after a release-sized batch.)
       the funnel tool takes `by`; build_brief_prompt is gone.
 
 - [ ] **/ledger**: wire the prediction ledger view (stub today). Append
-      predictions to `ledger.jsonl`, show hit-rate over time.
+      predictions to `ledger.jsonl`, show hit-rate over time. Plan with
+      four open decisions: plans/ledger-plan.md (2026-10-22).
 - [x] **Scheduled CRM fetch**: superseded (2026-10-09) - /schedule runs
       `moneyball refresh`, which pulls Meta then CRM into the same day.
 - [x] **Setup wizard: CRM step** (2026-10-10): setup's last word lists
