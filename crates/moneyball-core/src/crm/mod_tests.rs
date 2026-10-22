@@ -1,6 +1,7 @@
 //! crm tests. Split from crm/mod.rs (size cap).
 
 use super::*;
+use crate::snapshot::Snapshot;
 use std::path::PathBuf;
 
 fn ticket(ad_id: &str, stage: &str, delivery: Value) -> Value {

@@ -74,10 +74,11 @@ and HOME/cwd reads live only in config.rs (also arch-enforced).
 - **One concern per file.** A view, a widget, a command dispatcher, a
   protocol - each gets its own module (codex-tui's shape). God-files are
   defects.
-- **Soft caps: ~400 lines per file, ~40 per function.** Crossing one is a
-  signal to split, not an excuse for a waiver. The file cap is ratcheted
-  by `tests/arch_contract.rs`: existing offenders are frozen at a ceiling
-  there - shrink entries out of the list; never raise a ceiling.
+- **Caps: 400 lines per source file, ~40 per function.** Crossing one is
+  a signal to split, not an excuse for a waiver. The file cap is enforced
+  by `tests/arch_contract.rs` with no exceptions (the last frozen
+  offenders were split on 2026-10-22); a module's tests may sit beside
+  it (`#[path = "x_tests.rs"]`) to stay under it.
 - **lib.rs is a table of contents**: module declarations, re-exports, and
   root-owned types only. No business logic.
 - New TUI surface -> new file (e.g. `setup/`, `palette.rs`, `commands.rs`),

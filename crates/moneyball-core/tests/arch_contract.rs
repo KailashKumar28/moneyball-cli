@@ -53,6 +53,8 @@ fn network_boundary() {
         // llm's own tests build requests to check auth and query params.
         "crates/moneyball-core/src/llm/tests.rs",
         "crates/moneyball-core/src/crm/fetch.rs",
+        // crm fetch's own tests, on HTTP statuses.
+        "crates/moneyball-core/src/crm/fetch_tests.rs",
     ];
     let mut violations = Vec::new();
     for krate in ["moneyball", "moneyball-core", "moneyball-tui"] {
@@ -138,27 +140,19 @@ fn ascii_only_outside_comments() {
     );
 }
 
-/// ARCHITECTURE §3: ~400 lines per file. Existing offenders are frozen at
-/// a ceiling and may only shrink - delete an entry when its file drops
-/// under 400; never raise a ceiling or add an entry.
+/// ARCHITECTURE §3: 400 lines per source file, no exceptions (the last
+/// frozen offenders were split 2026-10-22). Split, don't waive.
 #[test]
 fn file_size_ratchet() {
+    const CAP: usize = 400;
     let root = workspace_root();
-    let frozen: &[(&str, usize)] = &[
-        ("crates/moneyball-core/src/crm/fetch.rs", 489),
-        ("crates/moneyball-core/src/crm/mod.rs", 434),
-    ];
     let mut violations = Vec::new();
     for krate in ["moneyball", "moneyball-core", "moneyball-tui"] {
         for f in rust_sources(&root.join("crates").join(krate).join("src")) {
             let r = rel(&root, &f);
             let lines = fs::read_to_string(&f).unwrap().lines().count();
-            let cap = frozen
-                .iter()
-                .find(|(name, _)| *name == r)
-                .map_or(400, |(_, cap)| *cap);
-            if lines > cap {
-                violations.push(format!("{}: {} lines (cap {})", r, lines, cap));
+            if lines > CAP {
+                violations.push(format!("{}: {} lines (cap {})", r, lines, CAP));
             }
         }
     }

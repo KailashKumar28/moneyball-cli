@@ -234,22 +234,16 @@ bottom after a release-sized batch.)
       needs the person's earlier submissions), no time_created window.
 
 - [ ] **Audit package G remainder** (structure P1/P2s from the 2026-07
-      architecture audit): bring llm.rs (684) / agent.rs (586) / chat.rs
-      (460) / crm/fetch.rs (489) / crm/mod.rs (434) under the 400-line
-      cap; remaining P2 hygiene (ASCII strings, busy
-      indicator, IST vs Local snapshot dating, query_params support,
-      usage/cost parsing, render examples for new cells). Done since:
-      the CRM connect flow moved into core behind a Prompter
-      (2026-10-09); the brief is down to two formatters, the TUI's
-      per-product blocks and the CLI table on text::table (2026-10-10);
-      atomic config.json and crm.toml writes (2026-10-09); snap_dir() at
-      every call site (2026-10-10); module docs no longer say keychain, a
-      `Client`, `moneyball/config.json` or `~/.moneyball/reports/`
-      (2026-10-10); event.rs 716 -> 301 (stream_drain.rs, its tests
-      beside it) and setup/mod.rs 658 -> 194 (keys.rs, steps.rs,
-      render_meta.rs), commands.rs 485 -> 285 with submit() a 91-line
-      dispatcher (agent_turn.rs, named fns for /setup /snapshot /clear
-      /help) (2026-10-22).
+      architecture audit): remaining P2 hygiene (ASCII strings, busy
+      indicator, IST vs Local snapshot dating, usage/cost parsing,
+      render examples for new cells). Done since: every source file is
+      under the 400-line cap and the frozen ceilings are gone (2026-10-22:
+      event, setup, commands, chat, agent, llm, crm/fetch and crm/mod
+      split along their seams, tests beside their modules); submit() is a
+      91-line dispatcher; provider query_params are sent; the CRM connect
+      flow moved into core (2026-10-09); the brief is down to two
+      formatters over text::table; atomic config.json and crm.toml
+      writes; snap_dir() everywhere; module docs corrected.
 
 - [x] **/brief and /funnel open as tool rounds** (2026-10-09): the turn
       is the typed command, the tool call it stands for and that tool's
