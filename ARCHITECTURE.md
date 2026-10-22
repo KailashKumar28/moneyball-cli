@@ -81,7 +81,7 @@ and HOME/cwd reads live only in config.rs (also arch-enforced).
   it (`#[path = "x_tests.rs"]`) to stay under it.
 - **lib.rs is a table of contents**: module declarations, re-exports, and
   root-owned types only. No business logic.
-- New TUI surface -> new file (e.g. `setup/`, `palette.rs`, `commands.rs`),
+- New TUI surface -> new file (e.g. `setup/`, `status_view.rs`, `diagnose_flow.rs`),
   registered in lib.rs. Never appended to an unrelated module.
 
 ## 4. Style rules
