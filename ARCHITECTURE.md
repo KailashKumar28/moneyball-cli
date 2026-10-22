@@ -28,7 +28,8 @@ never touches the network. Network lives in exactly four core modules:
 against a loopback server), `fetch/` (explicit snapshot pull:
 `mod.rs` insights + `creatives.rs` per-ad creative identity, `leads.rs`,
 `adsets.rs`, `changes.rs` the accounts' change log), `llm.rs`
-(model calls), `crm/fetch.rs` (explicit CRM pull driven by the
+(model calls; `llm/sse.rs` and `llm/wire.rs` are its pure JSON halves,
+`llm/tests.rs` builds requests), `crm/fetch.rs` (explicit CRM pull driven by the
 declarative crm.toml spec). Nothing ever writes to Meta or the CRM.
 Enforced by `tests/arch_contract.rs` (this is the canonical statement;
 AGENTS.md's intro summarizes it). Fetch callers resolve the Meta token

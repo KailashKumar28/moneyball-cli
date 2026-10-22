@@ -50,6 +50,8 @@ fn network_boundary() {
         "crates/moneyball-core/src/fetch/creatives.rs",
         "crates/moneyball-core/src/fetch/leads.rs",
         "crates/moneyball-core/src/llm.rs",
+        // llm's own tests build requests to check auth and query params.
+        "crates/moneyball-core/src/llm/tests.rs",
         "crates/moneyball-core/src/crm/fetch.rs",
     ];
     let mut violations = Vec::new();
@@ -143,10 +145,8 @@ fn ascii_only_outside_comments() {
 fn file_size_ratchet() {
     let root = workspace_root();
     let frozen: &[(&str, usize)] = &[
-        ("crates/moneyball-core/src/agent.rs", 586),
         ("crates/moneyball-core/src/crm/fetch.rs", 489),
         ("crates/moneyball-core/src/crm/mod.rs", 434),
-        ("crates/moneyball-core/src/llm.rs", 684),
     ];
     let mut violations = Vec::new();
     for krate in ["moneyball", "moneyball-core", "moneyball-tui"] {
