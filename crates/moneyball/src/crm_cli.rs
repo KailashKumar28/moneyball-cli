@@ -101,7 +101,7 @@ pub(crate) fn run(cmd: CrmCmd, cfg: &AppConfig, data_root: Option<&str>) -> Resu
         }
         CrmCmd::Import { file } => {
             let strict = AppConfig::resolve(data_root, None)?;
-            let r = moneyball_core::crm::fetch::import_csv(&strict, &file)
+            let r = moneyball_core::crm::ingest::import_csv(&strict, &file)
                 .with_context(|| "crm import failed")?;
             if strict.agent {
                 return ingest_json(&r);

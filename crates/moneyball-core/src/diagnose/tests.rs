@@ -127,7 +127,7 @@ fn the_trend_compares_the_last_week_with_the_days_before() {
 #[test]
 fn tired_ads_are_called_and_the_change_log_is_this_accounts_week() {
     let d = compute(&snap(json!([])), &cfg(), "P");
-    // a1 drew 2% clicks before and 0.5% now, seen 3.3 times a day.
+    // a1 drew 2% clicks before and 0.5% now, seen 3.3 times in the week.
     assert_eq!(d.ads[0].name, "Ad a1");
     assert_eq!(d.ads[0].ctr_before.map(|c| c.round()), Some(2.0));
     assert_eq!(d.ads[0].call, Fatigue::Fatigued);

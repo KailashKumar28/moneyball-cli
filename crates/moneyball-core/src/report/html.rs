@@ -35,17 +35,14 @@ pub fn render(
     brand: &str,
     history_dir: &Path,
 ) -> String {
-    let day = chrono::NaiveDate::parse_from_str(&r.window.until, "%Y-%m-%d").ok();
     let multi = r.window.since != r.window.until;
     let dayline = if multi {
         format!("{} - {}", esc(&r.window.since), esc(&r.window.until)).to_uppercase()
     } else {
-        day.map(|d| d.format("%a %d %b %Y").to_string().to_uppercase())
-            .unwrap_or_else(|| r.window.until.clone())
+        day(&r.window.until, "%a %d %b %Y").to_uppercase()
     };
-    let window = if r.window.since == r.window.until {
-        day.map(|d| d.format("%d %b %Y").to_string())
-            .unwrap_or_else(|| r.window.until.clone())
+    let window = if !multi {
+        day(&r.window.until, "%d %b %Y")
     } else {
         format!("{} .. {}", r.window.since, r.window.until)
     };
@@ -345,13 +342,13 @@ pub(super) fn slug(s: &str) -> String {
 
 pub(super) use crate::text::commas;
 
-/// Rupee amount with the sign entity (authored Rust stays ASCII).
 /// A YYYY-MM-DD date in `fmt` ("%d %b" -> "18 Aug"); anything else as is.
 pub(super) fn day(iso: &str, fmt: &str) -> String {
     chrono::NaiveDate::parse_from_str(iso, "%Y-%m-%d")
         .map_or_else(|_| iso.to_string(), |d| d.format(fmt).to_string())
 }
 
+/// Rupee amount with the sign entity (authored Rust stays ASCII).
 pub(super) fn rupees(v: f64) -> String {
     format!("&#8377;{}", commas(v.round().max(0.0) as u64))
 }

@@ -22,7 +22,8 @@ pub(crate) fn run_connect(app: &mut App) {
         Para::default(),
     ];
     // group 10, name 12, state 13: the detail wraps under itself.
-    const DETAIL_AT: usize = 6 + 10 + 12 + 13;
+    const NAME_AT: usize = 6 + 10;
+    const DETAIL_AT: usize = NAME_AT + 12 + 13;
     for s in connections::status_all(&app.cfg) {
         let (word, color) = match s.link {
             Link::Connected => ("connected", Color::Green),
@@ -40,7 +41,7 @@ pub(crate) fn run_connect(app: &mut App) {
         // that wraps mid-way cannot be copied whole.
         if let Some(fix) = s.fix {
             paras.push(
-                Para::new(6 + 10, 6 + 10 + 6)
+                Para::new(NAME_AT, NAME_AT + "fix:  ".len())
                     .run("fix:  ", gray())
                     .run(fix.clone(), bold(Color::Cyan))
                     .run(format!("   {}", fix_does(&fix)), gray()),

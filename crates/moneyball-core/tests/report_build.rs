@@ -440,6 +440,11 @@ fn crm_columns_sit_where_the_css_hides_them() {
     let history = std::env::temp_dir().join("mb-html-nocrm-none");
     let mut s = snapshot();
     s.crm = json!({});
+    // A second product: the projects table only shows with two.
+    let mut other = s.ads_daily[0].clone();
+    other._product = "Other".into();
+    other.ad_id = "ad-other".into();
+    s.ads_daily.push(other);
     let r = report::build(&s, "ws", "2026-08-07T00:00:00Z", 1, None, None).unwrap();
     let page = html::render(&r, None, "TestBrand", &history);
     assert!(page.contains(r#"<body class="nocrm">"#));
@@ -474,7 +479,7 @@ fn crm_columns_sit_where_the_css_hides_them() {
     assert!(targeting[4..8].iter().all(|h| crm(h)), "{:?}", targeting);
     assert_eq!(targeting[8], "verdict");
     let project = header_cells(&page, "ptable");
-    if !project.is_empty() {
-        assert!(project[..3].iter().all(|h| !crm(h)) && project[3..].iter().all(|h| crm(h)));
-    }
+    assert_eq!(project.len(), 7, "{:?}", project);
+    assert!(project[..3].iter().all(|h| !crm(h)), "{:?}", project);
+    assert!(project[3..].iter().all(|h| crm(h)), "{:?}", project);
 }

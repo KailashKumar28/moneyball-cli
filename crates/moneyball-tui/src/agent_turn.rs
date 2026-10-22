@@ -188,6 +188,8 @@ pub(crate) fn call_agent(app: &mut App, system: &str, turn: Vec<moneyball_core::
     app.stream = Some(rx);
     app.turn_active = true;
     app.turn_started = std::time::Instant::now();
+    // A tool left "running" by a worker that died must not label this turn.
+    app.running_tool = None;
 }
 
 /// Free-form chat: plain text in the input bar is a question for the

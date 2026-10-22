@@ -96,12 +96,12 @@ pub(super) fn missing_banner(r: &CreativeReport) -> String {
         r#"<div class="missing"><b>{} missing from your CRM</b><p>They submitted your ad form {} but never arrived in the CRM. They are paid for and still warm - a same-day call recovers them.</p><div class="mwhere">{}</div></div>"#,
         crate::text::count(total, "lead is", "leads are"),
         if r.window.since == r.window.until {
-            format!("on {}", esc(&r.window.until))
+            format!("on {}", esc(&super::html::day(&r.window.until, "%a %d %b")))
         } else {
             format!(
                 "between {} and {}",
-                esc(&r.window.since),
-                esc(&r.window.until)
+                esc(&super::html::day(&r.window.since, "%a %d %b")),
+                esc(&super::html::day(&r.window.until, "%a %d %b"))
             )
         },
         per.join(" &middot; ")

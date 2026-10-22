@@ -64,8 +64,8 @@ pub enum Ev {
     /// One transcript item is final - record it (history + session
     /// JSONL) immediately.
     ItemDone(Item),
-    /// Turn ended normally. `usage`: what its last call read (the
-    /// context as it now stands) and everything its calls wrote.
+    /// Turn ended normally. `usage`: what its last call read and
+    /// everything its calls wrote.
     TurnComplete {
         ms: u64,
         provider: String,
@@ -349,7 +349,6 @@ fn run_turn_with(
     }
 }
 
-/// What one model request returned: streamed text plus any tool calls.
 /// Tokens a model call read and wrote, as the provider reported them
 /// (zero when it reports none). Input counts the whole prompt, cached
 /// parts included: it is how full the context is.
@@ -359,6 +358,7 @@ pub struct Usage {
     pub output: u64,
 }
 
+/// What one model request returned: streamed text plus any tool calls.
 #[derive(Debug, Default)]
 pub struct TurnResponse {
     pub text: String,

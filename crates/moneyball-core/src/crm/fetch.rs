@@ -20,8 +20,6 @@ use crate::error::{Error, Result};
 use super::ingest::{load_spec, validate_and_write};
 use super::source::{self, PagingMode};
 
-// The offline path lives in ingest.rs; callers reach it here.
-pub use super::ingest::import_csv;
 use super::CheckReport;
 
 #[derive(serde::Serialize)]
@@ -380,4 +378,4 @@ fn status_error(status: reqwest::StatusCode, body: &str, secrets: &[String]) -> 
 
 #[cfg(test)]
 #[path = "fetch_tests.rs"]
-mod status_tests;
+mod tests;

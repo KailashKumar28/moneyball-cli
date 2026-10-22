@@ -176,6 +176,7 @@ pub fn run(
                         ("leads", f.leads as u64),
                         ("adsets", f.adsets as u64),
                         ("changes", f.changes as u64),
+                        ("ads_7d", f.ads_7d as u64),
                     ],
                 );
                 if !errors.is_empty() {

@@ -214,14 +214,16 @@ fn render_chat_view(f: &mut ratatui::Frame, area: Rect, app: &App) {
     };
     f.render_widget(Paragraph::new(prompt_line), chunks[input_idx]);
 
-    // 5. Keybinding caption (no borders) - contextual, codex-style.
-    let caption_text = if palette_h > 0 {
-        "  \u{2191}\u{2193} choose  \u{00B7}  \u{21B5} run  \u{00B7}  \u{21E5} complete  \u{00B7}  esc clear"
-    } else if asking.is_some() {
+    // 5. Keybinding caption (no borders) - contextual, codex-style. In
+    // the order Esc is routed: a connect's question, then a turn, then
+    // the palette.
+    let caption_text = if asking.is_some() {
         "  \u{21B5} answer  \u{00B7}  esc cancel the connect"
     } else if turn.is_some() {
         "  esc interrupt the answer  \u{00B7}  \u{2191}\u{2193} scroll"
-    } else if busy.is_some() && app.input.is_empty() && !app.turn_active && app.stream.is_none() {
+    } else if palette_h > 0 {
+        "  \u{2191}\u{2193} choose  \u{00B7}  \u{21B5} run  \u{00B7}  \u{21E5} complete  \u{00B7}  esc clear"
+    } else if busy.is_some() && app.input.is_empty() && app.stream.is_none() {
         "  esc cancel refresh (after the current step)  \u{00B7}  other commands still work"
     } else {
         "  \u{21B5} send  \u{00B7}  esc clear input  \u{00B7}  \u{21E5} complete  \u{00B7}  \u{2191}\u{2193} scroll  \u{00B7}  /exit to quit"
@@ -260,7 +262,7 @@ fn render_chat_view(f: &mut ratatui::Frame, area: Rect, app: &App) {
     }
 }
 
-/// "◐ working 4s  ·  running diagnose": the spinner turns each tick.
+/// "◐ working 4s  ·  running diagnose": the spinner turns every 150ms.
 fn working(app: &App, elapsed: std::time::Duration) -> Line<'static> {
     const FRAMES: [&str; 4] = ["\u{25D0}", "\u{25D3}", "\u{25D1}", "\u{25D2}"];
     let frame = FRAMES[(elapsed.as_millis() / 150) as usize % FRAMES.len()];

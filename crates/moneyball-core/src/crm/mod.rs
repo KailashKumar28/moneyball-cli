@@ -10,7 +10,7 @@ mod check;
 pub mod connect;
 mod curl;
 pub mod fetch;
-mod ingest;
+pub mod ingest;
 pub mod paging;
 pub mod presets;
 mod refs;

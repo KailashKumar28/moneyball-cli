@@ -11,13 +11,13 @@
 //! is the pure content-addressed image cache it fills (slice A2);
 //! `changes.rs` pulls each account's change log for /diagnose.
 
+pub mod ads_7d;
 pub mod adsets;
 pub mod assets;
 pub mod changes;
 pub mod creatives;
 pub mod leads;
 pub(crate) mod map;
-pub mod reach;
 
 use std::path::{Path, PathBuf};
 
@@ -131,7 +131,7 @@ pub fn fetch_snapshot(cfg: &AppConfig, token: &str, days: u32) -> Result<FetchRe
 
     // The accounts' change log and each ad's week, for /diagnose: only
     // the 7 days it reads. Best-effort.
-    let week_start = until - Duration::days(6);
+    let week_start = until - Duration::days(crate::diagnose::RECENT_DAYS - 1);
     let since_epoch = week_start
         .and_hms_opt(0, 0, 0)
         .and_then(|t| t.and_local_timezone(Local).earliest())
@@ -144,8 +144,8 @@ pub fn fetch_snapshot(cfg: &AppConfig, token: &str, days: u32) -> Result<FetchRe
         };
 
     let week = week_start.format("%Y-%m-%d").to_string();
-    let (ads_7d, ads_7d_error) =
-        match reach::fetch_and_write(&client, token, &distinct, (&week, &until_s), &path) {
+    let (ads_7d_n, ads_7d_error) =
+        match ads_7d::fetch_and_write(&client, token, &distinct, (&week, &until_s), &path) {
             Ok(got) => got,
             Err(e) => (0, Some(e.reason())),
         };
@@ -154,7 +154,7 @@ pub fn fetch_snapshot(cfg: &AppConfig, token: &str, days: u32) -> Result<FetchRe
         date,
         changes: changes_n,
         changes_error,
-        ads_7d,
+        ads_7d: ads_7d_n,
         ads_7d_error,
         path,
         per_product,

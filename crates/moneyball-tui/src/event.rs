@@ -298,4 +298,4 @@ fn apply_completion(app: &mut App) {
 
 #[cfg(test)]
 #[path = "event_tests.rs"]
-mod paste_tests;
+mod tests;

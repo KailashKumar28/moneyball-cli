@@ -196,7 +196,7 @@ pub(super) fn parse_args(s: &str) -> Value {
 /// reads and writes. Chat Completions: a last chunk, from servers that
 /// send it unasked (asking with stream_options fails on strict ones, and
 /// in moneyball this wire is Ollama and custom providers). Responses:
-/// response.completed.
+/// response.completed, or .incomplete when it stopped for length.
 pub(super) fn usage_in(wire: WireApi, v: &Value, u: &mut Usage) {
     let n = |ptr: &str| v.pointer(ptr).and_then(Value::as_u64).unwrap_or(0);
     let at = match (wire, v.get("type").and_then(Value::as_str)) {
@@ -207,7 +207,7 @@ pub(super) fn usage_in(wire: WireApi, v: &Value, u: &mut Usage) {
             u.output = n("/usage/completion_tokens");
             return;
         }
-        (WireApi::Responses, Some("response.completed")) => {
+        (WireApi::Responses, Some("response.completed" | "response.incomplete")) => {
             u.input = n("/response/usage/input_tokens");
             u.output = n("/response/usage/output_tokens");
             return;

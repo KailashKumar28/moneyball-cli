@@ -76,20 +76,24 @@ pub(crate) fn drain(app: &mut App) {
                         app.chat.finish_streaming();
                         // Latency, size and provider are status metadata,
                         // never part of the persisted message text.
-                        let size = match usage.input + usage.output {
-                            0 => String::new(),
-                            _ => format!(
-                                "  \u{00B7}  context {} tokens, {} out",
-                                moneyball_core::text::commas(usage.input),
-                                moneyball_core::text::commas(usage.output)
-                            ),
-                        };
-                        app.status = Some(format!(
-                            "{:.1}s{}  \u{00B7}  via {}",
-                            ms as f64 / 1000.0,
-                            size,
-                            provider
-                        ));
+                        // Each part only when the provider reported it.
+                        let commas = moneyball_core::text::commas;
+                        let parts: Vec<String> = [
+                            moneyball_core::refresh::duration(ms),
+                            match usage.input {
+                                0 => String::new(),
+                                n => format!("context {} tokens", commas(n)),
+                            },
+                            match usage.output {
+                                0 => String::new(),
+                                n => format!("{} out", commas(n)),
+                            },
+                            format!("via {}", provider),
+                        ]
+                        .into_iter()
+                        .filter(|p| !p.is_empty())
+                        .collect();
+                        app.status = Some(parts.join("  \u{00B7}  "));
                         app.turn_active = false;
                         app.stream = None;
                         return;

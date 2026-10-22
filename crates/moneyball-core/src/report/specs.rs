@@ -48,13 +48,19 @@ pub(super) fn specs_for(snap: &Snapshot, adset_ids: &[String]) -> Option<Targeti
                 .into_iter()
                 .flatten()
             {
-                // Meta gives ISO codes; "IN" on a chip reads as a word.
+                // Meta gives ISO codes; "IN" or "US" on a chip reads as a
+                // word. The ones this market targets, spelled out.
                 if let Some(n) = c.as_str() {
-                    names.push(if n == "IN" {
-                        "India".into()
-                    } else {
-                        n.to_string()
-                    });
+                    names.push(
+                        match n {
+                            "IN" => "India",
+                            "US" => "United States",
+                            "AE" => "UAE",
+                            "GB" => "United Kingdom",
+                            other => other,
+                        }
+                        .to_string(),
+                    );
                 }
             }
         }

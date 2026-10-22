@@ -49,7 +49,7 @@ fn network_boundary() {
         "crates/moneyball-core/src/fetch/changes.rs",
         "crates/moneyball-core/src/fetch/creatives.rs",
         "crates/moneyball-core/src/fetch/leads.rs",
-        "crates/moneyball-core/src/fetch/reach.rs",
+        "crates/moneyball-core/src/fetch/ads_7d.rs",
         "crates/moneyball-core/src/llm.rs",
         // llm's own tests build requests to check auth and query params.
         "crates/moneyball-core/src/llm/tests.rs",
