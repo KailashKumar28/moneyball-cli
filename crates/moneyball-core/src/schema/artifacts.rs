@@ -176,6 +176,9 @@ pub struct ChangeRow {
     pub object_type: String,
     #[serde(default)]
     pub object_name: String,
+    /// The changed campaign, ad set or ad's Meta id.
+    #[serde(default)]
+    pub object_id: String,
     /// The value before and after, as Meta gives it: a status string, or
     /// for money `{type: payment_amount, currency, new_value}` in minor
     /// units.

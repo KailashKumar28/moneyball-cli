@@ -61,6 +61,7 @@ fn snap(crm: serde_json::Value) -> Snapshot {
                     event: "Ad set budget updated".into(),
                     object_type: "ad set".into(),
                     object_name: "S".into(),
+                    object_id: "s".into(),
                     old: Some(
                         json!({"type": "payment_amount", "currency": "INR", "old_value": 500000}),
                     ),

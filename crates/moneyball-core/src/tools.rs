@@ -105,6 +105,60 @@ pub fn diagnose_tool() -> Tool {
     )
 }
 
+/// `recommend` - record a recommendation in the ledger (ledger::submit).
+/// The description carries submit's rules, so a refusal is rare and
+/// says what to fix.
+pub fn recommend_tool() -> Tool {
+    let metrics = json!({
+        "type": "string",
+        "enum": ["spend", "meta_leads", "cpl", "crm_leads", "qualified", "cost_per_qualified", "l_to_q"]
+    });
+    Tool::new(
+        "recommend",
+        "Record ONE concrete change you recommend in the ledger, with the number it should move and the date to check it by; moneyball notices when it is applied and settles the prediction from the data. Evidence values are copied from the funnel tool's 7-day table for the same entity and level (metric names map to its columns: meta_leads = m, crm_leads = l, qualified = q, cost_per_qualified = rs_per_q); counts must match exactly, money and ratios within 5%. Prediction targets for spend and counts are per 7 days, like the table. CRM metrics need CRM data. A refusal lists what to fix.",
+        json!({
+            "type": "object",
+            "properties": {
+                "product": {"type": "string", "description": "Product name exactly as in config.json."},
+                "level": {"type": "string", "enum": ["campaign", "adset", "ad", "product"]},
+                "entity_id": {"type": "string", "description": "The id column of the funnel table at this level (ignored for product)."},
+                "lever": {"type": "string", "enum": ["budget", "creative", "targeting", "structure", "form", "crm"]},
+                "action": {"type": "string", "description": "The change in one sentence, e.g. 'cut the daily budget from Rs 2,000 to Rs 1,700'."},
+                "evidence": {
+                    "type": "array",
+                    "minItems": 1,
+                    "items": {
+                        "type": "object",
+                        "properties": {"metric": metrics, "value": {"type": "number"}},
+                        "required": ["metric", "value"]
+                    }
+                },
+                "prediction": {
+                    "type": "object",
+                    "properties": {
+                        "metric": metrics,
+                        "direction": {"type": "string", "enum": ["up", "down"]},
+                        "target": {"type": "number"},
+                        "verify_by": {"type": "string", "description": "YYYY-MM-DD, after today and at most 28 days out; give a budget change 3+ days, anything else 7+."}
+                    },
+                    "required": ["metric", "direction", "target", "verify_by"]
+                },
+                "budget": {
+                    "type": "object",
+                    "description": "Required for the budget lever: Rs a day before and after. A move over 20% restarts Meta's learning; set relearn true only when that is intended.",
+                    "properties": {
+                        "from": {"type": "number"},
+                        "to": {"type": "number"},
+                        "relearn": {"type": "boolean"}
+                    },
+                    "required": ["from", "to"]
+                }
+            },
+            "required": ["product", "level", "entity_id", "lever", "action", "evidence", "prediction"]
+        }),
+    )
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

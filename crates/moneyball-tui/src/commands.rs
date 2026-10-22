@@ -5,8 +5,7 @@ use crate::*;
 
 // CLAUDE.md hard rule: only commands with real handlers may appear
 // here - this list feeds the palette, /help, AND every LLM system
-// prompt (app_state_block). Re-add /ledger in the same commit that
-// wires it.
+// prompt (app_state_block).
 pub(crate) const COMMANDS: &[(&str, &str)] = &[
     ("/brief", "7-day portfolio brief"),
     (
@@ -19,6 +18,10 @@ pub(crate) const COMMANDS: &[(&str, &str)] = &[
     (
         "/diagnose",
         "before cutting a product: where leads die, tired ads, trend, changes",
+    ),
+    (
+        "/ledger",
+        "the advisor's recommendations and how each came out",
     ),
     (
         "/report",
@@ -113,6 +116,7 @@ pub(crate) fn submit(app: &mut App) {
         "/setup" => open_setup(app, arg),
         "/funnel" => crate::funnel_flow::run_funnel(app, arg),
         "/diagnose" => crate::diagnose_flow::run_diagnose(app, arg),
+        "/ledger" => crate::ledger_view::run_ledger(app, arg),
         "/debug" => crate::report::run_debug_report(app, arg),
         "/report" => crate::creative_flow::run_report(app, arg),
         "/crm" => crate::crm_flow::run_crm_status(app),

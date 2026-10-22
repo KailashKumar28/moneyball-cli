@@ -1,5 +1,6 @@
 //! The advisor's tools over the on-disk snapshot - brief, funnel,
-//! diagnose - each returning what its typed command shows the model.
+//! diagnose, each returning what its typed command shows the model -
+//! and recommend, which records into the ledger.
 //! Split from commands.rs (size cap).
 
 /// Tool executor over on-disk snapshot data. Runs on the agent worker
@@ -48,6 +49,29 @@ impl moneyball_core::agent::ToolExec for SnapshotTools {
                     &self.snap()?,
                     &product,
                 ))
+            }
+            "recommend" => {
+                let rec: moneyball_core::schema::Rec = serde_json::from_value(args.clone())
+                    .map_err(|e| {
+                        format!("not recorded: {} - fix the arguments and call again", e)
+                    })?;
+                let check = rec.prediction.verify_by.clone();
+                match moneyball_core::ledger::submit(
+                    &self.cfg,
+                    &self.snap()?,
+                    rec,
+                    chrono::Local::now(),
+                ) {
+                    Ok(id) => Ok(format!(
+                        "recorded {id}. Give the user its id. moneyball marks it applied when the \
+                         change shows in the ad account's change log (or when they type \
+                         /ledger {id} applied) and checks the prediction after {check}."
+                    )),
+                    Err(why) => Err(format!(
+                        "not recorded - fix these and call recommend again, or drop it:\n- {}",
+                        why.join("\n- ")
+                    )),
+                }
             }
             other => Err(format!(
                 "tool \"{}\" is not implemented - answer from the tools you have",

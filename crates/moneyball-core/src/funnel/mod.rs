@@ -17,7 +17,8 @@ pub use print::{table, verdict, view};
 /// Spend as a multiple of target Rs/qualified at 0/1/2 qualified leads
 /// before an entity becomes a kill candidate (mb.py KILL_TABLE).
 pub const KILL_TABLE: [f64; 3] = [3.0, 4.7, 6.3];
-const LAG_HOURS: i64 = 72;
+/// CRM outcomes this recent are still coming in.
+pub const LAG_HOURS: i64 = 72;
 /// mb.py fallback when the workspace sets no target_rs_per_q.
 const DEFAULT_TARGET_RPQ: f64 = 2500.0;
 
@@ -104,6 +105,18 @@ pub fn compute(
         .expect("snapshot::load validated the date");
     let d1 = snap_date - Duration::days(1);
     let d0 = d1 - Duration::days(days.max(1) as i64 - 1);
+    compute_between(snap, cfg, product, (d0, d1), by)
+}
+
+/// The funnel over the days [d0, d1], both included - the ledger measures
+/// a prediction over the days after a change, not the last N.
+pub fn compute_between(
+    snap: &Snapshot,
+    cfg: &AppConfig,
+    product: &str,
+    (d0, d1): (NaiveDate, NaiveDate),
+    by: By,
+) -> Vec<FunnelRow> {
     let (d0s, d1s) = (
         d0.format("%Y-%m-%d").to_string(),
         d1.format("%Y-%m-%d").to_string(),
@@ -132,8 +145,8 @@ pub fn compute(
     }
 
     // CRM outcomes joined by ad_id, delivery-bucketed (IST).
-    let d1_ist = crate::brief::ist_midnight_epoch(snap_date);
-    let d0_ist = d1_ist - days.max(1) as i64 * 86400;
+    let d1_ist = crate::brief::ist_midnight_epoch(d1 + Duration::days(1));
+    let d0_ist = crate::brief::ist_midnight_epoch(d0);
     let lag_cut = d1_ist - LAG_HOURS * 3600;
     crate::crm::for_each_ticket(&snap.crm, |t, ep| {
         if ep < d0_ist || ep >= d1_ist {

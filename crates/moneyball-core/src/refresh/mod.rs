@@ -272,6 +272,10 @@ pub fn run(
         Err(e) => push(cfg, &mut run, on_step, failed("report", started, &e)),
     }
 
+    // Recs move on with the new data; a ledger it cannot write shows its
+    // error when it is next opened.
+    let _ = crate::ledger::catch_up(cfg, chrono::Local::now().date_naive());
+
     let missing = run
         .steps
         .iter()

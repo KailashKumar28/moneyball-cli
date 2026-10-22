@@ -77,6 +77,14 @@ enum Cmd {
         /// Product name (as configured in the workspace).
         product: String,
     },
+    /// The advisor's recommendations, what each predicted and how it came
+    /// out; `ledger <id> applied|ignored` marks one by hand.
+    Ledger {
+        /// A rec id, e.g. mb-20261022-1.
+        id: Option<String>,
+        /// applied or ignored.
+        state: Option<String>,
+    },
     /// The CRM: its status, connecting one, pulling or importing leads,
     /// checking a crm.json against the contract.
     Crm {
@@ -274,6 +282,24 @@ fn run(cli: Cli) -> Result<()> {
         Cmd::Diagnose { product } => {
             let strict = AppConfig::resolve(cli.data_root.as_deref(), cli.date.as_deref())?;
             moneyball_core::diagnose::run(&strict, &product, cli.date.as_deref())?;
+        }
+        Cmd::Ledger { id: None, .. } => {
+            let strict = AppConfig::resolve(cli.data_root.as_deref(), None)?;
+            moneyball_core::ledger::run(&strict)?;
+        }
+        Cmd::Ledger {
+            id: Some(id),
+            state,
+        } => {
+            use moneyball_core::ledger;
+            let strict = AppConfig::resolve(cli.data_root.as_deref(), None)?;
+            let state = state
+                .as_deref()
+                .and_then(ledger::by_hand)
+                .context("usage: moneyball ledger <id> applied|ignored")?;
+            let today = chrono::Local::now().date_naive();
+            ledger::mark(&strict, &id, state, None, today).map_err(anyhow::Error::msg)?;
+            println!("{} marked {}", id, ledger::name(state));
         }
         Cmd::Report { date, window } => {
             let strict = AppConfig::resolve(cli.data_root.as_deref(), cli.date.as_deref())?;

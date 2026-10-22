@@ -1,0 +1,213 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "LedgerEvent",
+  "description": "One line of ledger.jsonl.",
+  "type": "object",
+  "properties": {
+    "at": {
+      "description": "On `proposed`: the moment (RFC 3339), so a change logged earlier\nthat day is not taken for its being applied.",
+      "type": [
+        "string",
+        "null"
+      ],
+      "default": null
+    },
+    "by": {
+      "description": "\"advisor\", \"you\" or \"moneyball\" (its own sweep).",
+      "type": "string"
+    },
+    "date": {
+      "description": "YYYY-MM-DD the event happened.",
+      "type": "string"
+    },
+    "event": {
+      "$ref": "#/$defs/RecState"
+    },
+    "id": {
+      "description": "The recommendation this is about, e.g. `mb-20261022-1`.",
+      "type": "string"
+    },
+    "note": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "default": null
+    },
+    "rec": {
+      "description": "Only on `proposed`: the recommendation itself.",
+      "anyOf": [
+        {
+          "$ref": "#/$defs/Rec"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "schema": {
+      "description": "`moneyball.ledger/<major>`.",
+      "type": "string"
+    }
+  },
+  "required": [
+    "schema",
+    "id",
+    "event",
+    "date",
+    "by"
+  ],
+  "$defs": {
+    "BudgetMove": {
+      "description": "Rupees a day, before and after.",
+      "type": "object",
+      "properties": {
+        "from": {
+          "type": "number",
+          "format": "double"
+        },
+        "relearn": {
+          "description": "A move over 20% restarts Meta's learning; true accepts that.",
+          "type": "boolean",
+          "default": false
+        },
+        "to": {
+          "type": "number",
+          "format": "double"
+        }
+      },
+      "required": [
+        "from",
+        "to"
+      ]
+    },
+    "Evidence": {
+      "type": "object",
+      "properties": {
+        "metric": {
+          "description": "spend, meta_leads, cpl, crm_leads, qualified, cost_per_qualified,\nl_to_q.",
+          "type": "string"
+        },
+        "value": {
+          "type": "number",
+          "format": "double"
+        }
+      },
+      "required": [
+        "metric",
+        "value"
+      ]
+    },
+    "Prediction": {
+      "type": "object",
+      "properties": {
+        "direction": {
+          "description": "\"up\" or \"down\".",
+          "type": "string"
+        },
+        "metric": {
+          "type": "string"
+        },
+        "target": {
+          "type": "number",
+          "format": "double"
+        },
+        "verify_by": {
+          "description": "YYYY-MM-DD: measured over the days from the change to this one.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "metric",
+        "direction",
+        "target",
+        "verify_by"
+      ]
+    },
+    "Rec": {
+      "description": "What the advisor recommended, and what it said would happen.",
+      "type": "object",
+      "properties": {
+        "action": {
+          "description": "The change, in words.",
+          "type": "string"
+        },
+        "budget": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/BudgetMove"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "entity_id": {
+          "description": "The Meta id (the product's name at product level).",
+          "type": "string"
+        },
+        "entity_name": {
+          "description": "Filled from the data when recorded.",
+          "type": "string",
+          "default": ""
+        },
+        "evidence": {
+          "description": "The 7-day numbers it rests on, as checked when it was proposed.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Evidence"
+          }
+        },
+        "level": {
+          "description": "\"campaign\", \"adset\", \"ad\" or \"product\".",
+          "type": "string"
+        },
+        "lever": {
+          "description": "budget, creative, targeting, structure, form or crm.",
+          "type": "string"
+        },
+        "prediction": {
+          "$ref": "#/$defs/Prediction"
+        },
+        "product": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "product",
+        "level",
+        "entity_id",
+        "lever",
+        "action",
+        "evidence",
+        "prediction"
+      ]
+    },
+    "RecState": {
+      "oneOf": [
+        {
+          "type": "string",
+          "enum": [
+            "proposed",
+            "applied",
+            "ignored",
+            "confirmed",
+            "refuted"
+          ]
+        },
+        {
+          "description": "Never applied by its verify-by date.",
+          "type": "string",
+          "const": "expired"
+        },
+        {
+          "description": "Its metric could not be measured (the entity stopped, or the CRM\ndata it needs is missing).",
+          "type": "string",
+          "const": "inconclusive"
+        }
+      ]
+    }
+  }
+}

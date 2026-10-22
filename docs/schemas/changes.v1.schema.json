@@ -44,6 +44,11 @@
         "new": {
           "default": null
         },
+        "object_id": {
+          "description": "The changed campaign, ad set or ad's Meta id.",
+          "type": "string",
+          "default": ""
+        },
         "object_name": {
           "type": "string",
           "default": ""

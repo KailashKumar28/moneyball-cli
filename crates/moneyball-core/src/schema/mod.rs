@@ -16,10 +16,12 @@
 //! bare arrays ("v0") - documented, never retrofitted with envelopes.
 
 mod artifacts;
+mod ledger;
 mod report;
 mod run;
 
 pub use artifacts::*;
+pub use ledger::*;
 pub use report::*;
 pub use run::*;
 
@@ -30,6 +32,7 @@ pub const CRM_CONTACTS_SCHEMA: &str = "moneyball.crm_contacts/1";
 pub const RUN_SCHEMA: &str = "moneyball.run/1";
 pub const CHANGES_SCHEMA: &str = "moneyball.changes/1";
 pub const ADS_7D_SCHEMA: &str = "moneyball.ads_7d/1";
+pub const LEDGER_SCHEMA: &str = "moneyball.ledger/1";
 
 #[cfg(test)]
 mod tests {

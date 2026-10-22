@@ -5,6 +5,13 @@
 use crate::commands::COMMANDS;
 use crate::*;
 
+/// Every advisor turn has the recommend tool, so every prompt carries
+/// the rule for it.
+const RECORD_RULE: &str = "When you recommend a specific change to a campaign, ad set, ad or \
+product's form or CRM, record it with the recommend tool (evidence from the funnel table, the \
+number it should move, a date to check it by) and give the user its id. If it is refused, fix \
+what it says or drop the recommendation - never present an unrecorded one as recorded.";
+
 /// System prompt for the free-form chat agent. Same persona, but the
 /// user is asking a free-form question rather than triggering /brief.
 const AGENT_SYSTEM_PROMPT: &str = "You are moneyball's portfolio advisor for Meta ads.\n\
@@ -26,6 +33,10 @@ and say what it shows. 3-8 sentences, no preamble.";
 /// their agents in real environment state for exactly this reason).
 pub(crate) fn app_state_block(app: &App) -> String {
     let mut s = String::from("== live app state (authoritative - never contradict this) ==\n");
+    s.push_str(&format!(
+        "today: {}\n",
+        chrono::Local::now().format("%Y-%m-%d")
+    ));
     match app.cfg.workspace.as_ref() {
         Some(w) => {
             s.push_str(&format!(
@@ -157,7 +168,7 @@ pub(crate) fn call_agent(app: &mut App, system: &str, turn: Vec<moneyball_core::
     let pid = provider_id.clone();
     let pinfo = provider_info.clone();
     let model = model.clone();
-    let sys = system.to_string();
+    let sys = format!("{}\n\n{}", system, RECORD_RULE);
     let history = app.history.clone();
     let cfg = app.cfg.clone();
     let cancel = app.cancel.clone();
@@ -178,6 +189,7 @@ pub(crate) fn call_agent(app: &mut App, system: &str, turn: Vec<moneyball_core::
             moneyball_core::tools::brief_tool(),
             moneyball_core::tools::funnel_tool(),
             moneyball_core::tools::diagnose_tool(),
+            moneyball_core::tools::recommend_tool(),
         ];
         moneyball_core::agent::run_turn(
             &pid, &pinfo, &model, &sys, history, &tools, &exec, &cancel, &etx,

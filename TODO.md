@@ -257,9 +257,14 @@ bottom after a release-sized batch.)
       printed twice, 6.5s -> 3.8s). One output per tool for both paths;
       the funnel tool takes `by`; build_brief_prompt is gone.
 
-- [ ] **/ledger**: wire the prediction ledger view (stub today). Append
-      predictions to `ledger.jsonl`, show hit-rate over time. Plan with
-      four open decisions: plans/ledger-plan.md (2026-10-22).
+- [x] **/ledger** (2026-10-22): the advisor records recommendations
+      through a `recommend` tool, checked as mb.py's submit was (evidence
+      against the 7-day funnel, guards, CRM metrics only with CRM data);
+      `.moneyball/ledger.jsonl` (moneyball.ledger/1). Applied is read from
+      the change log (changes.json now carries object_id) or marked by
+      hand; each refresh and every view settles what is due from the
+      snapshot. /ledger and `moneyball ledger`. Defaults chosen for the
+      plan's four questions are in plans/ledger-plan.md.
 - [x] **Scheduled CRM fetch**: superseded (2026-10-09) - /schedule runs
       `moneyball refresh`, which pulls Meta then CRM into the same day.
 - [x] **Setup wizard: CRM step** (2026-10-10): setup's last word lists

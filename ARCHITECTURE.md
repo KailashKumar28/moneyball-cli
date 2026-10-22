@@ -39,9 +39,9 @@ and HOME/cwd reads live only in config.rs (also arch-enforced).
 ## 2. I/O contract
 
 - Reads: snapshots at `<workspace>/.moneyball/history/snap/<date>/`.
-- Writes: `.moneyball/{config.json,crm.toml,history/,state/,runs/,sessions/,reports/}`
-  in the workspace (sessions fall back to `~/.moneyball/sessions/` only
-  before a workspace is configured); `~/.moneyball/auth.json` (0600) for
+- Writes: `.moneyball/{config.json,crm.toml,ledger.jsonl,history/,state/,runs/,sessions/,reports/}`
+  in the workspace (ledger.jsonl is append-only; sessions fall back to
+  `~/.moneyball/sessions/` only before a workspace is configured); `~/.moneyball/auth.json` (0600) for
   secrets - Meta and model keys per person, CRM keys per workspace
   (`workspaces.<id>.crm_keys`; the legacy global `crm_keys` is never read for a pull, only copied once into a workspace that has pulled CRM data) and `~/.moneyball/bug-reports/` for user-filed bug reports -
   codex-style dotfile, not the OS keychain (keychain ACLs break for

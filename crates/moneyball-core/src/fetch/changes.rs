@@ -12,7 +12,7 @@ use crate::error::Result;
 use crate::schema::{ChangeRow, ChangesFile, CHANGES_SCHEMA};
 
 const FIELDS: &str =
-    "event_type,translated_event_type,event_time,object_name,object_type,extra_data";
+    "event_type,translated_event_type,event_time,object_id,object_name,object_type,extra_data";
 
 /// Pull every account's log from `since` (epoch seconds; the week
 /// /diagnose reads, not the whole fetch window) and write
@@ -81,6 +81,7 @@ fn row_of(account: &str, e: &Value) -> ChangeRow {
         event_type,
         object_type,
         object_name: text("object_name"),
+        object_id: text("object_id"),
         old: value("old_value"),
         new: value("new_value"),
     }

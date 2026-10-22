@@ -15,6 +15,7 @@ mod diagnose_flow;
 mod event;
 mod funnel_flow;
 mod landing;
+mod ledger_view;
 pub(crate) mod markdown;
 mod refresh_cell;
 mod refresh_flow;

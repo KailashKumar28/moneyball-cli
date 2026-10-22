@@ -1,6 +1,7 @@
-# /ledger - plan (draft, awaiting decisions)
+# /ledger - plan
 
-Status: proposal only, nothing built. TODO.md "Next: /ledger". Written
+Status: built 2026-10-22 with the defaults under "Decisions" (each easy
+to change: guards are constants in ledger/mod.rs). TODO.md "Next: /ledger". Written
 2026-10-22 from mb.py's `rec submit / settle / ledger` (the reference
 behavior) and what moneyball has since gained (diagnose, changes.json).
 
@@ -51,7 +52,22 @@ an advisor: how often is it right, by lever.
 - report.json does not include the ledger (the client sees results,
   not the advisor's scorecard) - unless you want it to.
 
-## Decisions needed from you
+## Decisions (defaults taken; say if any should change)
+
+1. You only: not in report.json or the client page.
+2. Both: the change log marks budget, targeting, creative and structure
+   changes applied; `/ledger <id> applied|ignored` for the rest (forms
+   and the CRM never show in Meta's log).
+3. mb.py's numbers as they were.
+4. Yes, but a prediction or evidence about CRM metrics (crm_leads,
+   qualified, cost_per_qualified, l_to_q) is refused while a snapshot
+   has no CRM data; Meta-side ones (spend, meta_leads, cpl) are fine.
+
+Settling: the metric over the full days from the day after the change
+to the check date, counts as a 7-day rate (the table the advisor read
+is 7 days); CRM metrics wait 3 more days for outcomes to land.
+
+## The questions as asked
 
 1. Is the ledger for you only, or does the client ever see it?
 2. Who marks "applied": detection from the change log only, or may you
