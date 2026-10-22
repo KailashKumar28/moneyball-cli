@@ -208,6 +208,7 @@
           "minimum": 0
         },
         "reach": {
+          "description": "Daily per-ad reach summed: an upper bound on people reached, exact\nonly for one ad on one day (a person seen on two days or by two\nads counts twice). Meta's deduplicated 7-day reach per ad is in the\nsnapshot's ads_7d.json.",
           "type": "integer",
           "format": "uint64",
           "default": 0,

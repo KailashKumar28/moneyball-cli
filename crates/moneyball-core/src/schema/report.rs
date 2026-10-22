@@ -289,6 +289,10 @@ pub struct ImageRef {
 pub struct Delivery {
     pub spend: f64,
     pub impressions: u64,
+    /// Daily per-ad reach summed: an upper bound on people reached, exact
+    /// only for one ad on one day (a person seen on two days or by two
+    /// ads counts twice). Meta's deduplicated 7-day reach per ad is in the
+    /// snapshot's ads_7d.json.
     #[serde(default)]
     pub reach: u64,
     pub clicks: u64,
