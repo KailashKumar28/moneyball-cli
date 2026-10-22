@@ -24,7 +24,10 @@ pub(crate) const COMMANDS: &[(&str, &str)] = &[
         "/report",
         "creative report (per-creative funnel) as HTML + summary",
     ),
-    ("/ask", "a question for the advisor (it pulls the numbers it needs)"),
+    (
+        "/ask",
+        "a question for the advisor (it pulls the numbers it needs)",
+    ),
     (
         "/debug",
         "flag this session as buggy for review (optional comment)",

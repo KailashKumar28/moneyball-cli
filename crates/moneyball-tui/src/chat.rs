@@ -1,23 +1,11 @@
 //! Chat-style message log for the moneyball TUI.
 //!
-//! Architecture inspired by Codex's `HistoryCell` design (openai/codex):
-//!
-//! - Each piece of transcript content is a `ChatCell` (trait object).
-//!   A cell exposes `display_lines(width)` so it renders wrapped lines
-//!   that fit the terminal width.
-//! - The "active" cell (the streaming assistant message) is mutated in
-//!   place as model deltas arrive - we don't append a new cell per delta.
-//! - Concrete cell types implement the trait and carry their own data;
-//!   a `Box<dyn ChatCell>` in the log lets a heterogeneous scrollback render
-//!   uniformly via virtual dispatch.
-//! - Timestamp/status badges live inside each cell, so the renderer
-//!   stays a simple loop.
-//!
-//! What we deliberately do NOT do (yet) vs codex:
-//! - markdown rendering (use plain text)
-//! - hyperlinks / OSC8
-//! - animation ticks (we redraw on every input event instead)
-//! - transcript overlay (Ctrl+T)
+//! Architecture after Codex's `HistoryCell` (openai/codex): each piece of
+//! the transcript is a cell (the `Cell` enum, its types in cells.rs) that
+//! renders itself as wrapped lines for a width, so the renderer stays a
+//! simple loop. The streaming assistant message is mutated in place as
+//! deltas arrive, never a new cell per delta. Assistant text renders as
+//! markdown (markdown.rs); the screen redraws every 100ms tick.
 
 use chrono::Local;
 use ratatui::style::{Color, Modifier, Style};
@@ -41,214 +29,10 @@ pub trait ChatCell: std::fmt::Debug + Send + Sync {
     }
 }
 
-/// Cell types. Each is a separate struct so they can have different data
-/// and behavior. The log stores `Box<dyn ChatCell>`.
-pub mod cells {
-    use super::*;
+pub mod cells;
 
-    /// User prompt (what they typed at the input bar).
-    #[derive(Debug, Clone)]
-    pub struct UserPrompt {
-        pub text: String,
-        pub at: chrono::DateTime<Local>,
-    }
-
-    /// Assistant text. While `streaming = true` the renderer tacks a
-    /// blinking caret onto the last line.
-    #[derive(Debug, Clone)]
-    pub struct AssistantText {
-        pub text: String,
-        pub streaming: bool,
-    }
-
-    /// Tool invocation: `moneyball brief`, `moneyball funnel Namma Mane`, etc.
-    #[derive(Debug, Clone)]
-    pub struct ToolCall {
-        pub name: String,
-        pub args: String,
-        pub status: ToolStatus,
-    }
-
-    /// Output of a tool call. Rendered immediately under the matching
-    /// `ToolCall` cell by the renderer (paired by index).
-    #[derive(Debug, Clone)]
-    pub struct ToolResult {
-        pub name: String,
-        pub output: Vec<String>,
-        pub success: bool,
-        pub duration_ms: u64,
-    }
-
-    /// System message: welcome, info banners, errors.
-    #[derive(Debug, Clone)]
-    pub struct System(pub String);
-
-    #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-    pub enum ToolStatus {
-        Pending,
-        Running,
-        Done,
-        Failed,
-    }
-
-    impl ToolStatus {
-        pub fn icon(self) -> &'static str {
-            match self {
-                ToolStatus::Pending => crate::widgets::IDLE,
-                ToolStatus::Running => crate::widgets::LOAD,
-                ToolStatus::Done => crate::widgets::OK,
-                ToolStatus::Failed => crate::widgets::FAIL,
-            }
-        }
-        pub fn color(self) -> Color {
-            match self {
-                ToolStatus::Pending => Color::DarkGray,
-                ToolStatus::Running => Color::Yellow,
-                ToolStatus::Done => Color::Green,
-                ToolStatus::Failed => Color::Red,
-            }
-        }
-    }
-
-    impl ChatCell for UserPrompt {
-        fn display_lines(&self, _width: u16) -> Vec<Line<'static>> {
-            // `>` prompt glyph + user text, then a timestamp on the next line.
-            vec![
-                Line::from(vec![
-                    Span::styled(
-                        "\u{276F} ",
-                        Style::default()
-                            .fg(Color::Cyan)
-                            .add_modifier(Modifier::BOLD),
-                    ),
-                    Span::styled(self.text.clone(), Style::default().fg(Color::White)),
-                ]),
-                Line::from(Span::styled(
-                    format!("    {}", self.at.format("%H:%M:%S")),
-                    Style::default().fg(Color::DarkGray),
-                )),
-            ]
-        }
-    }
-
-    impl ChatCell for AssistantText {
-        fn display_lines(&self, width: u16) -> Vec<Line<'static>> {
-            // Markdown-aware render (codex/Claude Code pattern): markers
-            // become styling, never raw ** or backticks on screen.
-            let mut out = crate::markdown::render(&self.text, width, "  ");
-            if self.streaming {
-                let caret = Span::styled(
-                    "\u{2588}",
-                    Style::default()
-                        .fg(Color::Cyan)
-                        .add_modifier(Modifier::SLOW_BLINK),
-                );
-                match out.last_mut() {
-                    Some(last) => last.spans.push(caret),
-                    None => out.push(Line::from(vec![Span::raw("  "), caret])),
-                }
-            }
-            if out.is_empty() {
-                out.push(Line::from(Span::raw("  ")));
-            }
-            out
-        }
-    }
-
-    impl ChatCell for ToolCall {
-        fn display_lines(&self, _width: u16) -> Vec<Line<'static>> {
-            let arg = if self.args.is_empty() {
-                String::new()
-            } else {
-                format!(" {}", self.args)
-            };
-            vec![Line::from(vec![
-                Span::styled("  \u{23BF} ", Style::default().fg(Color::DarkGray)),
-                Span::styled(self.status.icon(), Style::default().fg(self.status.color())),
-                Span::styled(" moneyball ", Style::default().fg(Color::DarkGray)),
-                Span::styled(
-                    self.name.clone(),
-                    Style::default()
-                        .fg(Color::Cyan)
-                        .add_modifier(Modifier::BOLD),
-                ),
-                Span::styled(arg, Style::default().fg(Color::Gray)),
-            ])]
-        }
-    }
-
-    impl ChatCell for ToolResult {
-        fn display_lines(&self, width: u16) -> Vec<Line<'static>> {
-            let mut out = Vec::new();
-            let indent = "      ";
-            let max_w = width.saturating_sub(indent.len() as u16).max(20) as usize;
-            let style = Style::default().fg(if self.success {
-                Color::Gray
-            } else {
-                Color::Red
-            });
-            for ln in &self.output {
-                // Tool output is pre-formatted (aligned tables): wrap it by
-                // columns, keeping its spaces, and indent the overflow.
-                let pieces = moneyball_core::text::wrap_columns(ln, max_w, max_w - 2);
-                for (i, piece) in pieces.into_iter().enumerate() {
-                    let lead = if i == 0 { indent } else { "        " };
-                    out.push(Line::from(Span::styled(
-                        format!("{}{}", lead, piece),
-                        style,
-                    )));
-                }
-            }
-            // 0 means "not measured" (replayed sessions) - print no
-            // duration rather than a fabricated "(0ms)".
-            if self.duration_ms > 0 {
-                out.push(Line::from(Span::styled(
-                    format!("      ({})", fmt_duration(self.duration_ms)),
-                    Style::default().fg(if self.success {
-                        Color::Green
-                    } else {
-                        Color::Red
-                    }),
-                )));
-            }
-            out
-        }
-    }
-
-    impl ChatCell for System {
-        fn display_lines(&self, _width: u16) -> Vec<Line<'static>> {
-            // Multi-line system text (e.g. the ASCII logo) - split on '\n'
-            // so each logical row is its own rendered line. Otherwise the
-            // whole string collapses to one wrapped visual line.
-            let mut out = Vec::new();
-            for ln in self.0.split('\n') {
-                out.push(Line::from(Span::styled(
-                    if ln.is_empty() {
-                        "  ".to_string()
-                    } else {
-                        format!("  {}", ln)
-                    },
-                    Style::default().fg(Color::DarkGray),
-                )));
-            }
-            out
-        }
-    }
-
-    /// Styled paragraphs that wrap to the width (the landing).
-    #[derive(Debug, Clone)]
-    pub struct Rich(pub Vec<crate::widgets::Para>);
-
-    impl ChatCell for Rich {
-        fn display_lines(&self, width: u16) -> Vec<Line<'static>> {
-            self.0.iter().flat_map(|p| p.lines(width)).collect()
-        }
-    }
-}
-
-/// Cell enum used by the log. We store as `Box<dyn ChatCell>` so the
-/// renderer can iterate uniformly; we also keep an enum here for
-/// convenience when we need to mutate the streaming assistant cell.
+/// One transcript entry. An enum, not a trait object, so the streaming
+/// assistant cell and a running tool's cell can be found and changed.
 #[derive(Debug, Clone)]
 pub enum Cell {
     UserPrompt(cells::UserPrompt),
@@ -259,22 +43,6 @@ pub enum Cell {
     Rich(cells::Rich),
     /// A /refresh run, updated in place as its steps land.
     Refresh(Box<crate::refresh_cell::RefreshCell>),
-}
-
-impl Cell {
-    /// Wrap into a boxed trait object for the log. Cheap clone via Arc-like
-    /// internal; we keep it simple with `Box` for v1.
-    pub fn into_boxed(self) -> Box<dyn ChatCell> {
-        match self {
-            Cell::UserPrompt(c) => Box::new(c),
-            Cell::AssistantText(c) => Box::new(c),
-            Cell::ToolCall(c) => Box::new(c),
-            Cell::ToolResult(c) => Box::new(c),
-            Cell::System(c) => Box::new(c),
-            Cell::Rich(c) => Box::new(c),
-            Cell::Refresh(c) => c,
-        }
-    }
 }
 
 impl ChatCell for Cell {
