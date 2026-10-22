@@ -257,17 +257,17 @@ pub fn status_lines(cfg: &AppConfig) -> Result<Vec<String>> {
                 String::new()
             };
             out.push(format!(
-                "data:   crm.json in snapshot {} ({} ticket(s){})",
-                d, n, range
+                "data:   crm.json in snapshot {} ({}{})",
+                snap_day(d),
+                crate::text::count(n as u64, "ticket", "tickets"),
+                range
             ));
             if latest.as_deref() != Some(d.as_str()) {
                 out.push(format!(
-                    "        STALE: the latest snapshot {} has no crm.json - brief/report/",
-                    latest.as_deref().unwrap_or("?")
+                    "        stale: the newest snapshot ({}) has no CRM data, so the brief, report \
+                     and funnel there show none",
+                    latest.as_deref().map_or("?".into(), snap_day)
                 ));
-                out.push(
-                    "        funnel run against the latest snapshot and see no CRM there.".into(),
-                );
             }
         }
     }
@@ -284,7 +284,7 @@ pub fn status_lines(cfg: &AppConfig) -> Result<Vec<String>> {
         match target_snapshot(cfg)? {
             Some(d) => format!(
                 "moneyball crm fetch   (writes crm.json into snapshot {})",
-                d
+                snap_day(&d)
             ),
             None => "moneyball fetch first: crm fetch needs a snapshot with ads".into(),
         }
@@ -295,11 +295,17 @@ pub fn status_lines(cfg: &AppConfig) -> Result<Vec<String>> {
     Ok(out)
 }
 
-/// Epoch seconds -> local calendar date, for display only.
+/// Epoch seconds -> calendar day, for display only ("15 Jul").
 fn ep_date(ep: i64) -> String {
     chrono::DateTime::from_timestamp(ep, 0)
-        .map(|d| d.format("%Y-%m-%d").to_string())
+        .map(|d| d.format("%d %b").to_string())
         .unwrap_or_else(|| "?".into())
+}
+
+/// A snapshot dir name as a day ("Wed 12 Aug").
+fn snap_day(d: &str) -> String {
+    chrono::NaiveDate::parse_from_str(d, "%Y-%m-%d")
+        .map_or_else(|_| d.to_string(), |d| d.format("%a %d %b").to_string())
 }
 
 #[cfg(test)]

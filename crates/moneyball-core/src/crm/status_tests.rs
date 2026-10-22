@@ -42,8 +42,8 @@ fn stale_crm_json_is_called_out_with_fetch_next() {
     .unwrap();
     let lines = status_lines(&cfg_at(&tmp)).unwrap();
     let all = lines.join("\n");
-    assert!(all.contains("snapshot 2026-08-01"), "{}", all);
-    assert!(all.contains("STALE"), "{}", all);
+    assert!(all.contains("snapshot Sat 01 Aug"), "{}", all);
+    assert!(all.contains("stale: the newest snapshot"), "{}", all);
     assert!(all.contains("crm fetch"), "{}", all);
     std::fs::remove_dir_all(&tmp).ok();
 }

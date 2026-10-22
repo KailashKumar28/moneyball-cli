@@ -77,7 +77,9 @@ pub(crate) fn on_report_done(
         );
     }
     lines.push(String::new());
-    lines.push(format!("open in browser: {}", out.html_path.display()));
+    lines.push(format!("report  {}", crate::widgets::tilde(&out.html_path)));
+    lines.push("ctrl+o opens it".into());
+    app.report_path = Some(out.html_path.clone());
     app.chat.push_tool("report", "", lines, true, ms);
 }
 
