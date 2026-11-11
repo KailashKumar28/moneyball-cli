@@ -240,7 +240,7 @@ state("report", "", async (page) => {
   await expect(frame).toHaveAttribute("srcdoc", fx.report.html);
   await expect(s.getByLabel("Report day")).toHaveValue(fx.report.date);
   const values = await s.getByLabel("Report day").locator("option").evaluateAll((os) => os.map((o) => (o as HTMLOptionElement).value));
-  expect(values).toEqual([...fx.reportDays].sort().reverse());
+  expect(values).toEqual(fx.reportDays.map((d) => d.date));
   await expect(s.getByRole("button", { name: "Open in Browser" })).toBeEnabled();
   const title = /<h1[^>]*>([^<]+)</.exec(fx.report.html)![1]!;
   await expect(page.frameLocator("iframe").getByRole("heading", { name: title })).toBeVisible();
@@ -461,7 +461,7 @@ state("report-none", "noreport", async (page) => {
   await nav(page, "Report");
   const s = screen(page, "Report");
   await expect(s.locator(".blank")).toContainText("No report is written for this day");
-  await expect(s.getByLabel("Report day")).toHaveValue(fx.reportDays[0]!);
+  await expect(s.getByLabel("Report day")).toHaveValue(fx.reportDays[0]!.date);
   await expect(s.getByRole("button", { name: "Open in Browser" })).toBeDisabled();
   await expect(s.getByRole("button", { name: "Generate" })).toBeEnabled();
   await expect(s.locator("iframe")).toHaveCount(0);

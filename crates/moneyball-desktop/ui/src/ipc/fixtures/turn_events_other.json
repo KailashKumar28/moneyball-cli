@@ -8,7 +8,7 @@
   },
   {
     "type": "failed",
-    "error": "prompt is too long: 210000 tokens > 200000 maximum Start a new session to continue."
+    "error": "prompt is too long: 210000 tokens > 200000 maximum. Start a new session to continue."
   },
   {
     "type": "died",

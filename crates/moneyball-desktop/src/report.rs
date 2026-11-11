@@ -47,8 +47,33 @@ fn view(r: &CreativeReport, html_path: &Path) -> Result<ReportView, AppError> {
     })
 }
 
+/// A day the Report screen can show.
+#[derive(Debug, Clone, Serialize)]
+pub struct ReportDay {
+    /// The snapshot date, what `report_for` and `report_generate` take.
+    pub date: String,
+    /// The data day it reports on, "Thu 08 Oct" (the day before `date`).
+    pub day: String,
+    /// The window that reaches back to the 1st of the data day's month.
+    pub month_to_date: u32,
+}
+
+/// The days with a snapshot, newest first.
+pub fn report_days_of(cfg: &AppConfig) -> Vec<ReportDay> {
+    let day = |date: String| {
+        let (iso, day) = data_day(&date);
+        let month_to_date = day_of(&iso).map_or(1, |d| chrono::Datelike::day(&d));
+        ReportDay {
+            date,
+            day,
+            month_to_date,
+        }
+    };
+    snapshot_dates(cfg).into_iter().map(day).collect()
+}
+
 /// Snapshot dates, newest first.
-pub fn report_days_of(cfg: &AppConfig) -> Vec<String> {
+fn snapshot_dates(cfg: &AppConfig) -> Vec<String> {
     let mut days: Vec<String> = std::fs::read_dir(cfg.snap_dir())
         .into_iter()
         .flatten()
@@ -67,7 +92,7 @@ fn snapshot_date(cfg: &AppConfig, date: Option<String>) -> Result<Option<String>
             format!("A report day must be YYYY-MM-DD, got \"{}\".", d),
         )),
         Some(d) => Ok(Some(d)),
-        None => Ok(report_days_of(cfg).into_iter().next()),
+        None => Ok(snapshot_dates(cfg).into_iter().next()),
     }
 }
 
@@ -116,7 +141,7 @@ pub fn refresh_busy() -> AppError {
 }
 
 #[tauri::command(async)]
-pub fn report_days(state: State<'_, AppState>) -> Result<Vec<String>, AppError> {
+pub fn report_days(state: State<'_, AppState>) -> Result<Vec<ReportDay>, AppError> {
     Ok(report_days_of(&state.workspace()?))
 }
 

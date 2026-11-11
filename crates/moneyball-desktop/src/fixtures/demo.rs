@@ -113,13 +113,15 @@ pub fn loaded(cfg: &AppConfig, crm: bool) -> Loaded {
 }
 
 /// What a generated report reads from the real clock: when it was
-/// generated, which its page also prints. Both are set to the demo's
-/// morning.
+/// generated, and the "pulled ..." time its masthead words from that.
+/// Both are set to the demo's morning.
 pub fn report_clock(cfg: &AppConfig) -> [(&'static str, serde_json::Value); 1] {
     let (rep, html) = report::daily(cfg, DATE).unwrap();
-    let page = std::fs::read_to_string(html).unwrap();
-    [(
-        "/html",
-        json!(page.replace(&rep.generated_at, "2026-10-09T02:01:21Z")),
-    )]
+    let page = std::fs::read_to_string(html)
+        .unwrap()
+        .replace(&rep.generated_at, "2026-10-09T02:01:21Z");
+    let (head, rest) = page.split_once("pulled ").unwrap();
+    let (_, tail) = rest.split_once(" &middot;").unwrap();
+    let page = format!("{}pulled 09 Oct, 07:31 am IST &middot;{}", head, tail);
+    [("/html", json!(page))]
 }

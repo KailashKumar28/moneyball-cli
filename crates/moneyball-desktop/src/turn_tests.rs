@@ -131,7 +131,7 @@ fn an_overflow_failure_says_to_start_a_new_session() {
     assert_eq!(types(&seen), ["failed"]);
     assert_eq!(
         seen[0]["error"],
-        "prompt is too long: 210000 tokens Start a new session to continue."
+        "prompt is too long: 210000 tokens. Start a new session to continue."
     );
     let other = Ev::Failed {
         error: "HTTP 500".into(),

@@ -189,6 +189,9 @@ export type RefreshEvent =
   | { type: "died"; message: string };
 
 /** `date` is the snapshot date (what `report_days` lists and `report_for` takes); `day` words the data day, one day earlier. */
+/** A day with a snapshot. `date` is what `report_for` / `report_generate` take; `day` words the data day. */
+export type ReportDay = { date: string; day: string; month_to_date: number };
+
 export type ReportView = { date: string; day: string; days: number; path: string; html: string; summary: string };
 
 // ---- core: session/summary.rs ----

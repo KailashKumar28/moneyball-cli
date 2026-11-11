@@ -1,6 +1,6 @@
 import { useImperativeHandle, useState, type Ref } from "react";
 import { reportDays, reportFor, reportGenerate, reportOpenInBrowser, toAppError, type AppError, type ReportView } from "../ipc";
-import { dayLabel, ErrorNote, Glyph, Loading, useAsync, type OnAction } from "../lib";
+import { ErrorNote, Glyph, Loading, useAsync, type OnAction } from "../lib";
 
 export type ReportHandle = { generate: () => void };
 type Props = { hidden: boolean; handle: Ref<ReportHandle>; version: number; onAction: OnAction };
@@ -17,12 +17,11 @@ export function ReportScreen({ hidden, handle, version, onAction }: Props) {
   const [error, setError] = useState<AppError | null>(null);
 
   const view = (made?.version === version ? made.view : null) ?? existing.data ?? null;
-  const shown = date ?? view?.date ?? days.data?.[0];
-  const options = [...new Set([...(shown ? [shown] : []), ...(days.data ?? [])])].sort().reverse();
+  const options = days.data ?? [];
+  const shown = date ?? view?.date ?? options[0]?.date;
 
   const run = () => {
-    // "Month to date" is the day of the month: the 8th asks for 8 days.
-    const n = win === "mtd" ? Number(shown?.slice(8)) || 1 : Number(win);
+    const n = win === "mtd" ? (options.find((d) => d.date === shown)?.month_to_date ?? 1) : Number(win);
     setBusy(true);
     setError(null);
     reportGenerate({ date: shown, days: n })
@@ -50,8 +49,8 @@ export function ReportScreen({ hidden, handle, version, onAction }: Props) {
           <select className="sel" aria-label="Report day" value={shown ?? ""} onChange={(e) => pickDate(e.target.value)} disabled={options.length === 0}>
             {options.length === 0 && <option value="">No days</option>}
             {options.map((d) => (
-              <option key={d} value={d}>
-                {dayLabel(d)}
+              <option key={d.date} value={d.date}>
+                {d.day}
               </option>
             ))}
           </select>

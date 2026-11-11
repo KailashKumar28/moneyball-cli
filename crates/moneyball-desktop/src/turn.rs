@@ -143,9 +143,12 @@ fn next<S: Fn(TurnEvent) -> bool>(events: &Receiver<Ev>, out: &mut Outbox<S>) ->
 /// what to do about it.
 fn with_hint(ev: Ev) -> Ev {
     match ev {
-        Ev::Failed { error } if looks_like_context_overflow(&error) => Ev::Failed {
-            error: format!("{} {}", error.trim_end(), OVERFLOW_HINT),
-        },
+        Ev::Failed { error } if looks_like_context_overflow(&error) => {
+            let error = error.trim_end().trim_end_matches('.');
+            Ev::Failed {
+                error: format!("{}. {}", error, OVERFLOW_HINT),
+            }
+        }
         ev => ev,
     }
 }

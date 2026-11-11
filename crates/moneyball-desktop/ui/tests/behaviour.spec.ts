@@ -146,7 +146,7 @@ test("report: day and window drive generate; open in browser passes the path", a
   await page.keyboard.press("Meta+4");
   const r = region(page, "Report");
   await expect(r.locator("iframe")).toBeVisible();
-  const older = fx.reportDays.find((d) => d !== fx.report.date)!;
+  const older = fx.reportDays.find((d) => d.date !== fx.report.date)!.date;
   await r.getByLabel("Report day").selectOption(older);
   await expect.poll(async () => (await calls(page, "report_for")).at(-1)).toEqual({ date: older });
   await r.getByLabel("Window").selectOption("7");
@@ -162,7 +162,7 @@ test("Generate builds a report where none is written", async ({ page }) => {
   const r = region(page, "Report");
   await r.getByRole("button", { name: "Generate" }).click();
   await expect(r.locator("iframe")).toBeVisible();
-  expect((await calls(page, "report_generate")).at(-1)).toEqual({ date: fx.reportDays[0], days: 1 });
+  expect((await calls(page, "report_generate")).at(-1)).toEqual({ date: fx.reportDays[0]!.date, days: 1 });
 });
 
 test("the empty state opens a workspace; Cmd-O does the same", async ({ page }) => {

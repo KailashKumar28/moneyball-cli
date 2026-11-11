@@ -8,6 +8,7 @@ import type {
   FunnelView,
   RefreshEvent,
   RefreshState,
+  ReportDay,
   ReportView,
   SessionSnapshot,
   SessionSummary,
@@ -48,7 +49,7 @@ export const refreshStart = (onEvent: (ev: RefreshEvent) => void, force?: boolea
   call<void>("refresh_start", { force, onEvent: channel(onEvent) });
 export const refreshCancel = () => call<void>("refresh_cancel");
 export const refreshState = () => call<RefreshState>("refresh_state");
-export const reportDays = () => call<string[]>("report_days");
+export const reportDays = () => call<ReportDay[]>("report_days");
 export const reportFor = (date?: string) => call<ReportView | null>("report_for", { date });
 export const reportGenerate = (args: { date?: string; days: number }) => call<ReportView>("report_generate", args);
 export const reportOpenInBrowser = (path: string) => call<void>("report_open_in_browser", { path });

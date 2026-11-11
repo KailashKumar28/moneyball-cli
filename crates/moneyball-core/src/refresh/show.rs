@@ -47,7 +47,7 @@ pub fn status_word(s: &RunStep) -> String {
     }
 }
 
-/// A step's counts in reading order: "5 products, 997 rows".
+/// A step's counts in reading order: "5 products, 997 rows, 1 page".
 pub fn counts_detail(s: &RunStep) -> String {
     let order: &[&str] = match s.name.as_str() {
         "meta" => &["products", "rows"],
@@ -58,7 +58,15 @@ pub fn counts_detail(s: &RunStep) -> String {
     };
     order
         .iter()
-        .filter_map(|k| s.counts.get(*k).map(|v| format!("{} {}", commas(*v), k)))
+        .filter_map(|k| {
+            let v = *s.counts.get(*k)?;
+            let noun = if v == 1 {
+                k.strip_suffix('s').unwrap_or(k)
+            } else {
+                k
+            };
+            Some(format!("{} {}", commas(v), noun))
+        })
         .collect::<Vec<_>>()
         .join(", ")
 }
