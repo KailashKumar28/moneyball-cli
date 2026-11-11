@@ -60,13 +60,17 @@ export function RefreshScreen({ hidden, refresh: r, onAction, go }: Props) {
             {f.numbers && (
               <p>
                 <b>{f.run.day}:</b>{" "}
-                {f.numbers.map((n, i) => (
+                {f.numbers.map((n, i, all) => (
                   <span key={n.label}>
-                    {i > 0 && ", "}
                     {n.label} <span className="num">{n.value}</span>
+                    {i < all.length - 1 && ", "}
                   </span>
                 ))}
-                {f.numbers_note && <span className="gold">. {f.numbers_note}</span>}
+                {f.numbers_note && (
+                  <>
+                    . <span className="gold cap1">{f.numbers_note}</span>
+                  </>
+                )}
               </p>
             )}
             <div className="acts">

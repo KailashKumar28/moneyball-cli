@@ -118,7 +118,7 @@ function Shell({ workspace, onPick }: { workspace: Workspace; onPick: () => void
         <div className="dragzone" data-tauri-drag-region />
         <button className="ws" title="Open another workspace" onClick={onPick}>
           <b>{workspace.name}</b>
-          <span>{workspace.display_path}</span>
+          <span title={workspace.display_path}>{workspace.display_path}</span>
         </button>
         <nav className="nav" aria-label="Views">
           {NAV.map(([id, label], i) => (

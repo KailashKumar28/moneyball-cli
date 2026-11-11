@@ -1,5 +1,5 @@
 import Markdown from "markdown-to-jsx";
-import { useCallback, useEffect, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
+import { Fragment, useCallback, useEffect, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
 import {
   sessionCurrent,
   sessionNew,
@@ -154,7 +154,17 @@ export function Advisor({ hidden, newSession, onAction }: Props) {
     setRows((r) => [...r, { type: "user", text: say }]);
     setActive(true);
     setSince(null);
-    turnStart(say, onEvent).catch((e: unknown) => {
+    const started = turnStart(say, onEvent);
+    // A new session has no id until its first turn writes the file: learn it, so the list shows and marks it.
+    if (id === null)
+      started
+        .then(sessionCurrent)
+        .then((s) => {
+          setId(s.id);
+          reloadSessions();
+        })
+        .catch(() => {});
+    started.catch((e: unknown) => {
       // Refused: nothing was recorded, so the message goes back to the composer.
       setRows((r) => {
         const i = r.findLastIndex((x) => x.type === "user" && x.text === say);
@@ -234,7 +244,7 @@ export function Advisor({ hidden, newSession, onAction }: Props) {
             {live && <Say text={live} live />}
             {refusal && (
               <div className="note" role="status">
-                <span>{refusal.reason}</span>
+                <span className="cap1">{refusal.reason}</span>
                 {refusal.fix && (
                   <span className="inl">
                     <ActionView action={refusal.fix} onAction={onAction} />
@@ -295,7 +305,7 @@ function RowView({ row, active }: { row: Row; active: boolean }) {
     case "note":
       return (
         <div className="note" role="status">
-          {row.text}
+          <span className="cap1">{row.text}</span>
         </div>
       );
   }
@@ -338,6 +348,7 @@ const Link = ({ children, href }: { children?: ReactNode; href?: string }) => (
 const MD = {
   disableParsingRawHTML: true,
   forceBlock: true,
+  wrapper: Fragment, // blocks sit straight in .say, so its spacing rules reach them whether there is one or many
   overrides: { a: { component: Link }, img: { component: () => null }, iframe: { component: () => null } },
 };
 
