@@ -16,11 +16,15 @@ not use hermes-agent as a reference (see AGENTS.md Don'ts).
 moneyball-core   headless logic: snapshot, brief, fetch, llm, config, secrets
 moneyball-tui    ratatui front-end; consumes core as a library
 moneyball        thin clap binary; dispatch only, no logic
+moneyball-desktop  Tauri 2 Mac app; commands in, Channel events out;
+                   Rust in src/, the web UI in ui/ (section 5b)
 ```
 
-Dependency rule: `moneyball -> moneyball-tui -> moneyball-core`, never the
-reverse. Core has no ratatui/terminal dependency, ever. The same code path
-is exercised headless (sub-commands) and through the TUI.
+Dependency rule: `moneyball -> moneyball-tui -> moneyball-core` and
+`moneyball-desktop -> moneyball-core`, never the reverse and never
+desktop -> tui. Core has no ratatui, terminal or tauri dependency, ever
+(arch_contract enforces all three). The same code path is exercised
+headless (sub-commands), through the TUI and through the desktop.
 
 Network boundary: the read/analysis path (brief, funnel, advisor math)
 never touches the network. Network lives in exactly four core modules:
@@ -48,6 +52,9 @@ and HOME/cwd reads live only in config.rs (also arch-enforced).
   locally built binaries). Secrets never appear in config.json,
   crm.toml, or logs - crm.toml references them as `secret:<name>` /
   `env:<VAR>`.
+- `~/.moneyball/config.json` holds `last_workspace`, written only by
+  `workspace::remember` for the desktop (a Finder launch has no cwd). The
+  CLI and TUI never read it; their resolution order is unchanged.
 - Outside both, only `schedule.rs`: `~/Library/LaunchAgents/ai.moneyball.refresh.<id>.plist`
   after the user confirms /schedule (or runs `moneyball schedule --at`),
   loaded with `launchctl bootstrap`, removed by `--off`.
@@ -118,6 +125,31 @@ and HOME/cwd reads live only in config.rs (also arch-enforced).
   the test surface and the review surface. New view -> render example or
   snapshot test, and actually read the output before shipping.
 
+## 5b. Desktop patterns (pi's seam; researched 2026-11-12, plans/desktop/)
+
+- **Direct commands and one event stream**, not a JSON-RPC server: one
+  `#[tauri::command]` per operation, each a thin wrapper over a plain
+  function that takes `&AppConfig` (so it tests without a Tauri runtime).
+  Commands return at once; long work streams over a
+  `tauri::ipc::Channel` fed by a forwarder thread on core's std mpsc.
+  Core stays blocking threads; no tokio in our code.
+- **State lives in Rust** (`tauri::State`): the open workspace, the
+  advisor `Session`, the running refresh. The webview holds nothing it
+  cannot re-read after a reload.
+- **The contract is pinned.** `plans/desktop/IPC.md` names every command
+  and shape; a Rust test writes one JSON example of each to
+  `ui/src/ipc/fixtures/`, and the UI type-checks them, so a shape change
+  fails `tsc`. "No CRM data" crosses as null, never zero.
+- **The UI presents, core words.** Sentences, figures and verdicts come
+  from core (`landing`, `refresh::finish`, `brief`, `funnel`); steps the
+  user takes arrive as `Action`s translated from `words::Command`.
+- **Closed webview.** CSP `connect-src ipc:` only; no plugin permission
+  is granted to the page (opener and dialog are called from Rust); the
+  report renders in `<iframe sandbox srcdoc>`; no command returns a
+  secret; a message starting with `/` never reaches the model.
+- **Test-only code is feature-gated** (`e2e`): the release bundle carries
+  no WebDriver plugin and no extra capability.
+
 ## 6. Provider/LLM patterns
 
 - All wire-protocol differences live behind `WireApi` in exactly two
@@ -165,14 +197,20 @@ requires updating this section first.
   RAG/embeddings, no sub-agents, no planner state. Models are RL-trained to
   understand agent loops; the loop + files + a few sharp tools is the
   product. Escape hatches go through existing commands, not new machinery.
-- **TUI<->core seam**: `Op` in (UserInput/Interrupt/Shutdown), `Ev` out
-  (AssistantDelta/Done, ToolBegin/End keyed by call_id, ItemDone,
-  TurnAborted, TurnComplete, Failed) over std mpsc. Items are emitted via
-  `ItemDone` the moment they are final and the UI records each immediately
-  (codex appends to the rollout as it goes - a crash mid-turn loses at
-  most the item in flight); the terminal events carry no item payload.
-  The TUI creates a cell on ToolBegin and finalizes it on ToolEnd; it
-  never sees wire formats.
+- **Front-end<->core seam**: `agent::Session` owns a conversation
+  (history, session file, cancel flag, the one-turn guard). In:
+  `start_turn` / `interrupt` (direct calls; there is no `Op` enum). Out:
+  `Ev` (AssistantDelta/Done, ToolBegin/End keyed by call_id, ItemDone,
+  TurnAborted, TurnComplete, Failed) over std mpsc. The front-end calls
+  `Session::apply` for every event, which records each `ItemDone` item
+  the moment it is final (codex appends to the rollout as it goes - a
+  crash mid-turn loses at most the item in flight), and `stream_closed`
+  when the receiver ends, so a dead worker is never a silent dead turn.
+  The terminal events carry no item payload. A front-end creates a row on
+  ToolBegin and finalizes it on ToolEnd; it never sees wire formats.
+  Reopen and live render go through one projection, `agent::view_items`.
+  What the model is told about the app comes from `prompt::FrontEnd`
+  (the commands that really exist, the output style, and `say`).
 
 ## 7. Enforcement gates (definition of done for any change)
 
@@ -191,6 +229,9 @@ file size ratchet (§3).
 5. Size caps (§3) respected for touched code.
 6. `cargo install --path crates/moneyball --locked` - the user runs the
    installed binary; a fix that isn't installed isn't shipped.
+7. Desktop: `pnpm check` in `crates/moneyball-desktop/ui` (types, lint,
+   WebKit tests against the pinned fixtures, build), then the real-app
+   run in `crates/moneyball-desktop/e2e`; its screenshots are read.
 
 ## 8. Standing debt (chip away; never add to it)
 

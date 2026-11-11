@@ -12,16 +12,15 @@ dependency of `ui/` (`pnpm add -D @tauri-apps/cli@^2`).
 
 | What | Command |
 |---|---|
-| Dev (vite + the app, restarts on Rust edits) | `pnpm --dir ui tauri dev` |
-| Release bundle (`.app` and `.dmg`) | `pnpm --dir ui tauri build --bundles app,dmg` |
+| Dev (vite + the app, restarts on Rust edits) | `./ui/node_modules/.bin/tauri dev` |
+| Release bundle (`.app` and `.dmg`) | `./ui/node_modules/.bin/tauri build --bundles app,dmg` (signed release: `scripts/release-desktop.sh`) |
 | Rust only | `cargo build -p moneyball-desktop` |
 | Tests | `cargo test -p moneyball-desktop` |
 | Regenerate the IPC fixtures | `MB_UPDATE_FIXTURES=1 cargo test -p moneyball-desktop fixtures` |
 | Regenerate the icon set | `python3 icons/make_icon.py` |
 
-- If the npm CLI cannot find `tauri.conf.json` from `ui/`, run it from this
-  directory: `pnpm --dir ui exec tauri dev`. Not verified here: `ui/` had no
-  package on this branch.
+- Run the CLI from this directory, not through `pnpm --dir ui`: it looks
+  for `tauri.conf.json` under the current directory.
 - `cargo build` needs `ui/dist/index.html` (Tauri embeds it at compile
   time). `build.rs` writes a stand-in page when it is missing, so a fresh
   checkout can run `cargo test --workspace`; `pnpm build` replaces it.

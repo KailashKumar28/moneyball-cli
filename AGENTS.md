@@ -5,8 +5,11 @@ math) never touches the network; network code lives in exactly four core
 modules (canonical list: ARCHITECTURE.md §1, enforced by the arch_contract
 test) - and nothing ever writes to Meta or the CRM.
 Analysis reads snapshots via the documented schema, whether written by
-`/refresh`, `crm fetch`, or an external pipeline. TUI is the management
-surface; no web UI.
+`/refresh`, `crm fetch`, or an external pipeline. The TUI is the management
+surface. The Mac app (`crates/moneyball-desktop`, Tauri) is a second
+front-end over the same core for the daily surfaces (today, brief, funnel,
+refresh, report, advisor); its webview has no network of its own. No
+hosted web UI.
 
 See [ARCHITECTURE.md](ARCHITECTURE.md) for the BINDING structure & style
 contract: crate layout, module/size rules, anti-verbosity rules, TUI/LLM
@@ -24,6 +27,10 @@ check items off in the same commit that ships them.
 5. Headless CLI parity vs `python3 pipeline/mb.py <cmd>`.
 6. **Show user actual stdout.**
 7. `cargo install --path crates/moneyball --locked --quiet`.
+8. Desktop changes: `pnpm check` in `crates/moneyball-desktop/ui`, then the
+   real-app run in `crates/moneyball-desktop/e2e` (its README), and read
+   its screenshots. A UI change seen only against the mocked IPC isn't
+   shipped.
 
 ## Hard-won lessons
 
@@ -49,6 +56,14 @@ check items off in the same commit that ships them.
   `TestBackend`.
 - Test -> `crates/moneyball-core/tests/` with hermetic fixture under
   `fixtures/snap/<date>/`.
+- Anything both front-ends say or do (a sentence, a loader, a worker, a
+  prompt) -> core, unstyled; the TUI and the desktop only present it.
+  Steps the user takes are named through `FrontEnd.say` / `words::Command`
+  so each front-end words them its own way.
+- Desktop surface -> a command file in `crates/moneyball-desktop/src/`, its
+  shape in `plans/desktop/IPC.md` and the pinned fixtures, then the screen
+  in `ui/src/screens/`. The UI never composes product wording or computes
+  a figure.
 
 ## Don'ts
 
@@ -61,7 +76,11 @@ check items off in the same commit that ships them.
   different things.) The one exception: `/schedule` (and `moneyball
   schedule --at`) writes `~/Library/LaunchAgents/ai.moneyball.refresh.<id>.plist`,
   only after the user confirms, and `--off` / `/schedule off` removes it
-  (core `schedule.rs` is the only writer).
+  (core `schedule.rs` is the only writer). The Mac app adds nothing of its
+  own outside those two roots; WebKit keeps its caches under `~/Library`
+  for the bundle id, which we do not control.
+- Do NOT let the desktop tell a user (on screen or through the advisor) to
+  type a slash command, and do NOT return a secret over IPC.
 - Do NOT fix "Stattic Ad" Meta typo (breaks LeadZump ad-id join). Do NOT bucket
   CRM by `created_at` for short windows - use `delivery_time`.
 - Do NOT use `AppConfig::resolve()` in `main.rs`. Use `resolve_optional()`;
