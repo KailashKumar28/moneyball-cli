@@ -82,7 +82,7 @@ fn loop_runs_tools_and_emits_items_as_they_complete() {
     let items: Vec<&Item> = evs
         .iter()
         .filter_map(|e| match e {
-            Ev::ItemDone(i) => Some(i),
+            Ev::ItemDone { item } => Some(item),
             _ => None,
         })
         .collect();
@@ -123,9 +123,11 @@ fn length_stop_fails_tool_calls_without_executing() {
     let out = evs
         .iter()
         .find_map(|e| match e {
-            Ev::ItemDone(Item::ToolOutput {
-                output, is_error, ..
-            }) => Some((output.clone(), *is_error)),
+            Ev::ItemDone {
+                item: Item::ToolOutput {
+                    output, is_error, ..
+                },
+            } => Some((output.clone(), *is_error)),
             _ => None,
         })
         .expect("a ToolOutput item");
@@ -156,7 +158,7 @@ fn cancel_mid_stream_emits_marker_and_aborts() {
     let evs = drain(rx);
     assert!(evs.iter().any(|e| matches!(
         e,
-        Ev::ItemDone(Item::User { text }) if text.starts_with("<turn_aborted>")
+        Ev::ItemDone { item: Item::User { text } } if text.starts_with("<turn_aborted>")
     )));
     assert!(matches!(evs.last(), Some(Ev::TurnAborted)));
 }
@@ -177,7 +179,7 @@ fn stream_error_without_cancel_is_failed() {
     let evs = drain(rx);
     assert!(matches!(evs.last(), Some(Ev::Failed { .. })));
     // A failed request emits no items.
-    assert!(!evs.iter().any(|e| matches!(e, Ev::ItemDone(_))));
+    assert!(!evs.iter().any(|e| matches!(e, Ev::ItemDone { .. })));
 }
 
 #[test]

@@ -1,0 +1,91 @@
+# core-agent: API note
+
+Branch `desktop-core-agent`. Everything the advisor chat needs now lives in
+`moneyball_core::agent` and `moneyball_core::session`; the TUI keeps cells,
+keys and its own wording. Seam doc items A B C C2 C3 D E F H J2 + section 3.
+
+## The session driver - `agent::Session` (agent/driver.rs)
+
+One conversation: history, session file, cancel flag, one-turn guard. A plain
+struct owned by the front-end (put it in `tauri::State<Mutex<_>>`).
+
+| Item | Signature | How a non-TUI caller uses it |
+|---|---|---|
+| `Session::new` | `(log: Option<SessionLog>, history: Vec<Item>) -> Session` | New chat: `Session::new(SessionLog::create(cfg.data_root.clone(), cfg.sessions_root()).ok(), vec![])`. Reopen: `let (log, items) = SessionLog::open(id, root)?; Session::new(Some(log), items)`. `None` log = not persisted. |
+| `Session::history` | `(&self) -> &[Item]` | Feed to `agent::view_items` for a snapshot after a webview reload. |
+| `Session::id` | `(&self) -> Option<&str>` | The session file id; None when not persisted. |
+| `Session::turn_active` | `(&self) -> bool` | True from `start_turn` until a final event is applied. |
+| `Session::start_turn` | `(&mut self, cfg: &AppConfig, system: &str, turn: Vec<Item>) -> Result<Turn, TurnRefused>` | `turn` is normally `vec![Item::User { text }]`. Records it, spawns the worker (provider/model lookup, tool list, executor, `run_turn`), returns at once. `system` = a persona const + `"\n\n"` + `prompt::app_state_block(..)`; the recommend rule is appended inside. A refusal records nothing. |
+| `Turn` | `struct { events: Receiver<Ev>, save_failed: Option<SaveFailed> }` | Forwarder thread: `for ev in turn.events { session.apply(&ev); channel.send(ev) }`, then `session.stream_closed()`. `save_failed` = the turn runs but its items missed the file; show once. |
+| `TurnRefused` | `enum { NoModel, UnknownProvider { provider }, Busy }`; Debug, Clone, PartialEq, Eq, thiserror, Serialize (`{"type":"no_model"}`, `{"type":"unknown_provider","provider":".."}`, `{"type":"busy"}`) | The typed "did not start" result. Its `Display` is neutral; each front-end writes its own sentence. |
+| `Session::apply` | `(&mut self, ev: &Ev) -> Result<(), SaveFailed>` | Call for EVERY event, in order. Records `ItemDone` items (history + file) and frees the guard on `TurnComplete` / `TurnAborted` / `Failed`. |
+| `Session::stream_closed` | `(&mut self)` | Call when the receiver disconnects. Harmless after a normal end; after a dead worker it is what frees the session (then tell the user to resend - never a silent dead turn). |
+| `Session::interrupt` | `(&self) -> bool` | `turn_cancel`. Sets the cancel flag if a turn is in flight; the stream then ends with `Ev::TurnAborted`. |
+| `Session::record` | `(&mut self, item: Item) -> Result<(), SaveFailed>` | Append an item outside a turn (the TUI's bug-report marker). The item is in the history even on Err. |
+| `Session::typed_tool_turn` | `(&self, typed: &str, tool: &str, args: Value, output: String) -> Vec<Item>` | The `turn` for a button that stands for a tool ("Brief" pressed): user item + tool call + its output, so the model does not call the tool again. |
+| `SaveFailed` | `struct SaveFailed(pub String)`; Display `session save failed: <why>`; Serialize (a string) | Show once; the chat goes on. |
+| `looks_like_context_overflow` | `(error: &str) -> bool` | On `Ev::Failed { error }`: true = offer a new session (the TUI's hint names `/clear`). |
+
+## Events - `agent::Ev`, `agent::Usage` (agent.rs)
+
+`Ev` now derives Debug, Clone, Serialize, tagged `type`, snake_case.
+**Shape change:** the two tuple variants became struct variants so the tag
+works: `AssistantDelta { text }` (was `AssistantDelta(String)`) and
+`ItemDone { item }` (was `ItemDone(Item)`). `Usage` gained Serialize.
+
+```json
+{"type":"assistant_delta","text":"hi"}
+{"type":"assistant_done","text":"..."}
+{"type":"tool_begin","call_id":"c1","name":"funnel","args":{}}
+{"type":"tool_end","call_id":"c1","output":"...","ok":true}
+{"type":"item_done","item":{"type":"user","text":"q"}}
+{"type":"turn_complete","ms":5,"provider":"p","usage":{"input":10,"output":2}}
+{"type":"turn_aborted"}
+{"type":"failed","error":"..."}
+```
+
+## View projection - `agent::view_items` (agent/view.rs)
+
+| Item | Signature | Use |
+|---|---|---|
+| `view_items` | `(history: &[Item]) -> Vec<ViewItem>` | Reopen / reload: `view_items(session.history())`. The TUI replay calls it. |
+| `ViewItem` | `enum { User { text }, Assistant { text }, Tool { call_id, name, args, status, output }, TurnInterrupted, BugReportFiled }`; Debug, Clone, PartialEq, Serialize (tagged `type`, snake_case) | One row each. The two markers are notes ("(turn interrupted)", "(bug report filed)" in the TUI), never user messages. |
+| `ToolStatus` | `enum { Pending, Ok, Failed }`; Serialize snake_case | `Pending` = no output recorded (running live, cut by an interrupt in a saved session); `output` is empty then. |
+
+## Prompts and app state - `agent::prompt` (agent/prompt.rs)
+
+| Item | Signature | Use |
+|---|---|---|
+| `AGENT_SYSTEM_PROMPT`, `BRIEF_SYSTEM_PROMPT`, `FUNNEL_SYSTEM_PROMPT`, `DIAGNOSE_SYSTEM_PROMPT` | `pub const &str` | The persona half of `system`. Free chat uses `AGENT_SYSTEM_PROMPT`. |
+| `FrontEnd` | `struct FrontEnd<'a> { commands: &'a [&'a str], output_style: &'a str }` | Desktop v1: `commands: &[]`, `output_style: "Output style: markdown renders here ..."` (no trailing newline). Only commands with handlers. |
+| `app_state_block` | `(cfg: &AppConfig, snap_date: Option<&str>, crm_note: Option<&str>, front: &FrontEnd) -> String` | `snap_date` / `crm_note` = the loaded snapshot's date and `CrmHealth::note()` (core-data's brief loader has both). Empty `commands` prints `slash commands: none (this app has none - never suggest one)`. |
+
+## Tool text - `agent::tool_text` (agent/tool_text.rs)
+
+| Item | Signature | Use |
+|---|---|---|
+| `format_brief_as_lines` | `(b: &ProductRowsAndFeasibility) -> Vec<String>` | The brief as plain lines (what the brief tool row shows). |
+| `brief_text` | `(b: &ProductRowsAndFeasibility, crm_note: Option<&str>) -> String` | The `output` for `typed_tool_turn(.., "brief", ..)`. |
+| `funnel_output` | `(cfg: &AppConfig, snap: &Snapshot, product: &str, by: By) -> String` | Same, for the funnel tool. |
+| `diagnose_output` | `(cfg: &AppConfig, snap: &Snapshot, product: &str) -> String` | Same, for the diagnose tool. |
+
+The executor (`SnapshotTools`) and the wire tool list are private to
+`agent` (agent/exec.rs); `start_turn` is their only caller.
+
+## Session list - `session::summaries` (session/summary.rs)
+
+| Item | Signature | Use |
+|---|---|---|
+| `summaries` | `(root: Option<&Path>) -> anyhow::Result<Vec<SessionSummary>>` | `sessions_list`: `session::summaries(cfg.sessions_root())`. Most recently modified first; unparseable files left out. Map the anyhow error to a string at the command edge. |
+| `SessionSummary` | `struct { id: String, started_at: DateTime<Utc>, modified_at: DateTime<Utc>, item_count: usize, preview: Option<String> }`; Debug, Clone, Serialize | `preview` = first real user text, one line, at most 200 bytes + "..."; markers never count. `item_count` counts every item. File format unchanged. |
+
+## Known gaps for the lead
+
+- Core text still names TUI commands whatever `FrontEnd.commands` says:
+  the state block's no-workspace and no-snapshot lines (`/setup`, `/brief`,
+  `/refresh`), the brief/diagnose personas ("The user ran /brief"), the
+  executor's no-snapshot error ("run /refresh") and the recommend result
+  ("/ledger <id> applied"). Moved verbatim to keep the TUI prompt
+  byte-identical; the desktop inherits them until someone rewords.
+- `ARCHITECTURE.md` 6b still describes `Op` and "the UI records each item";
+  the truth is `Session::start_turn / apply / interrupt` (wave 3 doc fix).

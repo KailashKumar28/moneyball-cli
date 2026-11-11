@@ -62,7 +62,10 @@ fn render_chat_view(f: &mut ratatui::Frame, area: Rect, app: &App) {
     // row says which step it is on - the cell may have scrolled away.
     let busy = app.refresh.as_ref().map(|j| j.step);
     // A turn in flight says so, and for how long (codex's "Working").
-    let turn = app.turn_active.then(|| app.turn_started.elapsed());
+    let turn = app
+        .session
+        .turn_active()
+        .then(|| app.turn_started.elapsed());
     let status_h: u16 = if app.status.is_some() || busy.is_some() || turn.is_some() {
         1
     } else {

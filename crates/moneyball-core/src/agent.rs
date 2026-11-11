@@ -1,5 +1,6 @@
-//! Agent core - conversation history, the tool loop, and the TUI seam.
-//! Binding design: ARCHITECTURE.md section 6b (codex-rs + pi-mono).
+//! Agent core - conversation history, the tool loop, and the front-end
+//! seam. Binding design: ARCHITECTURE.md section 6b (codex-rs + pi-mono).
+//! A front-end drives it through `Session` (driver.rs).
 //!
 //! History is the wire format: one `Item` enum is the in-memory
 //! transcript, the prompt (full history every request), and the JSONL
@@ -15,6 +16,14 @@ use serde_json::Value;
 
 use crate::provider::ModelProviderInfo;
 use crate::tools::{Tool, ToolCall};
+
+mod driver;
+mod exec;
+pub mod prompt;
+pub mod tool_text;
+mod view;
+pub use driver::{looks_like_context_overflow, SaveFailed, Session, Turn, TurnRefused};
+pub use view::{view_items, ToolStatus, ViewItem};
 
 /// One transcript item. Serialized verbatim into session JSONL.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -43,8 +52,12 @@ pub enum Item {
 /// one by one AS THEY COMPLETE (codex appends to the rollout as it
 /// goes) - a crash or quit mid-turn loses at most the item in flight,
 /// and the final events carry no payload to re-sync.
+#[derive(Debug, Clone, Serialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
 pub enum Ev {
-    AssistantDelta(String),
+    AssistantDelta {
+        text: String,
+    },
     /// One assistant message finished (there may be several per turn
     /// when tool rounds intervene). UI-only; the matching ItemDone
     /// carries the same text for persistence.
@@ -63,7 +76,9 @@ pub enum Ev {
     },
     /// One transcript item is final - record it (history + session
     /// JSONL) immediately.
-    ItemDone(Item),
+    ItemDone {
+        item: Item,
+    },
     /// Turn ended normally. `usage`: what its last call read and
     /// everything its calls wrote.
     TurnComplete {
@@ -79,7 +94,7 @@ pub enum Ev {
     },
 }
 
-/// Executes one tool call. Implemented TUI-side over snapshot data.
+/// Executes one tool call (exec.rs runs them over snapshot data).
 /// Errors return Err(message) and become ToolOutput{is_error} - the
 /// model sees them and recovers; they never kill the turn.
 pub trait ToolExec: Send {
@@ -205,7 +220,7 @@ fn run_turn_with(
     // most the item in flight.
     let emit = |history: &mut Vec<Item>, item: Item| {
         history.push(item.clone());
-        let _ = tx.send(Ev::ItemDone(item));
+        let _ = tx.send(Ev::ItemDone { item });
     };
     // Request-building healing only (never emitted): dangling ToolCalls
     // from a prior aborted turn get synthesized outputs so every wire
@@ -216,7 +231,9 @@ fn run_turn_with(
     let mut usage = Usage::default();
     loop {
         let resp = stream(&history, &mut |d| {
-            let _ = tx.send(Ev::AssistantDelta(d.to_string()));
+            let _ = tx.send(Ev::AssistantDelta {
+                text: d.to_string(),
+            });
         });
         let resp = match resp {
             Ok(r) => r,
@@ -247,7 +264,9 @@ fn run_turn_with(
         if resp.truncated && resp.tool_calls.is_empty() {
             // Length-stopped plain answer: never present it as complete.
             let note = "\n[response cut off: the model hit its max_tokens limit]";
-            let _ = tx.send(Ev::AssistantDelta(note.to_string()));
+            let _ = tx.send(Ev::AssistantDelta {
+                text: note.to_string(),
+            });
             text.push_str(note);
         }
         if !text.is_empty() {
@@ -352,7 +371,7 @@ fn run_turn_with(
 /// Tokens a model call read and wrote, as the provider reported them
 /// (zero when it reports none). Input counts the whole prompt, cached
 /// parts included: it is how full the context is.
-#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Serialize)]
 pub struct Usage {
     pub input: u64,
     pub output: u64,

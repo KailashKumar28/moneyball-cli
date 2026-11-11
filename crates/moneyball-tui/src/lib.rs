@@ -1,7 +1,6 @@
 //! moneyball-tui - ratatui REPL with brief view, slash-commands,
 //! completion, and first-run setup wizard.
 
-mod agent_tools;
 mod agent_turn;
 mod app;
 mod brief_flow;
@@ -41,6 +40,7 @@ use crossterm::terminal::{
 use ratatui::backend::CrosstermBackend;
 use ratatui::Terminal;
 
+use moneyball_core::agent::Session;
 use moneyball_core::session::SessionLog;
 use moneyball_core::AppConfig;
 
@@ -114,14 +114,14 @@ pub fn run_with_cfg(
     let mut app = App::new(cfg);
     match resume {
         Some((log, items)) => {
-            app.session = Some(log);
-            app.replay(items);
+            app.replay(&items);
+            app.session = Session::new(Some(log), items);
         }
         // Fresh session: appended items persist from the first turn.
         // A create failure degrades to an unpersisted session with a
         // visible warning, never a dead REPL.
         None => match SessionLog::create(app.cfg.data_root.clone(), app.cfg.sessions_root()) {
-            Ok(log) => app.session = Some(log),
+            Ok(log) => app.session = Session::new(Some(log), Vec::new()),
             Err(e) => app.status = Some(format!("session log unavailable: {}", e)),
         },
     }

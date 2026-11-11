@@ -2,32 +2,10 @@
 //! advisor's reading of them. The agent's `diagnose` tool returns the
 //! same text.
 
-use crate::agent_turn::{app_state_block, call_agent, typed_tool_turn};
+use crate::agent_turn::{call_agent, system_prompt};
 use crate::*;
-use moneyball_core::diagnose;
-
-const DIAGNOSE_SYSTEM_PROMPT: &str = "You are moneyball's portfolio advisor for Meta ads. \
-The user ran /diagnose: the diagnose tool's result holds four checks for one product - where \
-its CRM leads die, which ads are tiring, the last 7 days against the days before, and what \
-changed in its ad account. Name the most likely cause of weak results and the one lever to \
-pull first (the lead form, phone data, sales follow-up, swapping a tired ad, undoing a \
-change), citing the numbers. A form, data or sales problem is not fixed by cutting ad spend - \
-say so when it applies. If CRM data is missing, say which checks that leaves blind and its \
-fix. 4-8 sentences, no preamble.";
-
-/// What the diagnose tool returns: the four checks, and the CRM state
-/// the model must not read past.
-pub(crate) fn diagnose_output(
-    cfg: &moneyball_core::AppConfig,
-    snap: &moneyball_core::Snapshot,
-    product: &str,
-) -> String {
-    let mut out = diagnose::text(&diagnose::compute(snap, cfg, product));
-    if let Some(note) = moneyball_core::crm::status::CrmHealth::of(cfg, snap).note() {
-        out.push_str(&format!("IMPORTANT: {}\n", note));
-    }
-    out
-}
+use moneyball_core::agent::prompt::DIAGNOSE_SYSTEM_PROMPT;
+use moneyball_core::agent::tool_text::diagnose_output;
 
 pub(crate) fn run_diagnose(app: &mut App, arg: &str) {
     let started = std::time::Instant::now();
@@ -66,8 +44,10 @@ pub(crate) fn run_diagnose(app: &mut App, arg: &str) {
         true,
         started.elapsed().as_millis() as u64,
     );
-    let sys = format!("{}\n\n{}", DIAGNOSE_SYSTEM_PROMPT, app_state_block(app));
+    let sys = system_prompt(app, DIAGNOSE_SYSTEM_PROMPT);
     let args = serde_json::json!({ "product": product });
-    let turn = typed_tool_turn(app, &format!("/diagnose {}", arg), "diagnose", args, output);
+    let turn = app
+        .session
+        .typed_tool_turn(&format!("/diagnose {}", arg), "diagnose", args, output);
     call_agent(app, &sys, turn);
 }

@@ -1,7 +1,7 @@
 //! Tool definitions the agent loop puts on the wire. Each tool is a
 //! (name, description, JSON-Schema) triple (codex's approach); the
 //! wire-specific serialization lives in llm.rs body builders, and the
-//! handlers live in moneyball-tui (they need App + snapshot access).
+//! handlers live in agent/exec.rs (they need only an AppConfig).
 //! Only tools with real handlers may be defined here - descriptions
 //! are promises to the model.
 
@@ -41,8 +41,8 @@ pub struct ToolCall {
 // ---------- built-in tool definitions ----------
 //
 // These describe the data-side capabilities of moneyball. The handlers
-// live in moneyball-tui (they need App + snapshot access). Keep the
-// descriptions specific so the LLM knows when to call each.
+// live in agent/exec.rs, whose `tools()` is the list that goes on the
+// wire. Keep the descriptions specific so the LLM knows when to call each.
 
 /// `brief` - load the 7-day portfolio snapshot and return a markdown
 /// summary table plus the feasibility math. Use this whenever the user

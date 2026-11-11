@@ -234,7 +234,7 @@ fn clear_conversation(app: &mut App) {
     // Escape hatch for context growth (codex /new): fresh
     // history + fresh session file. The old session stays on
     // disk untouched (append-only, resumable via -c or --resume).
-    if app.turn_active || app.stream.is_some() {
+    if app.session.turn_active() || app.stream.is_some() {
         app.chat
             .note("still responding - esc to interrupt first, then /clear");
         return;
@@ -245,19 +245,19 @@ fn clear_conversation(app: &mut App) {
             .note("a CRM connect is running - finish or esc it, then /clear");
         return;
     }
-    app.history.clear();
     // A refresh still running keeps its cell: its outcome and any
     // fix land there.
     app.chat
         .cells
         .retain(|c| matches!(c, Cell::Refresh(r) if r.end.is_none()));
     app.chat.scroll_to_bottom();
+    use moneyball_core::agent::Session;
     match moneyball_core::session::SessionLog::create(
         app.cfg.data_root.clone(),
         app.cfg.sessions_root(),
     ) {
         Ok(log) => {
-            app.session = Some(log);
+            app.session = Session::new(Some(log), Vec::new());
             app.chat.push(Cell::System(cells::System(
                 "fresh conversation - previous session saved on disk (resume with \
                  moneyball --continue)"
@@ -265,7 +265,7 @@ fn clear_conversation(app: &mut App) {
             )));
         }
         Err(e) => {
-            app.session = None;
+            app.session = Session::new(None, Vec::new());
             app.chat.push(Cell::System(cells::System(format!(
                 "fresh conversation - but the new session log is unavailable ({})",
                 e
