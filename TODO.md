@@ -8,6 +8,31 @@ bottom after a release-sized batch.)
 
 ## Now (next slices, in order)
 
+- [ ] **Moneyball for Mac** (decided 2026-11-12: Tauri 2, daily driver
+      first, signed + notarized DMG; plan and research: plans/desktop/,
+      contract: plans/desktop/IPC.md, patterns: ARCHITECTURE.md 5b):
+  - [x] Core holds what both front-ends share (2026-11-12): the advisor
+        session, its tools and prompts; the landing and finished-refresh
+        words; the refresh worker and the brief loader; one `say` hook so
+        each front-end words a step its own way. The TUI's output is
+        unchanged (render examples diffed against master).
+  - [x] The app (2026-11-12): crates/moneyball-desktop - today, brief,
+        funnel, refresh, report, advisor with sessions; opens an existing
+        workspace and remembers it. UI tested in WebKit against fixtures
+        pinned from the Rust side; the real binary driven end to end
+        (e2e/) on a hermetic home with a mock model.
+  - [ ] Signed + notarized DMG: scripts/release-desktop.sh is written;
+        blocked on a Developer ID Application certificate, the Team ID
+        and an App Store Connect API key. Until then it builds ad-hoc.
+  - [ ] Setup, connect and schedule in the app (today: terminal only; a
+        Meta or CRM fix is shown as an "In Terminal" command).
+  - [ ] In-step refresh progress (core reports a step beginning and
+        ending only).
+  - [ ] Rupee sign in the app (core words money as "Rs."; the client
+        report uses the sign) - decide, then one display rule.
+  - [ ] Stop keeps the partial answer on screen but not in the session
+        file (core never persists a partial message, 6b invariant 3).
+
 - [ ] **Daily refresh and data health** (picked 2026-10-08 by a three-engineer
       review panel; design: plans/prototype/board.html sections R and S;
       contract: plans/daily-refresh-build-prompt.md; the task plan and its
