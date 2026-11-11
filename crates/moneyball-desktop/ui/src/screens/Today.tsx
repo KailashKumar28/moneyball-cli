@@ -1,6 +1,6 @@
 import type { Screen } from "../App";
 import type { Today } from "../ipc";
-import { ActionView, Glyph, Notice, Pending, stepGlyph, Strip, type Async, type OnAction } from "../lib";
+import { ActionView, Glyph, Notice, Pending, StepDetail, stepGlyph, Strip, type Async, type OnAction } from "../lib";
 
 type Props = { hidden: boolean; today: Async<Today>; onAction: OnAction; onRefresh: () => void; go: (s: Screen) => void };
 
@@ -79,7 +79,9 @@ function Body({ t, onAction }: { t: Today; onAction: OnAction }) {
                       {s.word}
                     </span>
                   </td>
-                  <td className="tx">{s.detail}</td>
+                  <td className="tx wrap">
+                    <StepDetail step={s} />
+                  </td>
                 </tr>
               ))}
             </tbody>

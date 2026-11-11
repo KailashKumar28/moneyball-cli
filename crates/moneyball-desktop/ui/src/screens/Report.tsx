@@ -48,6 +48,7 @@ export function ReportScreen({ hidden, handle, version, onAction }: Props) {
         <h1>Report</h1>
         <div className="tools">
           <select className="sel" aria-label="Report day" value={shown ?? ""} onChange={(e) => pickDate(e.target.value)} disabled={options.length === 0}>
+            {options.length === 0 && <option value="">No days</option>}
             {options.map((d) => (
               <option key={d} value={d}>
                 {dayLabel(d)}
@@ -76,13 +77,13 @@ export function ReportScreen({ hidden, handle, version, onAction }: Props) {
       <div className="body flush">
         {view ? (
           // sandbox with no tokens: no scripts, no navigation, no same-origin.
-          <iframe sandbox="" srcDoc={view.html} title={view.summary || view.day} />
+          <iframe sandbox="" srcDoc={view.html} title={`Report for ${view.day}`} />
         ) : (
           <div className="blank">
             {existing.loading || days.loading ? (
               <Loading />
             ) : (
-              !problem && <p className="cap">{shown ? `No report is written for ${dayLabel(shown)}. Generate builds one from the snapshot.` : "No snapshot yet, so there is no report to show."}</p>
+              !problem && <p className="cap">{shown ? "No report is written for this day. Generate builds one from the snapshot." : "No snapshot yet, so there is no report to show."}</p>
             )}
           </div>
         )}

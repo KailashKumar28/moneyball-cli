@@ -1,5 +1,5 @@
 import { brief, type BriefView } from "../ipc";
-import { ErrorNote, Notice, num, pct, Pending, rupees, useAsync, type OnAction } from "../lib";
+import { ErrorNote, Notice, num, pct, Pending, RS, rupees, useAsync, type OnAction } from "../lib";
 
 type Props = { hidden: boolean; sub: string; version: number; onAction: OnAction };
 
@@ -37,7 +37,7 @@ function Body({ v, onAction }: { v: BriefView; onAction: OnAction }) {
             {crm && <th>CRM</th>}
             {crm && <th>Qual.</th>}
             {crm && <th>Per day</th>}
-            {crm && <th>{"₹"}/qual.</th>}
+            {crm && <th>{RS}/qual.</th>}
             {crm && <th>L to Q</th>}
             <th>Goal</th>
             {crm && <th>Gap</th>}
@@ -46,7 +46,9 @@ function Body({ v, onAction }: { v: BriefView; onAction: OnAction }) {
         <tbody>
           {rows.map((r) => (
             <tr key={r.product}>
-              <td className="nm">{r.product}</td>
+              <td className="nm" title={r.product}>
+                {r.product}
+              </td>
               <td>{num(r.spend_per_day)}</td>
               <td>{num(r.m7d)}</td>
               {crm && <td>{num(r.l7d)}</td>}
@@ -65,7 +67,7 @@ function Body({ v, onAction }: { v: BriefView; onAction: OnAction }) {
           ? "Meta, CRM and Qual. are leads over the 7 days. Gap is qualified per day short of the goal."
           : "Meta is leads over the 7 days. Goal is qualified per day."}
       </p>
-      {v.cpl_order && <p className="cap">{v.cpl_order}</p>}
+      {v.cpl_order && <p className="cap cap1">{v.cpl_order}</p>}
       <div className="feas">
         <div className="h2">Feasibility</div>
         {v.feasibility_line && <p className="line">{v.feasibility_line}</p>}

@@ -1,7 +1,7 @@
 import { useState } from "react";
 import type { Screen } from "../App";
 import { funnel, type By, type FunnelView } from "../ipc";
-import { Notice, num, Pending, useAsync, type OnAction } from "../lib";
+import { Notice, num, Pending, RS, useAsync, type OnAction } from "../lib";
 
 type Props = { hidden: boolean; products: string[]; version: number; onAction: OnAction; go: (s: Screen) => void };
 type Days = 7 | 14 | 28;
@@ -94,14 +94,16 @@ function Body({ v, level, onAction, toToday }: { v: FunnelView; level: string; o
               <th>Per lead</th>
               {crm && <th>CRM</th>}
               {crm && <th>Qual.</th>}
-              {crm && <th>{"₹"}/qual.</th>}
+              {crm && <th>{RS}/qual.</th>}
               <th className="tx">Verdict</th>
             </tr>
           </thead>
           <tbody>
             {v.rows.map((r) => (
               <tr key={r.id}>
-                <td className="nm">{r.name}</td>
+                <td className="nm" title={r.name}>
+                  {r.name}
+                </td>
                 <td>{num(r.spend)}</td>
                 <td>{num(r.m)}</td>
                 <td>{num(r.cpl)}</td>
@@ -116,7 +118,7 @@ function Body({ v, level, onAction, toToday }: { v: FunnelView; level: string; o
           </tbody>
         </table>
       )}
-      {v.cpl_ranking && <p className="cap">{v.cpl_ranking}</p>}
+      {v.cpl_ranking && <p className="cap cap1">{v.cpl_ranking}</p>}
       {v.notes.map((n) => (
         <p className="cap" key={n}>
           {n}

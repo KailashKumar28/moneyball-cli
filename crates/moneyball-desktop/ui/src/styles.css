@@ -271,3 +271,23 @@ td.cap1{display:table-cell}
 .feas dl{grid-template-columns:max-content max-content}
 .empty .notice{margin:0 0 var(--s4)}
 .empty .notice p{margin:0;color:var(--ink)}
+
+/* ---------- real data (longer names, paths and sentences than the mock's) ---------- */
+/* a workspace name or path wider than the sidebar is cut; the path's title has it whole */
+.ws b,.ws span{overflow:hidden;text-overflow:ellipsis}
+/* core writes some sentences in lower case too ("cheapest Meta lead first: ...", an error's reason) */
+p.cap1{display:block}
+.notice>p:first-child::first-letter{text-transform:uppercase}
+/* a fix's "does" is a sentence: beside its command when there is room, under it when not, wrapping either way */
+.notice li,.inl{flex-wrap:wrap;align-items:baseline}
+.notice li .why,.inl .why{flex:1 1 18em;min-width:0;white-space:normal}
+.notice li:has(>.n){position:relative;padding-left:18px}
+.notice li>.n{position:absolute;left:0;top:0;line-height:26px}
+/* names (ad sets, campaigns, products) are cut like the report's ledger cuts them; the cell's title has the whole name */
+.t td.nm{max-width:300px;overflow:hidden;text-overflow:ellipsis}
+/* a failed step gives a sentence where the others give counts: that cell wraps */
+.t td.wrap{white-space:normal;padding-top:5px;padding-bottom:5px;line-height:18px}
+/* the run's summary and the feasibility line are sentences too; a figure never breaks from its label */
+.sum p,.feas .line{white-space:normal}
+.sum p>span{white-space:nowrap}
+@media (max-width:1000px){.t td.nm{max-width:200px}}

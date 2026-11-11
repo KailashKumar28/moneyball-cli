@@ -55,7 +55,9 @@ const int = new Intl.NumberFormat("en-US", { maximumFractionDigits: 0 });
 /** null is an empty cell, never 0. */
 export const num = (v: number | null, digits = 0) =>
   v === null ? "" : digits ? v.toFixed(digits) : int.format(v);
-export const rupees = (v: number | null) => (v === null ? "" : "₹" + int.format(v));
+/** Money is worded the way core words it in every sentence it sends, so one screen never shows two styles. */
+export const RS = "Rs.";
+export const rupees = (v: number | null) => (v === null ? "" : RS + int.format(v));
 export const pct = (v: number | null) => (v === null ? "" : v.toFixed(1) + "%");
 
 /** Elapsed wall time as 00:52. */
@@ -97,6 +99,14 @@ const STEP_GLYPH: Record<StepView["status"], GlyphKind> = {
   running: "run",
 };
 export const stepGlyph = (status: StepView["status"]): GlyphKind => STEP_GLYPH[status] ?? "warn";
+
+/** What a step brought in. The contract carries `reused` as a flag, not a sentence, so the note is the app's. */
+export const StepDetail = ({ step }: { step: StepView }) => (
+  <>
+    {step.detail}
+    {step.reused && <span className="tag">from today's earlier pull</span>}
+  </>
+);
 
 export const TINT_GLYPH: Record<Tint, GlyphKind | null> = { plain: null, good: "ok", warn: "warn", bad: "bad" };
 
@@ -201,7 +211,11 @@ export function Strip(props: { numbers: DayNumber[]; note: string | null; change
           {change(n.label) && <div className="dl">{change(n.label)}</div>}
         </div>
       ))}
-      {props.note && <div className="none">{props.note}</div>}
+      {props.note && (
+        <div className="none">
+          <span className="cap1">{props.note}</span>
+        </div>
+      )}
     </div>
   );
 }
@@ -236,9 +250,8 @@ export function Steps(props: { steps: StepView[]; live: boolean; elapsed?: strin
                 {open(s) && !live ? "" : s.word}
               </span>
             </td>
-            <td className="tx">
-              {s.detail}
-              {s.reused && <span className="tag">reused</span>}
+            <td className="tx wrap">
+              <StepDetail step={s} />
             </td>
             <td>{s.status === "running" ? (live ? elapsed : "") : s.time}</td>
           </tr>

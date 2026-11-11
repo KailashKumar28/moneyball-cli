@@ -1,6 +1,8 @@
 // Keys, re-reads and the trust boundary. No screenshots here.
 import { expect, test, type Page } from "@playwright/test";
-import { calls, open } from "./mock";
+import type { Action } from "../src/ipc/types";
+import { event, fx } from "./fixtures";
+import { calls, emitTurn, open } from "./mock";
 
 test.use({ timezoneId: "Asia/Kolkata", viewport: { width: 1200, height: 800 } });
 
@@ -70,9 +72,30 @@ test("opening another session swaps the log", async ({ page }) => {
   await open(page);
   await page.keyboard.press("Meta+5");
   const adv = region(page, "Advisor");
-  await adv.locator(".sess button").nth(2).click();
-  await expect(adv.locator(".me")).toHaveText("this is very old data");
-  await expect(adv.locator(".sess button").nth(2)).toHaveAttribute("aria-current", "true");
+  const other = fx.sessions.findIndex((s) => s.id === fx.sessionMarkers.id);
+  expect(fx.session.id).not.toBe(fx.sessionMarkers.id);
+  await adv.locator(".sess button").nth(other).click();
+  expect((await calls(page, "session_open")).at(-1)).toEqual({ id: fx.sessionMarkers.id });
+  await expect(adv.locator(".me")).toHaveText(fx.sessionMarkers.items.flatMap((i) => (i.type === "user" ? [i.text] : [])));
+  await expect(adv.locator(".sess button").nth(other)).toHaveAttribute("aria-current", "true");
+  await expect(adv.locator(".sess button[aria-current=true]")).toHaveCount(1);
+});
+
+test("a new session has no id until its first turn starts, then the list marks it", async ({ page }) => {
+  await open(page);
+  await page.keyboard.press("Meta+n");
+  const adv = region(page, "Advisor");
+  await expect(adv.locator(".sess button[aria-current=true]")).toHaveCount(0);
+  await adv.getByLabel("Message").fill("q");
+  await adv.getByLabel("Message").press("Enter");
+  // the turn's start wrote the file: the session is marked while the answer is still coming
+  const mine = adv.locator(".sess button").nth(fx.sessions.findIndex((s) => s.id === fx.session.id));
+  await expect(mine).toHaveAttribute("aria-current", "true");
+  await emitTurn(page, event(fx.turnEvents, "turn_complete"));
+  await expect(mine).toHaveAttribute("aria-current", "true");
+  // and a click on it does not reopen the session already shown
+  await adv.locator(".sess button[aria-current=true]").click();
+  expect(await calls(page, "session_open")).toHaveLength(0);
 });
 
 test("model output is untrusted: no raw HTML, links do not navigate", async ({ page }) => {
@@ -97,8 +120,9 @@ test("model output is untrusted: no raw HTML, links do not navigate", async ({ p
 test("Copy sends the command to copy_text and says Copied", async ({ page }) => {
   await open(page, "degraded");
   const copy = region(page, "Today").getByRole("button", { name: "Copy" });
+  const fix = fx.todayDegraded.fixes.find((a): a is Extract<Action, { kind: "terminal" }> => a.kind === "terminal")!;
   await copy.click();
-  expect(await calls(page, "copy_text")).toEqual([{ text: "moneyball crm secret leadzump_token" }]);
+  expect(await calls(page, "copy_text")).toEqual([{ text: fix.command }]);
   await expect(region(page, "Today").getByRole("button", { name: "Copied" })).toBeVisible();
 });
 
@@ -106,11 +130,14 @@ test("funnel controls ask core for the product, days and level", async ({ page }
   await open(page);
   await page.keyboard.press("Meta+3");
   const f = region(page, "Funnel");
-  await expect(f.locator("tbody tr")).toHaveCount(4);
-  await f.getByLabel("Product").selectOption("Primus by Fincity");
+  const [first, second] = fx.workspace.products as [string, string];
+  await expect(f.locator("tbody tr")).toHaveCount(fx.funnel.rows.length);
+  expect((await calls(page, "funnel")).at(-1)).toEqual({ product: first, days: 7, by: "adset" });
+  await expect(f.getByLabel("Product").locator("option")).toHaveText(fx.workspace.products);
+  await f.getByLabel("Product").selectOption(second);
   await f.getByText("28d").click();
   await f.getByText("Campaign").click();
-  await expect.poll(async () => (await calls(page, "funnel")).at(-1)).toEqual({ product: "Primus by Fincity", days: 28, by: "campaign" });
+  await expect.poll(async () => (await calls(page, "funnel")).at(-1)).toEqual({ product: second, days: 28, by: "campaign" });
   await expect(f.locator("thead th").first()).toHaveText("Campaign");
 });
 
@@ -119,13 +146,14 @@ test("report: day and window drive generate; open in browser passes the path", a
   await page.keyboard.press("Meta+4");
   const r = region(page, "Report");
   await expect(r.locator("iframe")).toBeVisible();
-  await r.getByLabel("Report day").selectOption("2026-10-07");
-  await expect.poll(async () => (await calls(page, "report_for")).at(-1)).toEqual({ date: "2026-10-07" });
-  await r.getByLabel("Window").selectOption("mtd");
+  const older = fx.reportDays.find((d) => d !== fx.report.date)!;
+  await r.getByLabel("Report day").selectOption(older);
+  await expect.poll(async () => (await calls(page, "report_for")).at(-1)).toEqual({ date: older });
+  await r.getByLabel("Window").selectOption("7");
   await r.getByRole("button", { name: "Generate" }).click();
-  expect((await calls(page, "report_generate")).at(-1)).toEqual({ date: "2026-10-07", days: 7 });
+  expect((await calls(page, "report_generate")).at(-1)).toEqual({ date: older, days: 7 });
   await r.getByRole("button", { name: "Open in Browser" }).click();
-  expect((await calls(page, "report_open_in_browser"))[0]).toMatchObject({ path: expect.stringContaining(".moneyball/reports/") });
+  expect((await calls(page, "report_open_in_browser"))[0]).toEqual({ path: fx.report.path });
 });
 
 test("Generate builds a report where none is written", async ({ page }) => {
@@ -134,13 +162,13 @@ test("Generate builds a report where none is written", async ({ page }) => {
   const r = region(page, "Report");
   await r.getByRole("button", { name: "Generate" }).click();
   await expect(r.locator("iframe")).toBeVisible();
-  expect((await calls(page, "report_generate")).at(-1)).toEqual({ date: "2026-10-08", days: 1 });
+  expect((await calls(page, "report_generate")).at(-1)).toEqual({ date: fx.reportDays[0], days: 1 });
 });
 
 test("the empty state opens a workspace; Cmd-O does the same", async ({ page }) => {
   await open(page, "noworkspace");
   await page.keyboard.press("Meta+o");
-  await expect(page.locator(".ws")).toContainText("moneyball-data");
+  await expect(page.locator(".ws")).toContainText(fx.workspace.name);
   expect(await calls(page, "workspace_pick")).toHaveLength(1);
 });
 

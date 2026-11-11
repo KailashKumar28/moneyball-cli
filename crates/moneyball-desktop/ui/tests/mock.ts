@@ -7,8 +7,10 @@ import type { RefreshEvent, TurnEvent } from "../src/ipc/types";
 // The fixtures' "now": the morning after the data day, in the workspace's zone.
 const NOW = new Date("2026-10-09T10:00:00+05:30");
 
-export async function open(page: Page, flags = "") {
+/** `replies` are hand-written answers (tests/fixtures.ts) served instead of the generated fixture, per command. */
+export async function open(page: Page, flags = "", replies?: Record<string, unknown>) {
   await page.clock.setFixedTime(NOW);
+  if (replies) await page.addInitScript((r) => void (window.__replies = r), replies);
   await page.goto(`/?mock=manual${flags ? "," + flags : ""}`);
   await page.waitForFunction(() => !!window.__mock);
   // the key handlers exist once the workspace has resolved, either way

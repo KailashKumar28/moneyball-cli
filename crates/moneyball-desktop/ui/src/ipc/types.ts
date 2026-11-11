@@ -1,4 +1,7 @@
-// The IPC contract (plans/desktop/IPC.md), typed by hand.
+// The IPC contract (plans/desktop/IPC.md), typed by hand and held to the
+// shell's generated fixtures by ./fixtures.ts: a field added, dropped or
+// retyped on either side fails tsc. Where this file and IPC.md differ, this
+// file is what the shell sends (NOTES.md, "Contract changes").
 // "core" types mirror the moneyball-core wire structs named beside each one.
 // CRM-derived fields are nullable: null means "no CRM data", never zero.
 
@@ -9,6 +12,7 @@ export type Action =
   | { kind: "report"; label: string; does: string }
   | { kind: "terminal"; command: string; does: string };
 
+/** `kind` is open (busy, no_model, snapshot, could_not_start, ...): the UI shows `reason` and `fix`, it never branches on the kind. */
 export type AppError = { kind: string; reason: string; fix: Action | null };
 
 export type Workspace = { name: string; path: string; display_path: string; products: string[] };
@@ -26,8 +30,8 @@ export type StepView = {
 };
 
 export type RunView = {
-  date: string;
-  day: string;
+  date: string; // the data day, "2026-10-08"
+  day: string; // the same day in words, "Thu 08 Oct"
   trigger: "manual" | "schedule";
   outcome: string;
   gaps: string;
@@ -184,6 +188,7 @@ export type RefreshEvent =
   | { type: "could_not_start"; error: AppError }
   | { type: "died"; message: string };
 
+/** `date` is the snapshot date (what `report_days` lists and `report_for` takes); `day` words the data day, one day earlier. */
 export type ReportView = { date: string; day: string; days: number; path: string; html: string; summary: string };
 
 // ---- core: session/summary.rs ----
@@ -204,6 +209,7 @@ export type ViewItem =
   | { type: "turn_interrupted" }
   | { type: "bug_report_filed" };
 
+/** `id` is null for a session with no turn yet: the shell writes the file on the first `turn_start`. */
 export type SessionSnapshot = { id: string | null; items: ViewItem[]; turn_active: boolean };
 
 // ---- core: agent.rs ----
