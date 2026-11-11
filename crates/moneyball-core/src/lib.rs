@@ -33,6 +33,7 @@ pub mod snapshot;
 pub mod status;
 pub mod text;
 pub mod tools;
+pub mod workspace;
 
 pub use logo::LOGO;
 pub use meta::{list_ad_accounts, validate_token, AdAccount};

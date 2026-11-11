@@ -9,6 +9,7 @@
 //! account, the creatives/leads/adsets capture, a cancel); `ok` otherwise.
 
 mod show;
+mod worker;
 
 use std::collections::BTreeMap;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -16,6 +17,7 @@ use std::sync::Arc;
 use std::time::Instant;
 
 pub use show::*;
+pub use worker::{spawn, Ev};
 
 use crate::config::AppConfig;
 use crate::error::Result;

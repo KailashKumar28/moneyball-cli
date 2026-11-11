@@ -12,6 +12,7 @@ use crate::error::{Error, Result};
 use crate::snapshot::Snapshot;
 
 pub mod print;
+mod wire;
 pub use print::{table, verdict, view};
 
 /// Spend as a multiple of target Rs/qualified at 0/1/2 qualified leads
@@ -22,7 +23,8 @@ pub const LAG_HOURS: i64 = 72;
 /// mb.py fallback when the workspace sets no target_rs_per_q.
 const DEFAULT_TARGET_RPQ: f64 = 2500.0;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
+#[serde(rename_all = "snake_case")]
 pub enum By {
     Campaign,
     Adset,

@@ -269,36 +269,23 @@ impl App {
         self.history = items;
     }
 
+    /// Load what the bar, the landing and the brief read (core does the
+    /// loading); a failure never kills the REPL.
     pub fn load_brief(&mut self) {
-        // Try to load the brief; failure shouldn't kill the REPL.
-        match self.cfg.snap_for(self.cfg.date.as_deref()) {
-            Ok(p) => match crate::snapshot_load(&p) {
-                Ok(snap) => {
-                    let history =
-                        brief::load_history(&self.cfg.history_dir().join("scoreboard.csv"));
-                    let r = brief::compute(&snap, &self.cfg, &history);
-                    self.crm_note =
-                        moneyball_core::crm::status::CrmHealth::of(&self.cfg, &snap).note();
-                    self.health = Some(moneyball_core::health::Health::of(&self.cfg, Some(&snap)));
-                    self.snap_date = Some(r::date_of(&snap));
-                    self.brief = Some(r);
-                    self.status = None;
-                }
-                Err(e) => {
-                    // Configured, with data that would not load: the bar and
-                    // landing still speak for the workspace, never "setup".
-                    self.health = Some(moneyball_core::health::Health::of(&self.cfg, None));
-                    self.status = Some(format!("snapshot load failed: {}", e));
-                }
-            },
-            // Missing snapshot is the normal first-run state, not a fault:
-            // the context bar already shows "no data", so keep the status
-            // hint short + actionable instead of dumping the raw error.
-            Err(_) => {
-                // The bar says "no data" and the landing says what to run.
-                self.health = Some(moneyball_core::health::Health::of(&self.cfg, None));
-            }
+        let loaded = brief::load(&self.cfg);
+        self.health = Some(loaded.health);
+        if let Some(r) = loaded.brief {
+            self.crm_note = loaded.crm_note;
+            self.snap_date = Some(r.snapshot_date.clone());
+            self.brief = Some(r);
+            self.status = None;
+        } else if let Some(e) = loaded.fault {
+            // Configured, with data that would not load: the bar and
+            // landing still speak for the workspace, never "setup".
+            self.status = Some(format!("snapshot load failed: {}", e));
         }
+        // Otherwise no snapshot yet - the normal first-run state: the bar
+        // says "no data" and the landing says what to run.
     }
 
     /// The first thing under the logo: how fresh the data is, and
@@ -311,17 +298,6 @@ impl App {
         self.report_path = report;
         self.chat.push(chat::Cell::Rich(chat::cells::Rich(paras)));
     }
-}
-
-mod r {
-    use moneyball_core::Snapshot;
-    pub fn date_of(s: &Snapshot) -> String {
-        s.date.clone()
-    }
-}
-
-pub(crate) fn snapshot_load(p: &std::path::Path) -> anyhow::Result<moneyball_core::Snapshot> {
-    Ok(moneyball_core::snapshot::load(p)?)
 }
 
 /// Short one-line render of tool args for the cell header.

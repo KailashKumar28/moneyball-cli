@@ -12,7 +12,8 @@ use crate::snapshot::Snapshot;
 pub const STALE_DAYS: i64 = 2;
 
 /// The bar's state; when several hold, the first listed wins.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
+#[serde(tag = "kind", rename_all = "snake_case")]
 pub enum State {
     /// Today's refresh failed: nothing new was written. Outranks NoData,
     /// so a first refresh that fails shows its fix, not "no data yet".
@@ -32,7 +33,7 @@ pub enum State {
     Fresh,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize)]
 pub struct Health {
     pub today: NaiveDate,
     /// The date of the snapshot on screen, and of the newest holding CRM.
