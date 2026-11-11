@@ -147,6 +147,7 @@ impl Session {
         let exec = exec::SnapshotTools {
             cfg: cfg.clone(),
             say: front.say,
+            self_heal: front.self_heal,
         };
         let cancel = self.cancel.clone();
         std::thread::spawn(move || {
@@ -203,6 +204,13 @@ impl Session {
         }
         self.turn_active
     }
+}
+
+/// Whether a turn could start on this workspace's model, checked the way
+/// `Session::start_turn` checks it: for a front-end that must know before
+/// it creates anything for the turn.
+pub fn model_configured(cfg: &AppConfig) -> Result<(), TurnRefused> {
+    model_for(cfg).map(|_| ())
 }
 
 /// The workspace's chosen provider and model.

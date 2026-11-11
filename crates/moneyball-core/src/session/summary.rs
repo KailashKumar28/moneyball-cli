@@ -24,6 +24,10 @@ pub struct SessionSummary {
     /// The first thing the user said (never a marker we authored), cut
     /// to one line; None for a session with no user message yet.
     pub preview: Option<String>,
+    /// The front-end that wrote it (`SessionMeta::front_end`): for a
+    /// front-end that lists only its own, not part of what a list shows.
+    #[serde(skip)]
+    pub front_end: Option<String>,
 }
 
 /// Every saved session under `root` (None = the global fallback dir),
@@ -56,6 +60,7 @@ fn summary_of(path: &Path) -> Option<SessionSummary> {
         modified_at: modified.into(),
         item_count: items.len(),
         preview,
+        front_end: meta.front_end,
     })
 }
 

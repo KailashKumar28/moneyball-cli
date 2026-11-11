@@ -48,7 +48,7 @@ function Body({ t, onAction }: { t: Today; onAction: OnAction }) {
         <Notice strong={headline?.text} text={headline?.rest} details={t.details} steps={steps} onAction={onAction} />
       )}
       {day?.numbers && <Strip numbers={day.numbers} note={day.numbers_note} changes={day.versus?.changes} />}
-      {day?.versus && <p className="cap">Changes are against {day.versus.day}.</p>}
+      {day?.versus && <p className="cap">{day.versus.caption}</p>}
       {day?.report_missing && (
         <div className="inl missing">
           <span>{day.report_missing.note}</span>

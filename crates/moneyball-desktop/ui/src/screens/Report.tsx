@@ -1,15 +1,15 @@
-import { useImperativeHandle, useState, type Ref } from "react";
+import { useEffect, useImperativeHandle, useRef, useState, type Ref } from "react";
 import { reportDays, reportFor, reportGenerate, reportOpenInBrowser, toAppError, type AppError, type ReportView } from "../ipc";
 import { ErrorNote, Glyph, Loading, useAsync, type OnAction } from "../lib";
 
-export type ReportHandle = { generate: () => void };
-type Props = { hidden: boolean; handle: Ref<ReportHandle>; version: number; onAction: OnAction };
-type Win = "1" | "7" | "mtd";
+export type ReportHandle = { daily: () => void };
+/** `onGenerated` tells the app the files on disk changed (it bumps `version`, so Today re-reads). */
+type Props = { hidden: boolean; handle: Ref<ReportHandle>; version: number; onAction: OnAction; onGenerated: () => void };
 
-export function ReportScreen({ hidden, handle, version, onAction }: Props) {
+export function ReportScreen({ hidden, handle, version, onAction, onGenerated }: Props) {
   const days = useAsync(reportDays, [version]);
   const [date, setDate] = useState<string>(); // undefined = the data day
-  const [win, setWin] = useState<Win>("1");
+  const [win, setWin] = useState(0); // which of the day's windows; the shell words them and gives their days
   const existing = useAsync(() => reportFor(date), [date, version]);
   // A report generated here, until a refresh rewrites the files (version moves on).
   const [made, setMade] = useState<{ version: number; view: ReportView } | null>(null);
@@ -19,17 +19,39 @@ export function ReportScreen({ hidden, handle, version, onAction }: Props) {
   const view = (made?.version === version ? made.view : null) ?? existing.data ?? null;
   const options = days.data ?? [];
   const shown = date ?? view?.date ?? options[0]?.date;
+  const windows = options.find((d) => d.date === shown)?.windows ?? [];
+  const chosen = windows[win];
+  const current = useRef(version);
+  useEffect(() => {
+    current.current = version;
+  });
 
-  const run = () => {
-    const n = win === "mtd" ? (options.find((d) => d.date === shown)?.month_to_date ?? 1) : Number(win);
+  const generate = (args: { date?: string; days: number }) => {
     setBusy(true);
     setError(null);
-    reportGenerate({ date: shown, days: n })
-      .then((view) => setMade({ version, view }), (e: unknown) => setError(toAppError(e)))
+    reportGenerate(args)
+      .then(
+        (view) => {
+          // Kept through the version this generate itself bumps; a later refresh moves past it.
+          setMade({ version: current.current + 1, view });
+          onGenerated();
+        },
+        (e: unknown) => setError(toAppError(e)),
+      )
       .finally(() => setBusy(false));
   };
-  // A "report" Action elsewhere in the app lands here and generates.
-  useImperativeHandle(handle, () => ({ generate: run }));
+  const run = () => {
+    if (shown && chosen) generate({ date: shown, days: chosen.days });
+  };
+  // A "report" Action elsewhere in the app means the daily report for the data day, whatever was
+  // last selected here: the selections go back to it, and the shell picks the day.
+  const daily = () => {
+    setDate(undefined);
+    setWin(0);
+    setMade(null);
+    generate({ days: 1 });
+  };
+  useImperativeHandle(handle, () => ({ daily }));
 
   const pickDate = (d: string) => {
     setMade(null);
@@ -54,12 +76,14 @@ export function ReportScreen({ hidden, handle, version, onAction }: Props) {
               </option>
             ))}
           </select>
-          <select className="sel" aria-label="Window" value={win} onChange={(e) => setWin(e.target.value as Win)}>
-            <option value="1">1 day</option>
-            <option value="7">7 days</option>
-            <option value="mtd">Month to date</option>
+          <select className="sel" aria-label="Window" value={win} onChange={(e) => setWin(Number(e.target.value))} disabled={windows.length === 0}>
+            {windows.map((w, i) => (
+              <option key={w.label} value={i}>
+                {w.label}
+              </option>
+            ))}
           </select>
-          <button className="btn" onClick={run} disabled={busy || !shown}>
+          <button className="btn" onClick={run} disabled={busy || !chosen}>
             {busy && <Glyph kind="run" />}
             Generate
           </button>

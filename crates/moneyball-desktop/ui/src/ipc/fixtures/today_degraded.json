@@ -17,6 +17,7 @@
     "refreshed": "07:31 this morning (manual, 1m 21s)",
     "report_missing": null,
     "versus": {
+      "caption": "Changes are against Wed 07 Oct.",
       "changes": [
         {
           "label": "spend",
@@ -126,7 +127,7 @@
         "fix": null,
         "label": "Meta insights",
         "name": "meta",
-        "reused": false,
+        "note": null,
         "status": "done",
         "time": "1m 04s",
         "word": "done"
@@ -136,7 +137,7 @@
         "fix": null,
         "label": "creatives and leads",
         "name": "assets",
-        "reused": false,
+        "note": null,
         "status": "done",
         "time": null,
         "word": "done"
@@ -150,7 +151,7 @@
         },
         "label": "CRM",
         "name": "crm",
-        "reused": false,
+        "note": null,
         "status": "skipped",
         "time": null,
         "word": "skipped"
@@ -160,7 +161,7 @@
         "fix": null,
         "label": "daily report",
         "name": "report",
-        "reused": false,
+        "note": null,
         "status": "partial",
         "time": "1.3s",
         "word": "no CRM"

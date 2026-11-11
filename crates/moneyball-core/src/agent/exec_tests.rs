@@ -10,6 +10,7 @@ const TUI: FrontEnd = FrontEnd {
     commands: &["/brief", "/refresh"],
     output_style: "Output style: plain.",
     say: |step| step.to_string(),
+    self_heal: Some("/brief"),
 };
 
 /// A front-end with buttons and no typed commands.
@@ -23,6 +24,7 @@ const DESKTOP: FrontEnd = FrontEnd {
             None => format!("{} in Terminal", other),
         },
     },
+    self_heal: None,
 };
 
 fn cfg() -> AppConfig {
@@ -33,6 +35,7 @@ fn exec() -> SnapshotTools {
     SnapshotTools {
         cfg: cfg(),
         say: TUI.say,
+        self_heal: TUI.self_heal,
     }
 }
 
@@ -103,7 +106,7 @@ fn a_front_end_without_commands_gets_no_slash_command() {
         prompt::RECORD_RULE.to_string(),
         app_state_block(&cfg(), None, None, &DESKTOP),
         app_state_block(&with_workspace, None, None, &DESKTOP),
-        no_snapshot(say),
+        tool_text::no_snapshot(&say, DESKTOP.self_heal),
         recorded(say, "r7", "2026-11-20"),
         tool_text::brief_output(&with_workspace, &snap, &say),
         tool_text::funnel_output(&with_workspace, &snap, "Namma Mane", by, &say),
@@ -121,9 +124,14 @@ fn a_front_end_without_commands_gets_no_slash_command() {
     }
     for text in &told {
         assert_eq!(slash_commands(text), Vec::<&str>::new(), "in: {}", text);
+        // Nothing here self-heals, so nothing may be said to.
+        assert!(!text.contains("self-heal"), "in: {}", text);
     }
     assert!(told[2].contains("NOT configured - moneyball setup in Terminal is the fix"));
-    assert!(told[4].contains("run the Refresh button (or moneyball brief in Terminal,"));
+    assert_eq!(
+        told[4],
+        "no snapshot on disk - tell the user to run the Refresh button before asking for numbers"
+    );
     assert!(told[5].contains("when they type moneyball ledger r7 applied in Terminal)"));
     // The tool outputs do carry the notes being checked.
     assert!(told[6].contains("IMPORTANT: no CRM connected"));
@@ -131,7 +139,7 @@ fn a_front_end_without_commands_gets_no_slash_command() {
     assert!(told[8].contains("the next the Refresh button pulls it"));
     // And the check itself sees the TUI's commands.
     assert_eq!(
-        slash_commands(&no_snapshot(TUI.say)),
+        slash_commands(&tool_text::no_snapshot(&TUI.say, TUI.self_heal)),
         ["/refresh", "/brief"]
     );
     let tui_diagnose = tool_text::diagnose_output(&with_workspace, &snap, "x", &TUI.say);

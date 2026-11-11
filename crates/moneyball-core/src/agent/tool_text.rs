@@ -35,6 +35,17 @@ pub(super) fn brief_output(
     brief_text(&b, note.as_deref())
 }
 
+/// The tools' answer when there is no snapshot to read. `self_heal`:
+/// `FrontEnd::self_heal`, named beside the refresh only where it exists.
+pub fn no_snapshot(say: &dyn Fn(&str) -> String, self_heal: Option<&str>) -> String {
+    let heals = self_heal.map(|step| format!(" (or {}, which self-heals)", say(step)));
+    format!(
+        "no snapshot on disk - tell the user to run {}{} before asking for numbers",
+        say("/refresh"),
+        heals.unwrap_or_default()
+    )
+}
+
 /// The brief as plain lines: what the model reads and what a front-end
 /// shows as the brief tool's result.
 pub fn format_brief_as_lines(b: &ProductRowsAndFeasibility) -> Vec<String> {
@@ -49,7 +60,7 @@ pub fn format_brief_as_lines(b: &ProductRowsAndFeasibility) -> Vec<String> {
         product_lines(&mut out, r, b.has_crm);
     }
     if let Some(order) = brief::cpl_order(&b.rows) {
-        out.push(format!("  cheapest Meta lead first: {}", order));
+        out.push(format!("  {}", order));
     }
     out.push(String::new());
     feasibility_lines(&mut out, b);

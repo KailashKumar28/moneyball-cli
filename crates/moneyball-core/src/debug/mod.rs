@@ -145,6 +145,7 @@ mod tests {
             id: "mb-test".into(),
             started_at: Utc::now(),
             data_root: "/w".into(),
+            front_end: None,
         };
         let mut raw = format!(
             "{{\"session\":{}}}\n",

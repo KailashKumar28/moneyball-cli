@@ -79,12 +79,10 @@ pub fn say(step: &str) -> String {
         Action::Terminal { .. } if step.starts_with("/funnel") => "the Funnel screen".into(),
         // No shell twin: the step is done inside the terminal app.
         Action::Terminal { command, .. } if step.starts_with('/') && command == CLI => {
-            let inside = match step {
-                "/setup" => ", then its setup",
-                "/setup meta" => ", then its Meta setup",
-                _ => "",
-            };
-            format!("{}{}", in_terminal(CLI), inside)
+            match inside(step) {
+                Some(place) => format!("{}, then {}", in_terminal(CLI), place),
+                None => in_terminal(CLI),
+            }
         }
         Action::Terminal { command, .. } => in_terminal(&command),
     }
@@ -97,15 +95,34 @@ fn terminal(command: &str, does: &str) -> Action {
     }
 }
 
+/// Where a slash command with no shell twin is done inside the terminal
+/// app, in words. Never the command itself: nothing this app shows or
+/// says may read as something to type (AGENTS.md).
+fn inside(slash: &str) -> Option<&'static str> {
+    match slash {
+        "/setup" => Some("its setup"),
+        "/setup meta" => Some("its Meta setup"),
+        _ => None,
+    }
+}
+
 /// A slash command with no shell twin (`/setup`, `/setup meta`): the
-/// terminal app is where it runs, so the command to paste opens that.
+/// terminal app is where it runs, so the command to paste opens that,
+/// and `does` says where to go in it, the way `say` does.
 fn inside_moneyball(slash: &str, does: &str) -> Action {
-    let then = format!("then type {} there", slash);
-    let does = match does {
-        "" => then,
-        d => format!("{} - {}", then, d),
+    let does = match (inside(slash), not_in_a_shell(does)) {
+        (Some(place), "") => format!("then open {}", place),
+        (Some(place), d) => format!("then open {} - {}", place, d),
+        (None, d) => d.to_string(),
     };
     terminal(CLI, &does)
+}
+
+/// Core's "in a shell" dropped from what a command does: "In Terminal"
+/// already says where it runs.
+fn not_in_a_shell(does: &str) -> &str {
+    does.strip_prefix("in a shell")
+        .map_or(does, |rest| rest.trim_start_matches("; "))
 }
 
 /// A shell command from core, made pasteable: several joined with "and"
@@ -116,11 +133,7 @@ fn shell(command: &str, does: &str) -> Action {
         None => (command, ""),
     };
     let command = command.replace(" and moneyball ", " && moneyball ");
-    // "In Terminal" already says where it runs.
-    let does = does
-        .strip_prefix("in a shell")
-        .map_or(does, |rest| rest.trim_start_matches("; "));
-    let does = match (note, does) {
+    let does = match (note, not_in_a_shell(does)) {
         ("", d) => d.to_string(),
         (n, "") => n.to_string(),
         (n, d) => format!("{}; {}", n, d),

@@ -8,6 +8,7 @@ const FRONT: prompt::FrontEnd = prompt::FrontEnd {
     commands: &[],
     output_style: "",
     say: |step| step.to_string(),
+    self_heal: None,
 };
 
 fn user(text: &str) -> Item {
@@ -115,7 +116,7 @@ fn applied_items_reach_the_history_and_the_file() {
         .lock()
         .unwrap_or_else(|e| e.into_inner());
     let ws = std::env::temp_dir().join(format!("mb-driver-test-{}", std::process::id()));
-    let log = SessionLog::create(ws.clone(), Some(&ws)).unwrap();
+    let log = SessionLog::create(ws.clone(), Some(&ws), "tui").unwrap();
     let mut s = Session::new(Some(log), vec![]);
     let id = s.id().unwrap().to_string();
     s.record(user("hi")).unwrap();

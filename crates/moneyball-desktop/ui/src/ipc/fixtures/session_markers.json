@@ -34,5 +34,6 @@
       "type": "bug_report_filed"
     }
   ],
-  "turn_active": false
+  "turn_active": false,
+  "failed": null
 }

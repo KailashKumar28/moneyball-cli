@@ -15,7 +15,7 @@ pub fn print_brief(r: &ProductRowsAndFeasibility) {
     }
     print!("{}", format_brief_table(&r.rows, r.has_crm));
     if let Some(order) = cpl_order(&r.rows) {
-        println!("cheapest Meta lead first: {}", order);
+        println!("{}", order);
     }
     let f = &r.feasibility;
     println!();
@@ -110,9 +110,9 @@ fn fmt_f64(x: f64, decimals: usize) -> String {
     format!("{}{}", sign, abs)
 }
 
-/// The products by cost per Meta lead, cheapest first ("A Rs.1,505 <
-/// B Rs.2,207"), for the model to narrate rather than compute; None
-/// with fewer than two to rank.
+/// The products by cost per Meta lead as one line ("cheapest Meta lead
+/// first: A Rs.1,505 < B Rs.2,207"), for the model to narrate rather
+/// than compute; None with fewer than two to rank.
 pub fn cpl_order(rows: &[ProductRow]) -> Option<String> {
     let mut ranked: Vec<(&str, u64)> = rows
         .iter()
@@ -126,7 +126,11 @@ pub fn cpl_order(rows: &[ProductRow]) -> Option<String> {
         .iter()
         .map(|(p, c)| format!("{} Rs.{}", p, crate::text::commas(*c)))
         .collect();
-    Some(parts.join(" < "))
+    Some(format!(
+        "{}: {}",
+        crate::words::CHEAPEST_FIRST,
+        parts.join(" < ")
+    ))
 }
 
 /// The brief for a machine (MB_AGENT=1): every number a field, and the

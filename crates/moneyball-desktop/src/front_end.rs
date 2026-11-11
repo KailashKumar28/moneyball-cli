@@ -11,6 +11,9 @@ pub const DESKTOP: FrontEnd<'static> = FrontEnd {
     output_style: "Output style: markdown renders here - tables, lists and bold are fine. \
                    No HTML.",
     say: crate::action::say,
+    // The Brief screen only reads: with no snapshot it has nothing to
+    // show, and the model must not send anyone there to wait.
+    self_heal: None,
 };
 
 /// The CRM sentence for the snapshot on screen with every fix said this
@@ -47,6 +50,13 @@ mod tests {
             assert!(state.contains("slash commands: none"), "{}", state);
             assert!(state.contains("markdown renders here"), "{}", state);
             assert_eq!(slash_command(state), None, "{}", state);
+            assert!(!state.contains("self-heal"), "{}", state);
         }
+        let none = system_prompt(&cfg, None, None);
+        assert!(
+            none.contains("snapshot: none yet. the Refresh button pulls one when"),
+            "{}",
+            none
+        );
     }
 }

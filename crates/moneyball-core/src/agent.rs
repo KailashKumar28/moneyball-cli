@@ -22,7 +22,9 @@ mod exec;
 pub mod prompt;
 pub mod tool_text;
 mod view;
-pub use driver::{looks_like_context_overflow, SaveFailed, Session, Turn, TurnRefused};
+pub use driver::{
+    looks_like_context_overflow, model_configured, SaveFailed, Session, Turn, TurnRefused,
+};
 pub use view::{view_items, ToolStatus, ViewItem};
 
 /// One transcript item. Serialized verbatim into session JSONL.

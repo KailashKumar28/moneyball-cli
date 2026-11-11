@@ -16,6 +16,10 @@ pub enum Tint {
     Bad,
 }
 
+/// How a cost-per-Meta-lead ranking is introduced (the brief's products,
+/// a funnel's rows), on every front-end and to the model.
+pub const CHEAPEST_FIRST: &str = "cheapest Meta lead first";
+
 /// Something the user types, and what it does, said once next to it.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct Command {

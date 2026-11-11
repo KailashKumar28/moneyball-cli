@@ -71,14 +71,18 @@ Hermetic:
    and its inline styles are applied under the shipped CSP (checked on
    the screenshot's pixels: the frame's document is out of reach).
 5. Refresh from the footer: four steps, Meta fails with no token, the
-   rest are skipped, and the notice gives the Terminal fix.
+   rest are skipped, and the notice gives the Terminal fix in words (no
+   slash command).
 6. Advisor: a message, the `brief` tool row with the real tool output,
    the streamed answer as markdown, exactly two model calls; Stop on a
    slow stream; a message starting with `/` is refused with no model
    call; New Session.
 7. Title bar: on every screen the top-left 80x40 (where the traffic
    lights sit) holds no control and is all drag region.
-8. After a relaunch the session is in the list and reopens.
+8. After a relaunch the session is in the list and reopens (a session
+   the terminal app wrote in the same workspace is never listed); the
+   failed refresh shows in full from its run record; a product added to
+   the workspace's config shows when the window regains focus.
 
 ## What it cannot do
 

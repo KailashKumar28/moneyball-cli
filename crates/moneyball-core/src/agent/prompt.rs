@@ -70,6 +70,11 @@ pub struct FrontEnd<'a> {
     /// shell command - and pass each through here before the model reads
     /// it. Return it unchanged only if the user can type it here as is.
     pub say: Say,
+    /// The step of this front-end that pulls a first snapshot by itself
+    /// when there is none (the TUI's "/brief"), as core names it. None
+    /// when nothing here does: the model is then pointed at the refresh
+    /// alone, never at a screen that would only sit empty.
+    pub self_heal: Option<&'static str>,
 }
 
 /// `FrontEnd::say`: a plain fn, so the turn's worker can carry it.
@@ -100,12 +105,11 @@ pub fn app_state_block(
             }
         }
         None => s.push_str(&format!(
-            "snapshot: none yet. {} self-heals by running {} when a token \
+            "snapshot: none yet. {} when a token \
              is configured; otherwise an external pipeline can write \
              <workspace>/.moneyball/history/snap/<YYYY-MM-DD>/*.json. \
              {} does NOT create snapshots - never suggest it for missing data.\n",
-            (front.say)("/brief"),
-            (front.say)("/refresh"),
+            first_snapshot(front),
             (front.say)("/setup")
         )),
     }
@@ -117,6 +121,15 @@ pub fn app_state_block(
     s.push_str(front.output_style);
     s.push('\n');
     s
+}
+
+/// How a first snapshot comes to be, in this front-end's steps.
+fn first_snapshot(front: &FrontEnd) -> String {
+    let refresh = (front.say)("/refresh");
+    match front.self_heal {
+        Some(step) => format!("{} self-heals by running {}", (front.say)(step), refresh),
+        None => format!("{} pulls one", refresh),
+    }
 }
 
 fn workspace_lines(cfg: &AppConfig, front: &FrontEnd) -> String {
@@ -155,6 +168,7 @@ mod tests {
         commands: &[],
         output_style: "",
         say: |step| step.to_string(),
+        self_heal: Some("/brief"),
     };
 
     #[test]
@@ -181,6 +195,15 @@ mod tests {
         };
         let s = app_state_block(&cfg(), None, None, &front);
         assert!(s.contains("\nslash commands: none (this app has none - never suggest one)\n"));
-        assert!(s.contains("\nsnapshot: none yet."));
+        assert!(s.contains(
+            "\nsnapshot: none yet. /brief self-heals by running /refresh when a token is configured;"
+        ));
+        let no_heal = FrontEnd {
+            self_heal: None,
+            ..front
+        };
+        let s = app_state_block(&cfg(), None, None, &no_heal);
+        assert!(s.contains("\nsnapshot: none yet. /refresh pulls one when a token is configured;"));
+        assert!(!s.contains("self-heal"), "{}", s);
     }
 }

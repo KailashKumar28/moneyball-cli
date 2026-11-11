@@ -50,9 +50,29 @@ pub fn open(state: &AppState, dir: &Path) -> Result<Workspace, AppError> {
     Ok(shown)
 }
 
-/// The remembered workspace, opened; None on a first run.
+/// Open the folder the user picked and remember it for the next launch.
+/// A failed `remember` never fails the pick: by then the workspace is
+/// open, and a rejection would leave the interface on the old workspace
+/// while every command answers for this one. Only the next launch
+/// forgets it.
+pub fn pick(
+    state: &AppState,
+    dir: &Path,
+    remember: impl FnOnce(&Path) -> moneyball_core::Result<()>,
+) -> Result<Workspace, AppError> {
+    let shown = open(state, dir)?;
+    let _ = remember(dir);
+    Ok(shown)
+}
+
+/// The open workspace as it reads on disk now (its name and products
+/// may have changed in the terminal); before one is open, the
+/// remembered one, opened. None on a first run.
 #[tauri::command(async)]
 pub fn workspace_current(state: State<'_, AppState>) -> Result<Option<Workspace>, AppError> {
+    if let Ok(cfg) = state.workspace() {
+        return Ok(Some(view(&cfg)));
+    }
     match workspace::last() {
         Some(dir) => open(&state, &dir).map(Some),
         None => Ok(None),
@@ -77,8 +97,41 @@ pub fn workspace_pick(
     let dir = picked
         .into_path()
         .map_err(|e| AppError::new("io", format!("That folder cannot be opened: {}", e)))?;
-    let shown = open(&state, &dir)?;
-    // The workspace is open either way; only next launch forgets it.
-    workspace::remember(&dir)?;
-    Ok(Some(shown))
+    pick(&state, &dir, workspace::remember).map(Some)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_pick_that_cannot_be_remembered_still_opens_the_workspace() {
+        let root = std::env::temp_dir().join(format!("mb-desktop-pick-{}", std::process::id()));
+        let workspace = |name: &str| {
+            let dir = root.join(name);
+            std::fs::create_dir_all(dir.join(".moneyball")).unwrap();
+            let config = r#"{"products": [{"name": "P", "ad_account": "act_1"}]}"#;
+            std::fs::write(dir.join(".moneyball/config.json"), config).unwrap();
+            dir
+        };
+        let (a, b) = (workspace("a"), workspace("b"));
+        let state = AppState::default();
+        pick(&state, &a, |_| Ok(())).unwrap();
+        let forgets = |_: &Path| {
+            Err(moneyball_core::Error::Config(
+                "config.json: not json".into(),
+            ))
+        };
+        let shown = pick(&state, &b, forgets).unwrap();
+        assert_eq!(shown.name, "b");
+        assert_eq!(view(&state.workspace().unwrap()), shown);
+        // A folder that is no workspace is still refused, and B stays open.
+        let err = pick(&state, &root, |_| Ok(())).unwrap_err();
+        assert_eq!(err.kind, "no_workspace_config");
+        assert_eq!(
+            state.workspace().unwrap().data_root,
+            b.canonicalize().unwrap()
+        );
+        std::fs::remove_dir_all(&root).ok();
+    }
 }

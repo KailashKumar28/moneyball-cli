@@ -6,7 +6,9 @@
 use std::sync::mpsc::{Receiver, RecvTimeoutError};
 use std::time::{Duration, Instant};
 
-use moneyball_core::agent::{looks_like_context_overflow, Ev, Item, Turn, TurnRefused};
+use moneyball_core::agent::{
+    looks_like_context_overflow, model_configured, Ev, Item, Turn, TurnRefused,
+};
 use moneyball_core::{brief, AppConfig};
 use serde::Serialize;
 use tauri::ipc::Channel;
@@ -14,7 +16,7 @@ use tauri::State;
 
 use crate::error::AppError;
 use crate::front_end::{crm_note, system_prompt, DESKTOP};
-use crate::session::current_or_new;
+use crate::session::new_session;
 use crate::state::{lock, AppState, SharedSession};
 
 /// How long text deltas gather before they are sent as one.
@@ -86,7 +88,8 @@ impl<S: Fn(TurnEvent) -> bool> Outbox<S> {
 /// Drain a turn. Every event is applied to the session before it is
 /// sent, so by the time the interface sees a final event the session is
 /// free for the next turn; a channel that closes without one frees it
-/// too, and says so.
+/// too, and says so. A failure is kept on the session as well: a window
+/// that reloaded mid-turn has no channel to hear it on.
 pub fn forward(turn: Turn, session: &SharedSession, send: impl Fn(TurnEvent) -> bool) {
     let mut out = Outbox {
         send,
@@ -100,8 +103,15 @@ pub fn forward(turn: Turn, session: &SharedSession, send: impl Fn(TurnEvent) -> 
     }
     let mut ended = false;
     while let Some(ev) = next(&turn.events, &mut out) {
-        if let Err(e) = lock(session).apply(&ev) {
-            out.save_failed(e.to_string());
+        let ev = with_hint(ev);
+        {
+            let mut live = lock(session);
+            if let Ev::Failed { error } = &ev {
+                live.failed = Some(error.clone());
+            }
+            if let Err(e) = live.session.apply(&ev) {
+                out.save_failed(e.to_string());
+            }
         }
         match ev {
             Ev::AssistantDelta { text } => out.delta(&text),
@@ -111,12 +121,18 @@ pub fn forward(turn: Turn, session: &SharedSession, send: impl Fn(TurnEvent) -> 
                     ev,
                     Ev::TurnComplete { .. } | Ev::TurnAborted | Ev::Failed { .. }
                 );
-                out.push(TurnEvent::Core(with_hint(ev)));
+                out.push(TurnEvent::Core(ev));
             }
         }
     }
     out.flush();
-    lock(session).stream_closed();
+    {
+        let mut live = lock(session);
+        live.session.stream_closed();
+        if !ended {
+            live.failed = Some(DIED.into());
+        }
+    }
     if !ended {
         out.push(TurnEvent::Shell(ShellEv::Died {
             message: DIED.into(),
@@ -170,20 +186,6 @@ pub fn refused(why: TurnRefused) -> AppError {
     }
 }
 
-/// Core's own check (`Session::start_turn` makes it again), made here
-/// first so a turn that cannot start does not create a session file.
-fn model_configured(cfg: &AppConfig) -> Result<(), TurnRefused> {
-    let w = cfg.workspace.as_ref().ok_or(TurnRefused::NoModel)?;
-    let provider = w.model_provider.clone().unwrap_or_default();
-    if provider.is_empty() || w.model.as_deref().unwrap_or_default().is_empty() {
-        return Err(TurnRefused::NoModel);
-    }
-    match w.model_providers.contains_key(&provider) {
-        true => Ok(()),
-        false => Err(TurnRefused::UnknownProvider { provider }),
-    }
-}
-
 /// Start a turn on the session on screen; returns at once.
 pub fn start(
     state: &AppState,
@@ -200,17 +202,27 @@ pub fn start(
     if text.trim().is_empty() {
         return Err(AppError::new("empty", "Type a question first."));
     }
+    // Core's check (`Session::start_turn` makes it again), made first so
+    // a turn that cannot start does not create a session file.
     model_configured(cfg).map_err(refused)?;
     // The state block names the snapshot the answer will be read from.
     let loaded = brief::load(cfg);
     let snap_date = loaded.brief.as_ref().map(|b| b.snapshot_date.as_str());
     let note = loaded.crm_note.as_ref().and_then(|_| crm_note(cfg));
     let system = system_prompt(cfg, snap_date, note.as_deref());
-    let session = current_or_new(state, cfg);
     let user = Item::User { text: text.into() };
-    let turn = lock(&session)
-        .start_turn(cfg, &DESKTOP, &system, vec![user])
-        .map_err(refused)?;
+    // The slot stays held until the turn has started: two starts landing
+    // together share one session (the second is refused as busy), and no
+    // session_open can swap it out in between.
+    let mut slot = state.session_slot();
+    let session = slot.get_or_insert_with(|| new_session(cfg)).clone();
+    let turn = {
+        let mut live = lock(&session);
+        live.failed = None;
+        live.session.start_turn(cfg, &DESKTOP, &system, vec![user])
+    };
+    drop(slot);
+    let turn = turn.map_err(refused)?;
     std::thread::spawn(move || forward(turn, &session, send));
     Ok(())
 }
@@ -229,7 +241,7 @@ pub fn turn_start(
 #[tauri::command]
 pub fn turn_cancel(state: State<'_, AppState>) {
     if let Some(session) = state.session() {
-        lock(&session).interrupt();
+        lock(&session).session.interrupt();
     }
 }
 

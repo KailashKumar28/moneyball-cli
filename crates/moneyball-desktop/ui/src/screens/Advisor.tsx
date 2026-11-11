@@ -40,7 +40,8 @@ export function Advisor({ hidden, newSession, onAction }: Props) {
 
   const show = useCallback((s: SessionSnapshot) => {
     setId(s.id);
-    setRows(s.items);
+    // A turn that failed while no window was listening left no item: the shell kept its sentence.
+    setRows(s.failed ? [...s.items, { type: "note", text: s.failed }] : s.items);
     liveText.current = "";
     setLive("");
     setActive(s.turn_active);

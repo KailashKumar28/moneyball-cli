@@ -43,7 +43,9 @@
     ],
     "snapshot_date": "2026-10-09"
   },
+  "caption": "Meta, CRM and Qual. are leads over the 7 days. Gap is qualified per day short of the goal.",
   "cpl_order": "cheapest Meta lead first: Namma Mane Rs.573 < Cityville Rs.663",
+  "crm_head": null,
   "crm_note": null,
   "fault": null,
   "feasibility_line": "4.0 qualified a day at Rs.7,697 a day is Rs.1,924 per qualified. The goal is 8 a day.",

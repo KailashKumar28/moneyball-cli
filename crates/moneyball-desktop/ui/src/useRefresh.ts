@@ -1,6 +1,8 @@
 // One refresh at a time, owned by the app so the sidebar footer can show it
 // on every screen. Core reports only a step beginning and ending; the
-// elapsed times are this window's own clock.
+// elapsed times are this window's own clock. At rest everything shown is
+// what refresh_state returns (the workspace's last recorded run), so a
+// reload, a workspace switch or a run by the terminal loses nothing.
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   refreshCancel,
@@ -8,8 +10,8 @@ import {
   refreshState,
   toAppError,
   type AppError,
+  type Finished,
   type RefreshEvent,
-  type RefreshFinished,
   type StepView,
 } from "./ipc";
 
@@ -19,15 +21,17 @@ export type Refresh = {
   steps: StepView[];
   startedAt: number | null;
   stepStartedAt: number | null;
-  finished: RefreshFinished | null;
+  finished: Finished | null;
   error: AppError | null; // could not start, or the state would not load
   died: string | null;
   cancelling: boolean;
   start: (force?: boolean) => void;
   cancel: () => void;
+  /** Re-read the state: the terminal or the schedule may have run since. */
+  sync: () => void;
 };
 
-type State = Omit<Refresh, "start" | "cancel">;
+type State = Omit<Refresh, "start" | "cancel" | "sync">;
 
 const idle: State = {
   running: false,
@@ -54,7 +58,7 @@ export function useRefresh(onSettled: () => void): Refresh {
     running.current = st.running;
   });
 
-  // Mount and reload: a run may already be in flight, with no channel to it.
+  // Mount, reload and focus: a run may be in flight with no channel to it, or one made elsewhere may be the last.
   const sync = useCallback(async () => {
     try {
       const s = await refreshState();
@@ -65,6 +69,7 @@ export function useRefresh(onSettled: () => void): Refresh {
         running: s.running,
         day: s.day,
         steps: s.steps,
+        finished: s.finished,
         startedAt: s.running && s.started_ms_ago !== null ? Date.now() - s.started_ms_ago : null,
         stepStartedAt: s.running ? (p.stepStartedAt ?? Date.now()) : null,
       }));
@@ -108,6 +113,7 @@ export function useRefresh(onSettled: () => void): Refresh {
           break;
         case "could_not_start":
           end({ error: ev.error });
+          void sync(); // nothing ran: the last recorded run is still the one to show
           break;
         case "died":
           end({ died: ev.message });
@@ -135,5 +141,5 @@ export function useRefresh(onSettled: () => void): Refresh {
     refreshCancel().catch(() => setSt((p) => ({ ...p, cancelling: false })));
   }, []);
 
-  return { ...st, start, cancel };
+  return { ...st, start, cancel, sync: useCallback(() => void sync(), [sync]) };
 }

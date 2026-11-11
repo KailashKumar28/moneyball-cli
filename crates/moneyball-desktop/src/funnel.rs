@@ -8,6 +8,7 @@ use serde::Serialize;
 use tauri::State;
 
 use crate::error::AppError;
+use crate::refresh::SNAPSHOT_DAYS;
 use crate::state::AppState;
 
 #[derive(Serialize)]
@@ -27,9 +28,6 @@ pub struct FunnelView {
     /// The kill rule and what immature means, or why kill is withheld.
     pub notes: Vec<String>,
 }
-
-/// The longest window a snapshot can answer for (a refresh pulls 28 days).
-const MAX_DAYS: u32 = 28;
 
 fn notes(has_crm: bool) -> Vec<String> {
     if !has_crm {
@@ -60,7 +58,7 @@ pub fn funnel_view(
     let snap = snapshot::load(&cfg.snap_for(cfg.date.as_deref())?)?;
     let product =
         product::resolve_configured(cfg, product).map_err(|e| AppError::new("config", e))?;
-    let rows = funnel::compute(&snap, cfg, &product, days.clamp(1, MAX_DAYS), by);
+    let rows = funnel::compute(&snap, cfg, &product, days.clamp(1, SNAPSHOT_DAYS), by);
     let has_crm = !crm::is_empty(&snap.crm);
     Ok(FunnelView {
         cpl_ranking: funnel::cpl_ranking(&rows),

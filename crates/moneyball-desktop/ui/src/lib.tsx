@@ -67,13 +67,6 @@ export function clock(ms: number): string {
 }
 
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-const DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
-/** "2026-10-08" as "Thu 08 Oct", the way core writes a day. */
-export function dayLabel(date: string): string {
-  const [y, m, d] = date.split("-").map(Number);
-  if (!y || !m || !d) return date;
-  return `${DAYS[new Date(y, m - 1, d).getDay()]} ${String(d).padStart(2, "0")} ${MONTHS[m - 1]}`;
-}
 /** A session's time: "Today 09:14", "Yesterday 17:53", "28 Sep". */
 export function when(iso: string, now = new Date()): string {
   const t = new Date(iso);
@@ -100,11 +93,11 @@ const STEP_GLYPH: Record<StepView["status"], GlyphKind> = {
 };
 export const stepGlyph = (status: StepView["status"]): GlyphKind => STEP_GLYPH[status] ?? "warn";
 
-/** What a step brought in. The contract carries `reused` as a flag, not a sentence, so the note is the app's. */
+/** What a step brought in, and the shell's note under it. */
 export const StepDetail = ({ step }: { step: StepView }) => (
   <>
     {step.detail}
-    {step.reused && <span className="tag">from today's earlier pull</span>}
+    {step.note && <span className="tag">{step.note}</span>}
   </>
 );
 
@@ -152,13 +145,12 @@ export function ActionView({ action, onAction }: { action: Action; onAction: OnA
 }
 
 /** A problem sentence and its numbered fix steps. */
-export function Notice(props: { strong?: string; text?: string; details?: string[]; steps?: Action[]; onAction: OnAction; children?: ReactNode }) {
+export function Notice(props: { strong?: string; text?: string; details?: string[]; steps?: Action[]; onAction: OnAction }) {
   const steps = props.steps ?? [];
   return (
     <div className="notice" role="status">
       <p>
         {props.strong && <b>{props.strong}</b>} {props.text}
-        {props.children}
       </p>
       {props.details?.map((d) => (
         <p className="why" key={d}>

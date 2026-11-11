@@ -87,14 +87,7 @@ impl RefreshCell {
             Some(End::Stopped(_)) => (FAIL, Color::Red, format!("{}stopped unexpectedly", DOT)),
             Some(End::Finished { run, .. }) => match run.outcome {
                 Outcome::Ok | Outcome::Running => (OK, Color::Green, String::new()),
-                Outcome::Failed => {
-                    let at = run
-                        .steps
-                        .iter()
-                        .position(|s| s.status == StepStatus::Failed)
-                        .map_or(1, |i| i + 1);
-                    (FAIL, Color::Red, format!("{}stopped at step {}", DOT, at))
-                }
+                Outcome::Failed => (FAIL, Color::Red, format!("{}{}", DOT, r::gaps(run))),
                 Outcome::Degraded => (OK, Color::Yellow, format!("{}{}", DOT, r::gaps(run))),
             },
         };

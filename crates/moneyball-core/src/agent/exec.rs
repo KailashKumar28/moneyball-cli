@@ -26,16 +26,8 @@ pub(super) struct SnapshotTools {
     pub(super) cfg: AppConfig,
     /// Words every step a tool's answer names (`FrontEnd::say`).
     pub(super) say: Say,
-}
-
-/// The tools' answer when there is no snapshot to read.
-fn no_snapshot(say: Say) -> String {
-    format!(
-        "no snapshot on disk - tell the user to run {} (or {}, which \
-         self-heals) before asking for numbers",
-        say("/refresh"),
-        say("/brief")
-    )
+    /// `FrontEnd::self_heal`.
+    pub(super) self_heal: Option<&'static str>,
 }
 
 /// The recommend tool's answer for a recorded recommendation.
@@ -53,7 +45,7 @@ impl SnapshotTools {
         self.cfg
             .snap_for(self.cfg.date.as_deref())
             .and_then(|p| crate::snapshot::load(&p))
-            .map_err(|_| no_snapshot(self.say))
+            .map_err(|_| tool_text::no_snapshot(&self.say, self.self_heal))
     }
 
     fn product(&self, args: &Value) -> Result<String, String> {

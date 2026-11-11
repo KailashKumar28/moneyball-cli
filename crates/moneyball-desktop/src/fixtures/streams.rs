@@ -17,7 +17,7 @@ use serde_json::{json, Value};
 use super::{demo, pinned, Pins};
 use crate::front_end::DESKTOP;
 use crate::refresh::{forward, state_view, RefreshEvent, RefreshRun};
-use crate::state::{lock, AppState};
+use crate::state::{lock, AppState, Live};
 use crate::turn::{self, TurnEvent};
 
 /// The events a run sends, as core's worker would have sent them: Begin
@@ -47,7 +47,7 @@ fn refresh_run(events: Vec<RefreshEv>) -> (Vec<RefreshEvent>, Vec<Value>, Value)
     let shared = Mutex::new(RefreshRun::begin(Arc::default()));
     let clock = [("/day", json!("Thu 08 Oct"))];
     let state = |ms: Value| {
-        let mut v = pinned(state_view(&lock(&shared), None), &clock);
+        let mut v = pinned(state_view(&shared, None), &clock);
         if !v["started_ms_ago"].is_null() {
             v["started_ms_ago"] = ms;
         }
@@ -77,7 +77,15 @@ pub fn refresh(pins: &mut Pins, cfg: &AppConfig, nocrm: &AppConfig) {
         .position(|e| matches!(e, RefreshEvent::Begin { step } if step.name == "crm"))
         .unwrap();
     pins.add("refresh_state_running", cfg, &states[crm_begins]);
-    pins.add("refresh_state", cfg, states.last().unwrap());
+    // At rest: the workspace's last recorded run (`demo::loaded` wrote
+    // it), in full, with no run of this launch behind it.
+    let idle = Mutex::new(RefreshRun::default());
+    pins.add("refresh_state", cfg, state_view(&idle, Some(cfg)));
+    pins.add(
+        "refresh_state_degraded",
+        nocrm,
+        state_view(&idle, Some(nocrm)),
+    );
     pins.add("refresh_events", cfg, events);
 
     let (degraded, _, _) = refresh_run(worker_events(&demo::run_record(nocrm, false)));
@@ -100,7 +108,7 @@ fn turn_run(events: Vec<Ev>, save_failed: Option<SaveFailed>) -> Vec<TurnEvent> 
         events: rx,
         save_failed,
     };
-    let session = Arc::new(Mutex::new(Session::new(None, Vec::new())));
+    let session = Live::shared(Session::new(None, Vec::new()));
     let seen = Mutex::new(Vec::new());
     turn::forward(turn, &session, |ev| {
         lock(&seen).push(ev);
@@ -211,10 +219,11 @@ pub fn turns(pins: &mut Pins) {
     demo::remove(&cfg);
 }
 
-/// A session file as core writes it, under a fixed id.
+/// A session file as core writes it for this app, under a fixed id.
 fn saved(cfg: &AppConfig, id: &str, started: &str, items: &[Item]) {
     let dir = session::sessions_dir(cfg.sessions_root()).unwrap();
-    let header = json!({"session": {"id": id, "started_at": started, "data_root": cfg.data_root}});
+    let header = json!({"session": {"id": id, "started_at": started, "data_root": cfg.data_root,
+        "front_end": crate::session::FRONT_END}});
     let lines = items.iter().map(|i| serde_json::to_string(i).unwrap());
     let body: Vec<String> = std::iter::once(header.to_string()).chain(lines).collect();
     std::fs::write(dir.join(format!("{}.jsonl", id)), body.join("\n") + "\n").unwrap();
@@ -248,7 +257,7 @@ pub fn sessions(pins: &mut Pins, cfg: &AppConfig) {
     pins.add("session", cfg, open(plain));
     pins.add("session_markers", cfg, open(marked));
     // modified_at is the file's own time: pin it to when each was started.
-    let list = session::summaries(cfg.sessions_root()).unwrap();
+    let list = crate::session::list(cfg);
     let mut list = serde_json::to_value(list).unwrap();
     let rows = list.as_array_mut().unwrap();
     rows.sort_by_key(|s| std::cmp::Reverse(s["started_at"].as_str().map(String::from)));
