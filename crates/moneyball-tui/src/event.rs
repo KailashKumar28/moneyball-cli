@@ -212,8 +212,7 @@ fn handle_esc(app: &mut App) {
     // Esc during an agent turn: set the cancel flag - the worker aborts
     // between SSE events (real HTTP cancel) and sends TurnAborted, which
     // records the partial items. The receiver stays alive for that.
-    if app.turn_active {
-        app.cancel.store(true, std::sync::atomic::Ordering::SeqCst);
+    if app.session.interrupt() {
         app.status = Some("interrupting...".into());
         return;
     }

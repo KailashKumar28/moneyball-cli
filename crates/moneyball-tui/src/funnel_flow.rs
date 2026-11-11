@@ -1,36 +1,11 @@
 //! /funnel flow - product resolution, funnel table cell, and the LLM
 //! commentary hand-off. Split from commands.rs (size cap).
 
-use crate::agent_turn::{app_state_block, call_agent, typed_tool_turn, FUNNEL_SYSTEM_PROMPT};
+use crate::agent_turn::{call_agent, system_prompt};
 use crate::*;
+use moneyball_core::agent::prompt::FUNNEL_SYSTEM_PROMPT;
+use moneyball_core::agent::tool_text::funnel_output;
 use moneyball_core::funnel::{self, By};
-
-/// What the funnel tool returns: the full table the model reasons from
-/// (ids, kill multiple, maturity) and the pre-computed CPL order.
-pub(crate) fn funnel_output(
-    cfg: &moneyball_core::AppConfig,
-    snap: &moneyball_core::Snapshot,
-    product: &str,
-    by: By,
-) -> String {
-    let rows = funnel::compute(snap, cfg, product, 7, by);
-    let rank = funnel::cpl_ranking_for_model(&rows)
-        .map(|r| format!("\n{}", r))
-        .unwrap_or_default();
-    let crm = moneyball_core::crm::status::CrmHealth::of(cfg, snap)
-        .note()
-        .map(|n| format!("\nIMPORTANT: {}", n))
-        .unwrap_or_default();
-    format!(
-        "FUNNEL {} - by {} - 7d - snapshot {}\n{}{}{}",
-        product,
-        by.name(),
-        snap.date,
-        funnel::table(&rows),
-        rank,
-        crm
-    )
-}
 
 pub(crate) fn run_funnel(app: &mut App, arg: &str) {
     use crate::chat::cells;
@@ -100,9 +75,11 @@ pub(crate) fn run_funnel(app: &mut App, arg: &str) {
         started.elapsed().as_millis() as u64,
     );
 
-    let sys = format!("{}\n\n{}", FUNNEL_SYSTEM_PROMPT, app_state_block(app));
+    let sys = system_prompt(app, FUNNEL_SYSTEM_PROMPT);
     let output = funnel_output(&app.cfg, &snap, &product, by);
     let args = serde_json::json!({ "product": product, "by": by.name() });
-    let turn = typed_tool_turn(app, &format!("/funnel {}", arg), "funnel", args, output);
+    let turn = app
+        .session
+        .typed_tool_turn(&format!("/funnel {}", arg), "funnel", args, output);
     call_agent(app, &sys, turn);
 }

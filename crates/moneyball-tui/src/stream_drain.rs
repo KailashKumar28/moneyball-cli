@@ -18,8 +18,15 @@ pub(crate) fn drain(app: &mut App) {
         match ev {
             Ok(StreamEvent::Agent(aev)) => {
                 use moneyball_core::agent::Ev;
+                // The session records each item the moment it is final
+                // (codex's rollout rule: a crash or quit mid-turn loses
+                // at most the item in flight) and ends the turn on a
+                // final event.
+                if let Err(e) = app.session.apply(&aev) {
+                    app.status = Some(e.to_string());
+                }
                 match aev {
-                    Ev::AssistantDelta(d) => app.chat.append_assistant(&d),
+                    Ev::AssistantDelta { text } => app.chat.append_assistant(&text),
                     Ev::AssistantDone { .. } => app.chat.finish_streaming(),
                     Ev::ToolBegin {
                         call_id,
@@ -62,12 +69,7 @@ pub(crate) fn drain(app: &mut App) {
                                 duration_ms: ms,
                             }));
                     }
-                    Ev::ItemDone(item) => {
-                        // Persist the moment an item is final (codex's
-                        // rollout rule) - a crash or quit mid-turn
-                        // loses at most the item in flight.
-                        app.record(item);
-                    }
+                    Ev::ItemDone { .. } => {}
                     Ev::TurnComplete {
                         ms,
                         provider,
@@ -94,7 +96,6 @@ pub(crate) fn drain(app: &mut App) {
                         .filter(|p| !p.is_empty())
                         .collect();
                         app.status = Some(parts.join("  \u{00B7}  "));
-                        app.turn_active = false;
                         app.stream = None;
                         return;
                     }
@@ -103,7 +104,6 @@ pub(crate) fn drain(app: &mut App) {
                         app.chat.push(chat::Cell::System(chat::cells::System(
                             "(turn interrupted)".into(),
                         )));
-                        app.turn_active = false;
                         app.stream = None;
                         return;
                     }
@@ -111,7 +111,7 @@ pub(crate) fn drain(app: &mut App) {
                         // Context overflow gets an actionable hint -
                         // without it every later turn fails the same
                         // way and the session looks bricked.
-                        let hint = if looks_like_context_overflow(&error) {
+                        let hint = if moneyball_core::agent::looks_like_context_overflow(&error) {
                             "\nthe conversation may have outgrown the model's context \
                              window - /clear starts a fresh session (the old one stays \
                              on disk)"
@@ -121,7 +121,6 @@ pub(crate) fn drain(app: &mut App) {
                         app.chat
                             .append_assistant(&format!("llm call failed: {}{}", error, hint));
                         app.chat.finish_streaming();
-                        app.turn_active = false;
                         app.stream = None;
                         return;
                     }
@@ -143,32 +142,15 @@ pub(crate) fn drain(app: &mut App) {
                 // tool or the forwarder). Never a silent dead turn:
                 // say so, and release the turn so Esc/submit work.
                 app.chat.finish_streaming();
-                if app.turn_active {
+                if app.session.turn_active() {
                     app.chat.push(chat::Cell::System(chat::cells::System(
                         "agent worker stopped unexpectedly - resend your message".into(),
                     )));
                 }
-                app.turn_active = false;
-                app.cancel.store(false, std::sync::atomic::Ordering::SeqCst);
+                app.session.stream_closed();
                 app.stream = None;
                 return;
             }
         }
     }
-}
-
-/// Provider error text that smells like a context-window overflow.
-/// Wording varies per provider; these substrings cover Anthropic,
-/// OpenAI-compatible, and MiniMax phrasings.
-fn looks_like_context_overflow(error: &str) -> bool {
-    let e = error.to_lowercase();
-    [
-        "context length",
-        "context window",
-        "prompt is too long",
-        "maximum context",
-        "token limit",
-    ]
-    .iter()
-    .any(|p| e.contains(p))
 }

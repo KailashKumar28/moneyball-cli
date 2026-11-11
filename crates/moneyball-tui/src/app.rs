@@ -3,12 +3,8 @@
 
 use crate::*;
 
-use std::sync::atomic::AtomicBool;
-use std::sync::Arc;
-
-use moneyball_core::agent::{Ev, Item};
+use moneyball_core::agent::{Ev, Item, Session, ToolStatus, ViewItem};
 use moneyball_core::brief::{self, ProductRowsAndFeasibility};
-use moneyball_core::session::SessionLog;
 use moneyball_core::AppConfig;
 
 #[derive(Debug, Clone, PartialEq)]
@@ -54,22 +50,15 @@ pub struct App {
     /// question, tool output) is appended here. The main TUI body renders
     /// from this log; the dashboard view was replaced.
     pub chat: chat::ChatLog,
-    /// Conversation transcript in wire format (ARCHITECTURE.md 6b).
-    /// The prompt for every turn; appended items also go to `session`.
-    pub history: Vec<Item>,
-    /// Append-only JSONL session log. None in tests / headless render.
-    pub session: Option<SessionLog>,
-    /// Cancel flag shared with the agent worker; Esc sets it and the
-    /// worker aborts between SSE events.
-    pub cancel: Arc<AtomicBool>,
-    /// True while an agent turn (not a fetch) is in flight - decides
-    /// what Esc means.
-    pub turn_active: bool,
+    /// The conversation (ARCHITECTURE.md 6b): the transcript in wire
+    /// format, its session file (none in tests / headless render), and
+    /// the turn in flight - which decides what Esc means.
+    pub session: Session,
     /// The tool currently executing on the agent worker: (call_id,
     /// name, started). Set on ToolBegin, taken on ToolEnd so the
     /// result cell carries the real name and elapsed time.
     pub running_tool: Option<(String, String, std::time::Instant)>,
-    /// When the turn in flight started (meaningful while turn_active).
+    /// When the turn in flight started (meaningful while one is active).
     pub turn_started: std::time::Instant,
     /// Live worker events, drained by the event loop each tick.
     /// `Some` while a turn or /report is in flight.
@@ -193,10 +182,7 @@ impl App {
             quit_armed: false,
             quit_emoji: String::new(),
             chat,
-            history: Vec::new(),
-            session: None,
-            cancel: Arc::new(AtomicBool::new(false)),
-            turn_active: false,
+            session: Session::new(None, Vec::new()),
             running_tool: None,
             turn_started: std::time::Instant::now(),
             stream: None,
@@ -206,67 +192,62 @@ impl App {
     /// Append one item to history AND the session log. A persistence
     /// failure surfaces once in the status line, never kills the REPL.
     pub(crate) fn record(&mut self, item: Item) {
-        if let Some(log) = &self.session {
-            if let Err(e) = log.append(&item) {
-                self.status = Some(format!("session save failed: {}", e));
-            }
+        if let Err(e) = self.session.record(item) {
+            self.status = Some(e.to_string());
         }
-        self.history.push(item);
     }
 
     /// Rebuild chat cells from a resumed transcript (codex replay
     /// pattern: history drives both the prompt and the visible cells).
-    pub(crate) fn replay(&mut self, items: Vec<Item>) {
+    pub(crate) fn replay(&mut self, items: &[Item]) {
         use crate::chat::cells;
         use crate::chat::Cell;
-        let mut last_tool = String::from("tool");
-        for item in &items {
-            match item {
-                Item::User { text } => {
-                    // Markers are model-facing, not real user messages -
-                    // show them as dim system notes.
-                    if text.starts_with("<turn_aborted>") {
-                        self.chat
-                            .push(Cell::System(cells::System("(turn interrupted)".into())));
-                    } else if moneyball_core::debug::is_bug_report_marker(text) {
-                        self.chat
-                            .push(Cell::System(cells::System("(bug report filed)".into())));
-                    } else {
-                        self.chat.push(Cell::UserPrompt(cells::UserPrompt {
-                            text: text.clone(),
-                            at: chrono::Local::now(),
+        for row in moneyball_core::agent::view_items(items) {
+            match row {
+                // Markers are model-facing, not real user messages -
+                // show them as dim system notes.
+                ViewItem::TurnInterrupted => self
+                    .chat
+                    .push(Cell::System(cells::System("(turn interrupted)".into()))),
+                ViewItem::BugReportFiled => self
+                    .chat
+                    .push(Cell::System(cells::System("(bug report filed)".into()))),
+                ViewItem::User { text } => self.chat.push(Cell::UserPrompt(cells::UserPrompt {
+                    text,
+                    at: chrono::Local::now(),
+                })),
+                ViewItem::Assistant { text } => {
+                    self.chat.push(Cell::AssistantText(cells::AssistantText {
+                        text,
+                        streaming: false,
+                    }))
+                }
+                ViewItem::Tool {
+                    name,
+                    args,
+                    status,
+                    output,
+                    ..
+                } => {
+                    self.chat.push(Cell::ToolCall(cells::ToolCall {
+                        name: name.clone(),
+                        args: compact_args(&args),
+                        status: cells::ToolStatus::Done,
+                    }));
+                    // A call cut off by an interrupt has no result.
+                    if status != ToolStatus::Pending {
+                        self.chat.push(Cell::ToolResult(cells::ToolResult {
+                            name,
+                            output: output.lines().map(String::from).collect(),
+                            success: status == ToolStatus::Ok,
+                            // Elapsed time is not persisted; 0 renders as
+                            // no duration, never a fabricated "(0ms)".
+                            duration_ms: 0,
                         }));
                     }
                 }
-                Item::Assistant { text } => {
-                    self.chat.push(Cell::AssistantText(cells::AssistantText {
-                        text: text.clone(),
-                        streaming: false,
-                    }));
-                }
-                Item::ToolCall { name, args, .. } => {
-                    last_tool = name.clone();
-                    self.chat.push(Cell::ToolCall(cells::ToolCall {
-                        name: name.clone(),
-                        args: compact_args(args),
-                        status: cells::ToolStatus::Done,
-                    }));
-                }
-                Item::ToolOutput {
-                    output, is_error, ..
-                } => {
-                    self.chat.push(Cell::ToolResult(cells::ToolResult {
-                        name: last_tool.clone(),
-                        output: output.lines().map(String::from).collect(),
-                        success: !is_error,
-                        // Elapsed time is not persisted; 0 renders as
-                        // no duration, never a fabricated "(0ms)".
-                        duration_ms: 0,
-                    }));
-                }
             }
         }
-        self.history = items;
     }
 
     pub fn load_brief(&mut self) {

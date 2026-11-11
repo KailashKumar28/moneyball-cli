@@ -13,7 +13,7 @@ use moneyball_core::agent::Item;
 use moneyball_core::{debug, session};
 
 pub(crate) fn run_debug_report(app: &mut App, comment: &str) {
-    let Some(id) = app.session.as_ref().map(|log| log.meta.id.clone()) else {
+    let Some(id) = app.session.id().map(String::from) else {
         app.chat.push(Cell::System(cells::System(
             "no active session to report (session persistence is off).".into(),
         )));
@@ -24,7 +24,7 @@ pub(crate) fn run_debug_report(app: &mut App, comment: &str) {
     app.record(Item::User {
         text: debug::marker_text(comment),
     });
-    let n = app.history.len();
+    let n = app.session.history().len();
     let outcome = session::read_raw(&id, app.cfg.sessions_root())
         .and_then(|(_, raw)| debug::register(&id, &raw, n, comment));
     app.chat.push(Cell::System(cells::System(match outcome {

@@ -22,7 +22,9 @@ use serde::{Deserialize, Serialize};
 use crate::agent::Item;
 
 mod id;
+mod summary;
 pub use id::make_session_id;
+pub use summary::{summaries, SessionSummary};
 
 /// Header line of every session file.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -206,13 +208,15 @@ pub fn fmt_meta_line(m: &SessionMeta) -> String {
     format!("  {}  {}  {}", m.id, human, m.data_root.display())
 }
 
+/// Serializes MONEYBALL_SESSIONS_DIR mutation across tests - env vars
+/// are process-global and cargo runs tests in parallel. Any test that
+/// creates a session file holds it.
+#[cfg(test)]
+pub(crate) static ENV_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    /// Serializes MONEYBALL_SESSIONS_DIR mutation across tests - env
-    /// vars are process-global and cargo runs tests in parallel.
-    static ENV_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
 
     /// Full file round trip through the MONEYBALL_SESSIONS_DIR seam:
     /// create -> append -> open replays the same items, and the file
