@@ -1,47 +1,47 @@
 {
-  "running": true,
   "day": "Thu 08 Oct",
+  "running": true,
   "started_ms_ago": 0,
   "steps": [
     {
-      "name": "meta",
+      "detail": "",
+      "fix": null,
       "label": "Meta insights",
-      "status": "waiting",
-      "word": "waiting",
-      "detail": "",
-      "time": null,
+      "name": "meta",
       "reused": false,
-      "fix": null
+      "status": "waiting",
+      "time": null,
+      "word": "waiting"
     },
     {
-      "name": "assets",
+      "detail": "",
+      "fix": null,
       "label": "creatives and leads",
-      "status": "waiting",
-      "word": "waiting",
-      "detail": "",
-      "time": null,
+      "name": "assets",
       "reused": false,
-      "fix": null
+      "status": "waiting",
+      "time": null,
+      "word": "waits for Meta"
     },
     {
-      "name": "crm",
+      "detail": "",
+      "fix": null,
       "label": "CRM",
-      "status": "waiting",
-      "word": "waiting",
-      "detail": "",
-      "time": null,
+      "name": "crm",
       "reused": false,
-      "fix": null
+      "status": "waiting",
+      "time": null,
+      "word": "waits for Meta"
     },
     {
-      "name": "report",
-      "label": "daily report",
-      "status": "waiting",
-      "word": "waiting",
       "detail": "",
-      "time": null,
+      "fix": null,
+      "label": "daily report",
+      "name": "report",
       "reused": false,
-      "fix": null
+      "status": "waiting",
+      "time": null,
+      "word": "waits for CRM"
     }
   ]
 }

@@ -1,47 +1,47 @@
 {
-  "running": false,
   "day": "Thu 08 Oct",
+  "running": false,
+  "started_ms_ago": null,
   "steps": [
     {
-      "name": "meta",
+      "detail": "2 products, 40 rows",
+      "fix": null,
       "label": "Meta insights",
-      "status": "done",
-      "word": "done",
-      "detail": "5 products, 1,104 rows",
-      "time": "18.2s",
+      "name": "meta",
       "reused": false,
-      "fix": null
+      "status": "done",
+      "time": "1m 04s",
+      "word": "done"
     },
     {
-      "name": "assets",
+      "detail": "5 creatives, 96 leads, 4 adsets, 3 changes",
+      "fix": null,
       "label": "creatives and leads",
-      "status": "done",
-      "word": "done",
-      "detail": "64 creatives, 1,812 leads",
-      "time": "21.0s",
+      "name": "assets",
       "reused": false,
-      "fix": null
+      "status": "done",
+      "time": null,
+      "word": "done"
     },
     {
-      "name": "crm",
+      "detail": "59 tickets, 1 pages",
+      "fix": null,
       "label": "CRM",
-      "status": "done",
-      "word": "done",
-      "detail": "655 tickets, 12 pages",
-      "time": "41.6s",
+      "name": "crm",
       "reused": false,
-      "fix": null
+      "status": "done",
+      "time": "9.4s",
+      "word": "done"
     },
     {
-      "name": "report",
+      "detail": "5 creatives",
+      "fix": null,
       "label": "daily report",
-      "status": "done",
-      "word": "done",
-      "detail": "64 creatives",
-      "time": "0.7s",
+      "name": "report",
       "reused": false,
-      "fix": null
+      "status": "done",
+      "time": "1.3s",
+      "word": "done"
     }
-  ],
-  "started_ms_ago": null
+  ]
 }

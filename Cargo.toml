@@ -4,6 +4,7 @@ members = [
     "crates/moneyball",
     "crates/moneyball-core",
     "crates/moneyball-tui",
+    "crates/moneyball-desktop",
 ]
 
 [workspace.lints.clippy]
@@ -62,6 +63,14 @@ image = { version = "0.25", default-features = false, features = ["jpeg", "png",
 # HTTP (Meta Graph API, Anthropic streaming later)
 reqwest = { version = "0.12", features = ["json", "stream", "blocking", "rustls-tls"] }
 # rustls-tls avoids the openssl-sys native dep on macOS
+
+# Desktop shell (crates/moneyball-desktop). Pinned to major 2: a 3.0
+# alpha is on crates.io and must not be picked up.
+tauri = { version = "2", features = [] }
+tauri-build = { version = "2", features = [] }
+tauri-plugin-single-instance = "2"
+tauri-plugin-opener = "2"
+tauri-plugin-dialog = "2"
 
 # Workspace members
 moneyball-core = { path = "crates/moneyball-core" }

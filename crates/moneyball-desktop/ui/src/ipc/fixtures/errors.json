@@ -1,49 +1,54 @@
 {
   "busy": {
+    "fix": null,
     "kind": "busy",
-    "reason": "The advisor is still answering. Stop it or wait for it to finish.",
-    "fix": null
+    "reason": "The advisor is still answering."
   },
   "no_model": {
-    "kind": "no_model",
-    "reason": "No model is connected, so the advisor cannot answer yet.",
     "fix": {
-      "kind": "terminal",
-      "command": "moneyball connect model",
-      "does": "stores a model key"
-    }
+      "command": "moneyball",
+      "does": "then type /setup there - pick a provider and paste its key",
+      "kind": "terminal"
+    },
+    "kind": "no_model",
+    "reason": "No model is set up for this workspace."
   },
-  "unknown_provider": {
-    "kind": "unknown_provider",
-    "reason": "The configured model provider 'acme' is not one Moneyball knows.",
-    "fix": null
-  },
-  "not_a_command": {
-    "kind": "not_a_command",
-    "reason": "This app has no slash commands. Ask in plain words.",
-    "fix": null
+  "no_workspace": {
+    "fix": null,
+    "kind": "no_workspace",
+    "reason": "No workspace is open."
   },
   "no_workspace_config": {
-    "kind": "no_workspace_config",
-    "reason": "~/DEV/old-project has no Moneyball workspace in it.",
     "fix": {
-      "kind": "terminal",
       "command": "moneyball",
-      "does": "runs setup in that folder"
-    }
+      "does": "then type /setup there - it sets the workspace up; run it in that folder",
+      "kind": "terminal"
+    },
+    "kind": "no_workspace_config",
+    "reason": "This folder is not a Moneyball workspace: it has no .moneyball/config.json."
+  },
+  "not_a_command": {
+    "fix": null,
+    "kind": "not_a_command",
+    "reason": "This app has no slash commands. Ask in plain words."
   },
   "refresh_busy": {
+    "fix": null,
     "kind": "busy",
-    "reason": "A refresh is running; it writes the same report. Try again when it finishes.",
-    "fix": null
+    "reason": "A refresh is running and writes the report itself. Generate one when it finishes."
   },
   "snapshot": {
-    "kind": "snapshot_unreadable",
-    "reason": "The snapshot for 2026-10-09 could not be read: ads_daily.json is not valid JSON.",
+    "fix": null,
+    "kind": "snapshot",
+    "reason": "snapshot 2026-10-09/ads_daily: invalid JSON: key must be a string at line 1 column 3"
+  },
+  "unknown_provider": {
     "fix": {
-      "kind": "refresh",
-      "label": "Refresh",
-      "does": "pulls the day again"
-    }
+      "command": "moneyball",
+      "does": "then type /setup there - pick a provider and paste its key",
+      "kind": "terminal"
+    },
+    "kind": "unknown_provider",
+    "reason": "The provider \"acme\" this workspace names is not in its list of model providers."
   }
 }

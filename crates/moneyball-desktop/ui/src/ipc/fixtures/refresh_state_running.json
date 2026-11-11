@@ -1,47 +1,47 @@
 {
-  "running": true,
   "day": "Thu 08 Oct",
+  "running": true,
   "started_ms_ago": 52000,
   "steps": [
     {
-      "name": "meta",
+      "detail": "2 products, 40 rows",
+      "fix": null,
       "label": "Meta insights",
-      "status": "done",
-      "word": "done",
-      "detail": "5 products, 1,104 rows",
-      "time": "18.2s",
+      "name": "meta",
       "reused": false,
-      "fix": null
+      "status": "done",
+      "time": "1m 04s",
+      "word": "done"
     },
     {
-      "name": "assets",
+      "detail": "5 creatives, 96 leads, 4 adsets, 3 changes",
+      "fix": null,
       "label": "creatives and leads",
+      "name": "assets",
+      "reused": false,
       "status": "done",
-      "word": "done",
-      "detail": "64 creatives, 1,812 leads",
-      "time": "21.0s",
-      "reused": false,
-      "fix": null
+      "time": null,
+      "word": "done"
     },
     {
-      "name": "crm",
+      "detail": "",
+      "fix": null,
       "label": "CRM",
-      "status": "running",
-      "word": "running",
-      "detail": "",
-      "time": null,
+      "name": "crm",
       "reused": false,
-      "fix": null
+      "status": "running",
+      "time": null,
+      "word": "running"
     },
     {
-      "name": "report",
-      "label": "daily report",
-      "status": "waiting",
-      "word": "waiting",
       "detail": "",
-      "time": null,
+      "fix": null,
+      "label": "daily report",
+      "name": "report",
       "reused": false,
-      "fix": null
+      "status": "waiting",
+      "time": null,
+      "word": "waits for CRM"
     }
   ]
 }

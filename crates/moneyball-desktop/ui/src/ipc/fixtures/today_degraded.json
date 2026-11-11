@@ -1,160 +1,177 @@
 {
-  "health": {
-    "today": "2026-10-09",
-    "snap_date": "2026-10-09",
-    "crm_snap_date": "2026-08-12",
-    "crm_connected": true,
-    "run": {
-      "schema": "moneyball.run/1",
-      "workspace_id": "ws_fincity",
-      "date": "2026-10-09",
-      "trigger": "schedule",
-      "started_at": "2026-10-09T07:30:00+05:30",
-      "finished_at": "2026-10-09T07:31:21+05:30",
-      "outcome": "degraded",
-      "steps": [
+  "day": {
+    "day": "Thu 08 Oct",
+    "numbers": [
+      {
+        "label": "spend",
+        "source": "meta",
+        "value": "Rs.7,680"
+      },
+      {
+        "label": "Meta leads",
+        "source": "meta",
+        "value": "12"
+      }
+    ],
+    "numbers_note": "no CRM in this report",
+    "refreshed": "07:31 this morning (manual, 1m 21s)",
+    "report_missing": null,
+    "versus": {
+      "changes": [
         {
-          "name": "meta",
-          "status": "done",
-          "ms": 1100,
-          "counts": {
-            "products": 5,
-            "rows": 1104
-          },
-          "reused": true
+          "label": "spend",
+          "text": "+Rs.185",
+          "tint": "plain"
         },
         {
-          "name": "assets",
-          "status": "done",
-          "ms": 600,
-          "counts": {
-            "creatives": 64,
-            "leads": 1812
-          },
-          "reused": true
-        },
-        {
-          "name": "crm",
-          "status": "failed",
-          "ms": 200,
-          "counts": {},
-          "error_kind": "auth",
-          "message": "HTTP 401",
-          "fix": "moneyball crm secret leadzump_token"
-        },
-        {
-          "name": "report",
-          "status": "partial",
-          "ms": 100,
-          "counts": {
-            "creatives": 64
-          },
-          "error_kind": "no_crm"
+          "label": "Meta leads",
+          "text": "-3",
+          "tint": "bad"
         }
       ],
-      "artifacts": {}
-    },
-    "refreshed_at": "2026-10-09T07:31:21+05:30",
-    "failed_today": null,
-    "newest_snap_date": null,
-    "state": {
-      "kind": "crm_missing"
+      "day": "Wed 07 Oct"
     }
-  },
-  "health_label": "CRM missing",
-  "footer": [
-    "Data Thu 08 Oct",
-    "CRM 11 Aug, refused"
-  ],
-  "headline": {
-    "tint": "warn",
-    "text": "Thu 08 Oct has no CRM data.",
-    "rest": "CRM refused the stored token (HTTP 401); it has likely expired."
   },
   "details": [],
   "fixes": [
     {
-      "kind": "terminal",
-      "command": "moneyball crm secret leadzump_token",
-      "does": "asks for the new token"
-    },
-    {
-      "kind": "refresh",
-      "label": "Refresh",
-      "does": "reuses today's Meta pull: only CRM and the report run again"
+      "command": "moneyball connect crm",
+      "does": "pick your CRM and give its key; a test pull checks it",
+      "kind": "terminal"
     }
   ],
-  "next": null,
-  "day": {
-    "day": "Thu 08 Oct",
-    "refreshed": "16:19 today (scheduled, 2.0s)",
-    "numbers": [
-      {
-        "label": "Spend",
-        "value": "₹96,869",
-        "source": "meta"
-      },
-      {
-        "label": "Meta leads",
-        "value": "42",
-        "source": "meta"
-      }
-    ],
-    "numbers_note": "No CRM in this report",
-    "versus": null,
-    "report_missing": null
+  "footer": [
+    "Data Thu 08 Oct",
+    "CRM not connected"
+  ],
+  "headline": {
+    "rest": "No CRM is connected, so CRM leads, qualified and every verdict are off.",
+    "text": "Thu 08 Oct has no CRM data.",
+    "tint": "warn"
   },
+  "health": {
+    "crm_connected": false,
+    "crm_snap_date": null,
+    "failed_today": null,
+    "newest_snap_date": null,
+    "refreshed_at": "2026-10-09T07:31:21+05:30",
+    "run": {
+      "artifacts": {
+        "report": "/Users/demo/acme-homes/.moneyball/reports/2026-10-09/Acme-Homes-Daily-08-Oct-2026.html",
+        "report_json": "/Users/demo/acme-homes/.moneyball/reports/2026-10-09/creative-report.json"
+      },
+      "date": "2026-10-09",
+      "finished_at": "2026-10-09T02:01:21Z",
+      "outcome": "degraded",
+      "schema": "moneyball.run/1",
+      "started_at": "2026-10-09T02:00:00Z",
+      "steps": [
+        {
+          "counts": {
+            "products": 2,
+            "rows": 40
+          },
+          "ms": 64300,
+          "name": "meta",
+          "status": "done"
+        },
+        {
+          "counts": {
+            "adsets": 4,
+            "changes": 3,
+            "creatives": 5,
+            "leads": 96
+          },
+          "ms": 0,
+          "name": "assets",
+          "status": "done"
+        },
+        {
+          "counts": {},
+          "fix": "/connect crm",
+          "message": "no CRM connected for this workspace",
+          "ms": 0,
+          "name": "crm",
+          "status": "skipped"
+        },
+        {
+          "counts": {
+            "creatives": 5
+          },
+          "error_kind": "no_crm",
+          "message": "written without CRM data: CRM figures left out, verdicts withheld",
+          "ms": 1300,
+          "name": "report",
+          "status": "partial"
+        }
+      ],
+      "trigger": "manual",
+      "workspace_id": "0b6f3c1e-5a2d-4e7f-9c41-7d2a6e8b1f30"
+    },
+    "snap_date": "2026-10-09",
+    "state": {
+      "kind": "crm_missing"
+    },
+    "today": "2026-10-09"
+  },
+  "health_label": "CRM missing",
   "last_run": {
     "date": "2026-10-08",
     "day": "Thu 08 Oct",
-    "trigger": "schedule",
-    "outcome": "degraded",
     "gaps": "finished without CRM",
+    "outcome": "degraded",
     "steps": [
       {
-        "name": "meta",
+        "detail": "2 products, 40 rows",
+        "fix": null,
         "label": "Meta insights",
+        "name": "meta",
+        "reused": false,
         "status": "done",
-        "word": "done",
-        "detail": "5 products, 1,104 rows",
-        "time": "1.1s",
-        "reused": true,
-        "fix": null
+        "time": "1m 04s",
+        "word": "done"
       },
       {
-        "name": "assets",
+        "detail": "5 creatives, 96 leads, 4 adsets, 3 changes",
+        "fix": null,
         "label": "creatives and leads",
+        "name": "assets",
+        "reused": false,
         "status": "done",
-        "word": "done",
-        "detail": "64 creatives, 1,812 leads",
-        "time": "0.6s",
-        "reused": true,
-        "fix": null
+        "time": null,
+        "word": "done"
       },
       {
-        "name": "crm",
-        "label": "CRM",
-        "status": "failed",
-        "word": "failed",
-        "detail": "CRM refused the stored token (HTTP 401); last good pull 11 Aug",
-        "time": "0.2s",
-        "reused": false,
+        "detail": "no CRM connected for this workspace",
         "fix": {
-          "kind": "terminal",
-          "command": "moneyball crm secret leadzump_token",
-          "does": "asks for the new token"
-        }
+          "command": "moneyball connect crm",
+          "does": "pick your CRM and give its key; a test pull checks it",
+          "kind": "terminal"
+        },
+        "label": "CRM",
+        "name": "crm",
+        "reused": false,
+        "status": "skipped",
+        "time": null,
+        "word": "skipped"
       },
       {
-        "name": "report",
+        "detail": "5 creatives",
+        "fix": null,
         "label": "daily report",
-        "status": "partial",
-        "word": "no CRM",
-        "detail": "CRM columns and verdicts hidden, not zero",
-        "time": "0.1s",
+        "name": "report",
         "reused": false,
-        "fix": null
+        "status": "partial",
+        "time": "1.3s",
+        "word": "no CRM"
       }
-    ]
+    ],
+    "trigger": "manual"
+  },
+  "next": {
+    "does": "reuses today's Meta pull: only CRM and the report run again",
+    "force": false,
+    "kind": "refresh",
+    "label": "Refresh"
   }
 }

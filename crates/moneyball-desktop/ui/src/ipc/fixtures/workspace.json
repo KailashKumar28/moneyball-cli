@@ -1,11 +1,9 @@
 {
-  "name": "moneyball-data",
-  "path": "/Users/me/DEV/moneyball-test/moneyball-data",
-  "display_path": "~/DEV/moneyball-test",
+  "name": "acme-homes",
+  "path": "/Users/demo/acme-homes",
+  "display_path": "/Users/demo/acme-homes",
   "products": [
-    "Disha Namma Mane",
-    "Purva Sparkling Spring by Fincity",
-    "Primus by Fincity",
-    "Cityville by Fincity"
+    "Namma Mane",
+    "Cityville"
   ]
 }

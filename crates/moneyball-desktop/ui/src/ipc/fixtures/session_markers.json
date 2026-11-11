@@ -1,29 +1,28 @@
 {
-  "id": "20260928-1102-c3",
-  "turn_active": false,
+  "id": "mb-20261008T113000Z-p7qd",
   "items": [
     {
       "type": "user",
-      "text": "this is very old data"
+      "text": "How is Cityville doing by ad?"
     },
     {
       "type": "tool",
-      "call_id": "c1",
+      "call_id": "call_1",
       "name": "funnel",
       "args": {
-        "product": "Cityville",
-        "by": "ad"
+        "by": "ad",
+        "product": "City"
       },
       "status": "failed",
-      "output": "no product matches 'Cityville'; did you mean 'Cityville by Fincity'?"
+      "output": "no product matches \"City\""
     },
     {
       "type": "tool",
-      "call_id": "c2",
+      "call_id": "call_2",
       "name": "funnel",
       "args": {
-        "product": "Cityville by Fincity",
-        "by": "ad"
+        "by": "ad",
+        "product": "Cityville"
       },
       "status": "pending",
       "output": ""
@@ -34,5 +33,6 @@
     {
       "type": "bug_report_filed"
     }
-  ]
+  ],
+  "turn_active": false
 }

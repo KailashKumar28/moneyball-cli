@@ -19,8 +19,8 @@
       "label": "Meta insights",
       "status": "done",
       "word": "done",
-      "detail": "5 products, 1,104 rows",
-      "time": "18.2s",
+      "detail": "2 products, 40 rows",
+      "time": "1m 04s",
       "reused": false,
       "fix": null
     }
@@ -45,8 +45,8 @@
       "label": "creatives and leads",
       "status": "done",
       "word": "done",
-      "detail": "64 creatives, 1,812 leads",
-      "time": "21.0s",
+      "detail": "5 creatives, 96 leads, 4 adsets, 3 changes",
+      "time": null,
       "reused": false,
       "fix": null
     }
@@ -71,8 +71,8 @@
       "label": "CRM",
       "status": "done",
       "word": "done",
-      "detail": "655 tickets, 12 pages",
-      "time": "41.6s",
+      "detail": "59 tickets, 1 pages",
+      "time": "9.4s",
       "reused": false,
       "fix": null
     }
@@ -97,8 +97,8 @@
       "label": "daily report",
       "status": "done",
       "word": "done",
-      "detail": "64 creatives",
-      "time": "0.7s",
+      "detail": "5 creatives",
+      "time": "1.3s",
       "reused": false,
       "fix": null
     }
@@ -117,8 +117,8 @@
           "label": "Meta insights",
           "status": "done",
           "word": "done",
-          "detail": "5 products, 1,104 rows",
-          "time": "18.2s",
+          "detail": "2 products, 40 rows",
+          "time": "1m 04s",
           "reused": false,
           "fix": null
         },
@@ -127,8 +127,8 @@
           "label": "creatives and leads",
           "status": "done",
           "word": "done",
-          "detail": "64 creatives, 1,812 leads",
-          "time": "21.0s",
+          "detail": "5 creatives, 96 leads, 4 adsets, 3 changes",
+          "time": null,
           "reused": false,
           "fix": null
         },
@@ -137,8 +137,8 @@
           "label": "CRM",
           "status": "done",
           "word": "done",
-          "detail": "655 tickets, 12 pages",
-          "time": "41.6s",
+          "detail": "59 tickets, 1 pages",
+          "time": "9.4s",
           "reused": false,
           "fix": null
         },
@@ -147,45 +147,45 @@
           "label": "daily report",
           "status": "done",
           "word": "done",
-          "detail": "64 creatives",
-          "time": "0.7s",
+          "detail": "5 creatives",
+          "time": "1.3s",
           "reused": false,
           "fix": null
         }
       ]
     },
-    "time": "finished 07:32 in 1m 21s",
+    "time": "1m 21s",
     "verdict": null,
     "fixes": [],
     "rerun": null,
     "numbers": [
       {
-        "label": "Spend",
-        "value": "₹98,412",
+        "label": "spend",
+        "value": "Rs.7,680",
         "source": "meta"
       },
       {
         "label": "Meta leads",
-        "value": "47",
+        "value": "12",
         "source": "meta"
       },
       {
         "label": "CRM leads",
-        "value": "44",
+        "value": "7",
         "source": "crm"
       },
       {
-        "label": "Qualified",
-        "value": "9",
+        "label": "qualified",
+        "value": "4",
         "source": "crm"
       },
       {
-        "label": "Per qualified",
-        "value": "₹10,935",
+        "label": "cost per qualified",
+        "value": "Rs.1,920",
         "source": "crm"
       }
     ],
     "numbers_note": null,
-    "report_path": "/Users/me/DEV/moneyball-test/.moneyball/reports/2026-10-08/Fincity-Daily-08-Oct-2026.html"
+    "report_path": "/Users/demo/acme-homes/.moneyball/reports/2026-10-09/Acme-Homes-Daily-08-Oct-2026.html"
   }
 ]

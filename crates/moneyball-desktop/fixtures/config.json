@@ -1,0 +1,19 @@
+{
+  "workspace_id": "0b6f3c1e-5a2d-4e7f-9c41-7d2a6e8b1f30",
+  "brand": "Acme Homes",
+  "products": [
+    {
+      "name": "Namma Mane",
+      "ad_account": "act_101"
+    },
+    {
+      "name": "Cityville",
+      "ad_account": "act_202"
+    }
+  ],
+  "goals": {
+    "Namma Mane": 6,
+    "Cityville": 2
+  },
+  "target_rs_per_q": 2500
+}

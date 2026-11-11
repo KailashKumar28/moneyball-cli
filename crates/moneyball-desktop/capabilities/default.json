@@ -1,0 +1,7 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "main",
+  "description": "The one window: Tauri's core defaults and window dragging for the overlay title bar. No plugin permission: the opener and the folder dialog are called from Rust only.",
+  "windows": ["main"],
+  "permissions": ["core:default", "core:window:allow-start-dragging"]
+}
