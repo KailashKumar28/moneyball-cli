@@ -7,6 +7,12 @@
 #   - a "Developer ID Application" certificate in the login keychain
 #   - APPLE_API_ISSUER, APPLE_API_KEY (key id), APPLE_API_KEY_PATH (.p8)
 # Pass --release to fail instead of falling back to ad-hoc.
+#
+# The DMG's icon layout is done by scripting Finder, so the terminal this
+# runs in needs Automation permission for Finder (System Settings >
+# Privacy & Security > Automation); without it the build stops with
+# "AppleEvent timed out (-1712)". CI=true skips the layout step and
+# builds a plain DMG.
 set -euo pipefail
 
 root=${0:A:h:h}
