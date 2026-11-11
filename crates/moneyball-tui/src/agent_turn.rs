@@ -13,19 +13,31 @@ const OUTPUT_STYLE: &str =
      use product names verbatim including spaces (e.g. /funnel Namma Mane) - \
      never slugify them.";
 
-/// A persona prompt plus the live app state, as this front-end has it
-/// loaded: its commands, its rendering rule.
-pub(crate) fn system_prompt(app: &App, persona: &str) -> String {
-    let commands: Vec<&str> = COMMANDS.iter().map(|(c, _)| *c).collect();
-    let front = prompt::FrontEnd {
-        commands: &commands,
+/// This front-end in the model's eyes: its commands, its rendering
+/// rule, and its words for the steps core's prompts and tools name.
+fn front_end<'a>(commands: &'a [&'a str]) -> prompt::FrontEnd<'a> {
+    prompt::FrontEnd {
+        commands,
         output_style: OUTPUT_STYLE,
-    };
+        refresh: "/refresh",
+        setup: "/setup",
+        brief: "/brief",
+        mark_applied: "type /ledger {id} applied",
+    }
+}
+
+fn commands() -> Vec<&'static str> {
+    COMMANDS.iter().map(|(c, _)| *c).collect()
+}
+
+/// A persona prompt plus the live app state, as this front-end has it
+/// loaded.
+pub(crate) fn system_prompt(app: &App, persona: &str) -> String {
     let state = prompt::app_state_block(
         &app.cfg,
         app.snap_date.as_deref(),
         app.crm_note.as_deref(),
-        &front,
+        &front_end(&commands()),
     );
     format!("{}\n\n{}", persona, state)
 }
@@ -43,7 +55,9 @@ pub(crate) fn call_agent(app: &mut App, system: &str, turn: Vec<Item>) {
     // Agent turn (ARCHITECTURE.md 6b): the session records the user
     // item, then runs the tool loop on a worker thread. Ev's arrive via
     // the tick drain; the UI never blocks and Esc interrupts.
-    let turn = match app.session.start_turn(&app.cfg, system, turn) {
+    let commands = commands();
+    let front = front_end(&commands);
+    let turn = match app.session.start_turn(&app.cfg, &front, system, turn) {
         Ok(turn) => turn,
         Err(TurnRefused::Busy) => return still_responding(app),
         Err(refused) => {

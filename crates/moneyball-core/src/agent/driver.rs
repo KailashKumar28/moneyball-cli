@@ -122,11 +122,13 @@ impl Session {
 
     /// Record `turn` (the user's item, and any tool round a typed command
     /// stands for) and run the agent on the whole history, on a worker
-    /// thread. `system` is a persona prompt plus `prompt::app_state_block`.
+    /// thread. `system` is a persona prompt plus `prompt::app_state_block`;
+    /// `front` words what the tools tell the model to do next.
     /// A refusal records nothing and starts nothing.
     pub fn start_turn(
         &mut self,
         cfg: &AppConfig,
+        front: &prompt::FrontEnd,
         system: &str,
         turn: Vec<Item>,
     ) -> Result<Turn, TurnRefused> {
@@ -142,9 +144,9 @@ impl Session {
         let (tx, events) = std::sync::mpsc::channel();
         let system = format!("{}\n\n{}", system, prompt::RECORD_RULE);
         let history = self.history.clone();
-        let (cfg, cancel) = (cfg.clone(), self.cancel.clone());
+        let exec = exec::SnapshotTools::new(cfg.clone(), front);
+        let cancel = self.cancel.clone();
         std::thread::spawn(move || {
-            let exec = exec::SnapshotTools { cfg };
             let tools = exec::tools();
             super::run_turn(
                 &provider_id,

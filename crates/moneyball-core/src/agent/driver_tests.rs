@@ -4,6 +4,15 @@
 use super::*;
 use crate::config::WorkspaceConfig;
 
+const FRONT: prompt::FrontEnd = prompt::FrontEnd {
+    commands: &[],
+    output_style: "",
+    refresh: "refresh",
+    setup: "setup",
+    brief: "the brief",
+    mark_applied: "mark {id} applied",
+};
+
 fn user(text: &str) -> Item {
     Item::User { text: text.into() }
 }
@@ -36,7 +45,9 @@ fn a_refused_turn_records_nothing() {
     if let Some(w) = cfg.workspace.as_mut() {
         w.model_providers.clear();
     }
-    let refused = s.start_turn(&cfg, "sys", vec![user("hi")]).unwrap_err();
+    let refused = s
+        .start_turn(&cfg, &FRONT, "sys", vec![user("hi")])
+        .unwrap_err();
     assert_eq!(
         refused,
         TurnRefused::UnknownProvider {
@@ -46,10 +57,14 @@ fn a_refused_turn_records_nothing() {
     if let Some(w) = cfg.workspace.as_mut() {
         w.model = None;
     }
-    let refused = s.start_turn(&cfg, "sys", vec![user("hi")]).unwrap_err();
+    let refused = s
+        .start_turn(&cfg, &FRONT, "sys", vec![user("hi")])
+        .unwrap_err();
     assert_eq!(refused, TurnRefused::NoModel);
     cfg.workspace = None;
-    let refused = s.start_turn(&cfg, "sys", vec![user("hi")]).unwrap_err();
+    let refused = s
+        .start_turn(&cfg, &FRONT, "sys", vec![user("hi")])
+        .unwrap_err();
     assert_eq!(refused, TurnRefused::NoModel);
     assert!(s.history().is_empty());
     assert!(!s.turn_active());
@@ -67,10 +82,12 @@ fn one_turn_at_a_time_until_its_final_event() {
     let cfg = cfg_with_model();
     let mut s = Session::new(None, vec![]);
     assert!(!s.interrupt(), "nothing to interrupt yet");
-    let turn = s.start_turn(&cfg, "sys", vec![user("hi")]).unwrap();
+    let turn = s.start_turn(&cfg, &FRONT, "sys", vec![user("hi")]).unwrap();
     assert!(turn.save_failed.is_none());
     assert!(s.turn_active());
-    let busy = s.start_turn(&cfg, "sys", vec![user("again")]).unwrap_err();
+    let busy = s
+        .start_turn(&cfg, &FRONT, "sys", vec![user("again")])
+        .unwrap_err();
     assert_eq!(busy, TurnRefused::Busy);
     assert_eq!(s.history().len(), 1, "the refused turn is not recorded");
 
@@ -81,7 +98,9 @@ fn one_turn_at_a_time_until_its_final_event() {
         s.apply(ev).unwrap();
     }
     assert!(!s.turn_active());
-    assert!(s.start_turn(&cfg, "sys", vec![user("again")]).is_ok());
+    assert!(s
+        .start_turn(&cfg, &FRONT, "sys", vec![user("again")])
+        .is_ok());
 }
 
 #[test]

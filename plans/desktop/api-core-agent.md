@@ -15,7 +15,7 @@ struct owned by the front-end (put it in `tauri::State<Mutex<_>>`).
 | `Session::history` | `(&self) -> &[Item]` | Feed to `agent::view_items` for a snapshot after a webview reload. |
 | `Session::id` | `(&self) -> Option<&str>` | The session file id; None when not persisted. |
 | `Session::turn_active` | `(&self) -> bool` | True from `start_turn` until a final event is applied. |
-| `Session::start_turn` | `(&mut self, cfg: &AppConfig, system: &str, turn: Vec<Item>) -> Result<Turn, TurnRefused>` | `turn` is normally `vec![Item::User { text }]`. Records it, spawns the worker (provider/model lookup, tool list, executor, `run_turn`), returns at once. `system` = a persona const + `"\n\n"` + `prompt::app_state_block(..)`; the recommend rule is appended inside. A refusal records nothing. |
+| `Session::start_turn` | `(&mut self, cfg: &AppConfig, front: &prompt::FrontEnd, system: &str, turn: Vec<Item>) -> Result<Turn, TurnRefused>` | `front` is the same `FrontEnd` the state block got; it words the tools' no-snapshot error and the recommend result. `turn` is normally `vec![Item::User { text }]`. Records it, spawns the worker (provider/model lookup, tool list, executor, `run_turn`), returns at once. `system` = a persona const + `"\n\n"` + `prompt::app_state_block(..)`; the recommend rule is appended inside. A refusal records nothing. |
 | `Turn` | `struct { events: Receiver<Ev>, save_failed: Option<SaveFailed> }` | Forwarder thread: `for ev in turn.events { session.apply(&ev); channel.send(ev) }`, then `session.stream_closed()`. `save_failed` = the turn runs but its items missed the file; show once. |
 | `TurnRefused` | `enum { NoModel, UnknownProvider { provider }, Busy }`; Debug, Clone, PartialEq, Eq, thiserror, Serialize (`{"type":"no_model"}`, `{"type":"unknown_provider","provider":".."}`, `{"type":"busy"}`) | The typed "did not start" result. Its `Display` is neutral; each front-end writes its own sentence. |
 | `Session::apply` | `(&mut self, ev: &Ev) -> Result<(), SaveFailed>` | Call for EVERY event, in order. Records `ItemDone` items (history + file) and frees the guard on `TurnComplete` / `TurnAborted` / `Failed`. |
@@ -57,7 +57,7 @@ works: `AssistantDelta { text }` (was `AssistantDelta(String)`) and
 | Item | Signature | Use |
 |---|---|---|
 | `AGENT_SYSTEM_PROMPT`, `BRIEF_SYSTEM_PROMPT`, `FUNNEL_SYSTEM_PROMPT`, `DIAGNOSE_SYSTEM_PROMPT` | `pub const &str` | The persona half of `system`. Free chat uses `AGENT_SYSTEM_PROMPT`. |
-| `FrontEnd` | `struct FrontEnd<'a> { commands: &'a [&'a str], output_style: &'a str }` | Desktop v1: `commands: &[]`, `output_style: "Output style: markdown renders here ..."` (no trailing newline). Only commands with handlers. |
+| `FrontEnd` | `struct FrontEnd<'a> { commands: &'a [&'a str], output_style: &'a str, refresh: &'a str, setup: &'a str, brief: &'a str, mark_applied: &'a str }` | One const per front-end, passed to both `app_state_block` and `start_turn`. Desktop v1: `commands: &[]`, its own `output_style` (no trailing newline), and its words for each step: `refresh` follows "run" ("the Refresh button"), `setup` and `brief` are noun phrases, `mark_applied` follows "when they" and carries `{id}` ("run `moneyball ledger {id} applied` in a terminal"). The TUI passes `/refresh`, `/setup`, `/brief`, `type /ledger {id} applied`. |
 | `app_state_block` | `(cfg: &AppConfig, snap_date: Option<&str>, crm_note: Option<&str>, front: &FrontEnd) -> String` | `snap_date` / `crm_note` = the loaded snapshot's date and `CrmHealth::note()` (core-data's brief loader has both). Empty `commands` prints `slash commands: none (this app has none - never suggest one)`. |
 
 ## Tool text - `agent::tool_text` (agent/tool_text.rs)
@@ -81,11 +81,21 @@ The executor (`SnapshotTools`) and the wire tool list are private to
 
 ## Known gaps for the lead
 
-- Core text still names TUI commands whatever `FrontEnd.commands` says:
-  the state block's no-workspace and no-snapshot lines (`/setup`, `/brief`,
-  `/refresh`), the brief/diagnose personas ("The user ran /brief"), the
-  executor's no-snapshot error ("run /refresh") and the recommend result
-  ("/ledger <id> applied"). Moved verbatim to keep the TUI prompt
-  byte-identical; the desktop inherits them until someone rewords.
+- Fixed in the follow-up: the state block, the no-snapshot tool error and
+  the recommend result take their command wording from `FrontEnd`; a test
+  (agent/exec.rs) builds all of them plus `AGENT_SYSTEM_PROMPT` and the
+  record rule with a desktop-style `FrontEnd` and finds no slash command.
+- `FrontEnd.brief` is told to the model as something that "self-heals" by
+  refreshing when there is no snapshot. Name a surface that does, or the
+  model will promise it.
+- Still naming TUI commands, and reaching the model through tool outputs
+  and `crm_note`: `CrmHealth::note()` ("Fix: /connect crm (moneyball
+  connect crm in a shell)", "... then /refresh"; crm/status.rs:59-91) and
+  diagnose's "the next /refresh pulls it" (diagnose/print.rs:248). Both
+  are shared with the CLI and the landing, outside the agent module, so
+  they were left for a decision.
+- `BRIEF_`, `FUNNEL_` and `DIAGNOSE_SYSTEM_PROMPT` name `/brief` and
+  `/diagnose` (said in their doc comments); the desktop v1 uses
+  `AGENT_SYSTEM_PROMPT` only.
 - `ARCHITECTURE.md` 6b still describes `Op` and "the UI records each item";
   the truth is `Session::start_turn / apply / interrupt` (wave 3 doc fix).
