@@ -1,0 +1,47 @@
+{
+  "running": false,
+  "day": "Thu 08 Oct",
+  "steps": [
+    {
+      "name": "meta",
+      "label": "Meta insights",
+      "status": "ok",
+      "word": "done",
+      "detail": "5 products, 1,104 rows",
+      "time": "18.2s",
+      "reused": false,
+      "fix": null
+    },
+    {
+      "name": "assets",
+      "label": "creatives and leads",
+      "status": "ok",
+      "word": "done",
+      "detail": "64 creatives, 1,812 leads",
+      "time": "21.0s",
+      "reused": false,
+      "fix": null
+    },
+    {
+      "name": "crm",
+      "label": "CRM",
+      "status": "ok",
+      "word": "done",
+      "detail": "655 tickets, 12 pages",
+      "time": "41.6s",
+      "reused": false,
+      "fix": null
+    },
+    {
+      "name": "report",
+      "label": "daily report",
+      "status": "ok",
+      "word": "done",
+      "detail": "64 creatives",
+      "time": "0.7s",
+      "reused": false,
+      "fix": null
+    }
+  ],
+  "started_ms_ago": null
+}

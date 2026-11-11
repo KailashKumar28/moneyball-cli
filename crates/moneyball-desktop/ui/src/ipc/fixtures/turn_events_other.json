@@ -1,0 +1,17 @@
+[
+  {
+    "type": "turn_aborted"
+  },
+  {
+    "type": "failed",
+    "error": "The model provider returned HTTP 529 (overloaded). Send the message again."
+  },
+  {
+    "type": "died",
+    "message": "The advisor stopped without finishing. Send the message again."
+  },
+  {
+    "type": "save_failed",
+    "message": "session save failed: disk full"
+  }
+]

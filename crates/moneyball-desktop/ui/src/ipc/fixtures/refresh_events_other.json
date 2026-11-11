@@ -1,0 +1,18 @@
+[
+  {
+    "type": "could_not_start",
+    "error": {
+      "kind": "no_meta_token",
+      "reason": "Meta is not connected.",
+      "fix": {
+        "kind": "terminal",
+        "command": "moneyball connect meta",
+        "does": "stores a Meta token"
+      }
+    }
+  },
+  {
+    "type": "died",
+    "message": "The refresh stopped without finishing. Its run record keeps the steps that finished."
+  }
+]

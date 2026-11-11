@@ -1,0 +1,49 @@
+{
+  "busy": {
+    "kind": "busy",
+    "reason": "The advisor is still answering. Stop it or wait for it to finish.",
+    "fix": null
+  },
+  "no_model": {
+    "kind": "no_model",
+    "reason": "No model is connected, so the advisor cannot answer yet.",
+    "fix": {
+      "kind": "terminal",
+      "command": "moneyball connect model",
+      "does": "stores a model key"
+    }
+  },
+  "unknown_provider": {
+    "kind": "unknown_provider",
+    "reason": "The configured model provider 'acme' is not one Moneyball knows.",
+    "fix": null
+  },
+  "not_a_command": {
+    "kind": "not_a_command",
+    "reason": "This app has no slash commands. Ask in plain words.",
+    "fix": null
+  },
+  "no_workspace_config": {
+    "kind": "no_workspace_config",
+    "reason": "~/DEV/old-project has no Moneyball workspace in it.",
+    "fix": {
+      "kind": "terminal",
+      "command": "moneyball",
+      "does": "runs setup in that folder"
+    }
+  },
+  "refresh_busy": {
+    "kind": "busy",
+    "reason": "A refresh is running; it writes the same report. Try again when it finishes.",
+    "fix": null
+  },
+  "snapshot": {
+    "kind": "snapshot_unreadable",
+    "reason": "The snapshot for 2026-10-09 could not be read: ads_daily.json is not valid JSON.",
+    "fix": {
+      "kind": "refresh",
+      "label": "Refresh",
+      "does": "pulls the day again"
+    }
+  }
+}

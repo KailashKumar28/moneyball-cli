@@ -1,0 +1,22 @@
+{
+  "id": "20261009-0914-a1",
+  "items": [
+    {
+      "type": "user",
+      "text": "how far are we from the goal?"
+    },
+    {
+      "type": "tool",
+      "call_id": "c1",
+      "name": "brief",
+      "args": {},
+      "status": "ok",
+      "output": "product  spend/day  meta  crm  qual\nDisha Namma Mane  20,863  142  112  27\n..."
+    },
+    {
+      "type": "assistant",
+      "text": "Portfolio is at **8.0 qualified a day** against a 50 a day goal. At current efficiency you'd need ₹631k a day; at the best-observed ₹5,409 per qualified you still need ₹270k a day. The constraint is money, not channels. Want me to propose a goal ramp?"
+    }
+  ],
+  "turn_active": false
+}
