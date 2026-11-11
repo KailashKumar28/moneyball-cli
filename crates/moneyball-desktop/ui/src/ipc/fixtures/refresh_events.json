@@ -1,0 +1,191 @@
+[
+  {
+    "type": "begin",
+    "step": {
+      "name": "meta",
+      "label": "Meta insights",
+      "status": "running",
+      "word": "running",
+      "detail": "",
+      "time": null,
+      "reused": false,
+      "fix": null
+    }
+  },
+  {
+    "type": "done",
+    "step": {
+      "name": "meta",
+      "label": "Meta insights",
+      "status": "done",
+      "word": "done",
+      "detail": "2 products, 40 rows",
+      "time": "1m 04s",
+      "reused": false,
+      "fix": null
+    }
+  },
+  {
+    "type": "begin",
+    "step": {
+      "name": "assets",
+      "label": "creatives and leads",
+      "status": "running",
+      "word": "running",
+      "detail": "",
+      "time": null,
+      "reused": false,
+      "fix": null
+    }
+  },
+  {
+    "type": "done",
+    "step": {
+      "name": "assets",
+      "label": "creatives and leads",
+      "status": "done",
+      "word": "done",
+      "detail": "5 creatives, 96 leads, 4 adsets, 3 changes",
+      "time": null,
+      "reused": false,
+      "fix": null
+    }
+  },
+  {
+    "type": "begin",
+    "step": {
+      "name": "crm",
+      "label": "CRM",
+      "status": "running",
+      "word": "running",
+      "detail": "",
+      "time": null,
+      "reused": false,
+      "fix": null
+    }
+  },
+  {
+    "type": "done",
+    "step": {
+      "name": "crm",
+      "label": "CRM",
+      "status": "done",
+      "word": "done",
+      "detail": "59 tickets, 1 pages",
+      "time": "9.4s",
+      "reused": false,
+      "fix": null
+    }
+  },
+  {
+    "type": "begin",
+    "step": {
+      "name": "report",
+      "label": "daily report",
+      "status": "running",
+      "word": "running",
+      "detail": "",
+      "time": null,
+      "reused": false,
+      "fix": null
+    }
+  },
+  {
+    "type": "done",
+    "step": {
+      "name": "report",
+      "label": "daily report",
+      "status": "done",
+      "word": "done",
+      "detail": "5 creatives",
+      "time": "1.3s",
+      "reused": false,
+      "fix": null
+    }
+  },
+  {
+    "type": "finished",
+    "run": {
+      "date": "2026-10-08",
+      "day": "Thu 08 Oct",
+      "trigger": "manual",
+      "outcome": "ok",
+      "gaps": "",
+      "steps": [
+        {
+          "name": "meta",
+          "label": "Meta insights",
+          "status": "done",
+          "word": "done",
+          "detail": "2 products, 40 rows",
+          "time": "1m 04s",
+          "reused": false,
+          "fix": null
+        },
+        {
+          "name": "assets",
+          "label": "creatives and leads",
+          "status": "done",
+          "word": "done",
+          "detail": "5 creatives, 96 leads, 4 adsets, 3 changes",
+          "time": null,
+          "reused": false,
+          "fix": null
+        },
+        {
+          "name": "crm",
+          "label": "CRM",
+          "status": "done",
+          "word": "done",
+          "detail": "59 tickets, 1 pages",
+          "time": "9.4s",
+          "reused": false,
+          "fix": null
+        },
+        {
+          "name": "report",
+          "label": "daily report",
+          "status": "done",
+          "word": "done",
+          "detail": "5 creatives",
+          "time": "1.3s",
+          "reused": false,
+          "fix": null
+        }
+      ]
+    },
+    "time": "1m 21s",
+    "verdict": null,
+    "fixes": [],
+    "rerun": null,
+    "numbers": [
+      {
+        "label": "spend",
+        "value": "Rs.7,680",
+        "source": "meta"
+      },
+      {
+        "label": "Meta leads",
+        "value": "12",
+        "source": "meta"
+      },
+      {
+        "label": "CRM leads",
+        "value": "7",
+        "source": "crm"
+      },
+      {
+        "label": "qualified",
+        "value": "4",
+        "source": "crm"
+      },
+      {
+        "label": "cost per qualified",
+        "value": "Rs.1,920",
+        "source": "crm"
+      }
+    ],
+    "numbers_note": null,
+    "report_path": "/Users/demo/acme-homes/.moneyball/reports/2026-10-09/Acme-Homes-Daily-08-Oct-2026.html"
+  }
+]

@@ -1,0 +1,54 @@
+{
+  "busy": {
+    "fix": null,
+    "kind": "busy",
+    "reason": "The advisor is still answering."
+  },
+  "no_model": {
+    "fix": {
+      "command": "moneyball",
+      "does": "then type /setup there - pick a provider and paste its key",
+      "kind": "terminal"
+    },
+    "kind": "no_model",
+    "reason": "No model is set up for this workspace."
+  },
+  "no_workspace": {
+    "fix": null,
+    "kind": "no_workspace",
+    "reason": "No workspace is open."
+  },
+  "no_workspace_config": {
+    "fix": {
+      "command": "moneyball",
+      "does": "then type /setup there - it sets the workspace up; run it in that folder",
+      "kind": "terminal"
+    },
+    "kind": "no_workspace_config",
+    "reason": "This folder is not a Moneyball workspace: it has no .moneyball/config.json."
+  },
+  "not_a_command": {
+    "fix": null,
+    "kind": "not_a_command",
+    "reason": "This app has no slash commands. Ask in plain words."
+  },
+  "refresh_busy": {
+    "fix": null,
+    "kind": "busy",
+    "reason": "A refresh is running and writes the report itself. Generate one when it finishes."
+  },
+  "snapshot": {
+    "fix": null,
+    "kind": "snapshot",
+    "reason": "snapshot 2026-10-09/ads_daily: invalid JSON: key must be a string at line 1 column 3"
+  },
+  "unknown_provider": {
+    "fix": {
+      "command": "moneyball",
+      "does": "then type /setup there - pick a provider and paste its key",
+      "kind": "terminal"
+    },
+    "kind": "unknown_provider",
+    "reason": "The provider \"acme\" this workspace names is not in its list of model providers."
+  }
+}

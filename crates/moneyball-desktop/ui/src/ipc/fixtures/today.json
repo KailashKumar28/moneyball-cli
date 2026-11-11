@@ -1,0 +1,172 @@
+{
+  "day": {
+    "day": "Thu 08 Oct",
+    "numbers": [
+      {
+        "label": "spend",
+        "source": "meta",
+        "value": "Rs.7,680"
+      },
+      {
+        "label": "Meta leads",
+        "source": "meta",
+        "value": "12"
+      },
+      {
+        "label": "CRM leads",
+        "source": "crm",
+        "value": "7"
+      },
+      {
+        "label": "qualified",
+        "source": "crm",
+        "value": "4"
+      },
+      {
+        "label": "cost per qualified",
+        "source": "crm",
+        "value": "Rs.1,920"
+      }
+    ],
+    "numbers_note": null,
+    "refreshed": "07:31 this morning (manual, 1m 21s)",
+    "report_missing": null,
+    "versus": {
+      "changes": [
+        {
+          "label": "qualified",
+          "text": "+0",
+          "tint": "plain"
+        },
+        {
+          "label": "cost per qualified",
+          "text": "+Rs.46",
+          "tint": "bad"
+        }
+      ],
+      "day": "Wed 07 Oct"
+    }
+  },
+  "details": [],
+  "fixes": [],
+  "footer": [
+    "Data Thu 08 Oct",
+    "CRM 08 Oct"
+  ],
+  "headline": null,
+  "health": {
+    "crm_connected": false,
+    "crm_snap_date": "2026-10-09",
+    "failed_today": null,
+    "newest_snap_date": null,
+    "refreshed_at": "2026-10-09T07:31:21+05:30",
+    "run": {
+      "artifacts": {
+        "report": "/Users/demo/acme-homes/.moneyball/reports/2026-10-09/Acme-Homes-Daily-08-Oct-2026.html",
+        "report_json": "/Users/demo/acme-homes/.moneyball/reports/2026-10-09/creative-report.json"
+      },
+      "date": "2026-10-09",
+      "finished_at": "2026-10-09T02:01:21Z",
+      "outcome": "ok",
+      "schema": "moneyball.run/1",
+      "started_at": "2026-10-09T02:00:00Z",
+      "steps": [
+        {
+          "counts": {
+            "products": 2,
+            "rows": 40
+          },
+          "ms": 64300,
+          "name": "meta",
+          "status": "done"
+        },
+        {
+          "counts": {
+            "adsets": 4,
+            "changes": 3,
+            "creatives": 5,
+            "leads": 96
+          },
+          "ms": 0,
+          "name": "assets",
+          "status": "done"
+        },
+        {
+          "counts": {
+            "pages": 1,
+            "tickets": 59
+          },
+          "ms": 9400,
+          "name": "crm",
+          "status": "done"
+        },
+        {
+          "counts": {
+            "creatives": 5
+          },
+          "ms": 1300,
+          "name": "report",
+          "status": "done"
+        }
+      ],
+      "trigger": "manual",
+      "workspace_id": "0b6f3c1e-5a2d-4e7f-9c41-7d2a6e8b1f30"
+    },
+    "snap_date": "2026-10-09",
+    "state": {
+      "kind": "fresh"
+    },
+    "today": "2026-10-09"
+  },
+  "health_label": "Fresh",
+  "last_run": {
+    "date": "2026-10-08",
+    "day": "Thu 08 Oct",
+    "gaps": "",
+    "outcome": "ok",
+    "steps": [
+      {
+        "detail": "2 products, 40 rows",
+        "fix": null,
+        "label": "Meta insights",
+        "name": "meta",
+        "reused": false,
+        "status": "done",
+        "time": "1m 04s",
+        "word": "done"
+      },
+      {
+        "detail": "5 creatives, 96 leads, 4 adsets, 3 changes",
+        "fix": null,
+        "label": "creatives and leads",
+        "name": "assets",
+        "reused": false,
+        "status": "done",
+        "time": null,
+        "word": "done"
+      },
+      {
+        "detail": "59 tickets, 1 pages",
+        "fix": null,
+        "label": "CRM",
+        "name": "crm",
+        "reused": false,
+        "status": "done",
+        "time": "9.4s",
+        "word": "done"
+      },
+      {
+        "detail": "5 creatives",
+        "fix": null,
+        "label": "daily report",
+        "name": "report",
+        "reused": false,
+        "status": "done",
+        "time": "1.3s",
+        "word": "done"
+      }
+    ],
+    "trigger": "manual"
+  },
+  "next": null
+}

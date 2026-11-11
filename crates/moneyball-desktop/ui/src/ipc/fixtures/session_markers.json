@@ -1,0 +1,38 @@
+{
+  "id": "mb-20261008T113000Z-p7qd",
+  "items": [
+    {
+      "type": "user",
+      "text": "How is Cityville doing by ad?"
+    },
+    {
+      "type": "tool",
+      "call_id": "call_1",
+      "name": "funnel",
+      "args": {
+        "by": "ad",
+        "product": "City"
+      },
+      "status": "failed",
+      "output": "no product matches \"City\""
+    },
+    {
+      "type": "tool",
+      "call_id": "call_2",
+      "name": "funnel",
+      "args": {
+        "by": "ad",
+        "product": "Cityville"
+      },
+      "status": "pending",
+      "output": ""
+    },
+    {
+      "type": "turn_interrupted"
+    },
+    {
+      "type": "bug_report_filed"
+    }
+  ],
+  "turn_active": false
+}

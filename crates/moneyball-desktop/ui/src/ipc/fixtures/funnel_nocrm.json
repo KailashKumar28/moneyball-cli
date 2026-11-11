@@ -1,0 +1,48 @@
+{
+  "product": "Namma Mane",
+  "has_crm": false,
+  "rows": [
+    {
+      "id": "s1",
+      "name": "Lookalike 1%",
+      "spend": 28690,
+      "m": 48,
+      "l": null,
+      "q": null,
+      "v": null,
+      "b": null,
+      "cpl": 598,
+      "rs_per_q": null,
+      "l_to_q": null,
+      "kill_mult": 11.5,
+      "kill": null,
+      "sufficient": true,
+      "immature": null,
+      "learning": "-",
+      "verdict": "no CRM"
+    },
+    {
+      "id": "s2",
+      "name": "Pincode Bengaluru East",
+      "spend": 12595,
+      "m": 24,
+      "l": null,
+      "q": null,
+      "v": null,
+      "b": null,
+      "cpl": 525,
+      "rs_per_q": null,
+      "l_to_q": null,
+      "kill_mult": 5.0,
+      "kill": null,
+      "sufficient": true,
+      "immature": null,
+      "learning": "-",
+      "verdict": "no CRM"
+    }
+  ],
+  "cpl_ranking": "cheapest Meta lead first: Pincode Bengaluru East Rs.525 < Lookalike 1% Rs.598",
+  "notes": [
+    "Kill is withheld: this snapshot has no CRM data, so qualified counts are unknown, not zero."
+  ]
+}

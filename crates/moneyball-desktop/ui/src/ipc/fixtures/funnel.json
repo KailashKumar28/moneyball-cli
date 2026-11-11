@@ -1,0 +1,49 @@
+{
+  "product": "Namma Mane",
+  "has_crm": true,
+  "rows": [
+    {
+      "id": "s1",
+      "name": "Lookalike 1%",
+      "spend": 28690,
+      "m": 48,
+      "l": 35,
+      "q": 21,
+      "v": 7,
+      "b": 2,
+      "cpl": 598,
+      "rs_per_q": 1366,
+      "l_to_q": 60.0,
+      "kill_mult": 11.5,
+      "kill": false,
+      "sufficient": true,
+      "immature": true,
+      "learning": "-",
+      "verdict": "keep"
+    },
+    {
+      "id": "s2",
+      "name": "Pincode Bengaluru East",
+      "spend": 12595,
+      "m": 24,
+      "l": 6,
+      "q": 0,
+      "v": 0,
+      "b": 0,
+      "cpl": 525,
+      "rs_per_q": null,
+      "l_to_q": 0.0,
+      "kill_mult": 5.0,
+      "kill": true,
+      "sufficient": true,
+      "immature": false,
+      "learning": "-",
+      "verdict": "kill"
+    }
+  ],
+  "cpl_ranking": "cheapest Meta lead first: Pincode Bengaluru East Rs.525 < Lookalike 1% Rs.598",
+  "notes": [
+    "Kill means spend passed 3x, 4.7x or 6.3x the target cost per qualified with 0, 1 or 2 qualified.",
+    "Immature means the leads arrived in the last 72 hours."
+  ]
+}

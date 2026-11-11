@@ -1,0 +1,14 @@
+[
+  {
+    "type": "could_not_start",
+    "error": {
+      "kind": "could_not_start",
+      "reason": "a refresh is already running for this workspace - wait for it to finish",
+      "fix": null
+    }
+  },
+  {
+    "type": "died",
+    "message": "The refresh stopped unexpectedly. Its run record keeps the steps that finished."
+  }
+]

@@ -1,0 +1,322 @@
+[
+ {
+  "ad_id": "a1",
+  "stage": "Contactable",
+  "delivery": 1790836200
+ },
+ {
+  "ad_id": "a1",
+  "stage": "Lost",
+  "delivery": 1790836800
+ },
+ {
+  "ad_id": "a1",
+  "stage": "Visit",
+  "delivery": 1790837400
+ },
+ {
+  "ad_id": "a1",
+  "stage": "Contactable",
+  "delivery": 1790922600
+ },
+ {
+  "ad_id": "a1",
+  "stage": "Lost",
+  "delivery": 1790923200
+ },
+ {
+  "ad_id": "a1",
+  "stage": "Visit",
+  "delivery": 1790923800
+ },
+ {
+  "ad_id": "a1",
+  "stage": "Contactable",
+  "delivery": 1791009000
+ },
+ {
+  "ad_id": "a1",
+  "stage": "Lost",
+  "delivery": 1791009600
+ },
+ {
+  "ad_id": "a1",
+  "stage": "Visit",
+  "delivery": 1791010200
+ },
+ {
+  "ad_id": "a1",
+  "stage": "Contactable",
+  "delivery": 1791095400
+ },
+ {
+  "ad_id": "a1",
+  "stage": "Lost",
+  "delivery": 1791096000
+ },
+ {
+  "ad_id": "a1",
+  "stage": "Booking",
+  "delivery": 1791096600
+ },
+ {
+  "ad_id": "a1",
+  "stage": "Contactable",
+  "delivery": 1791181800
+ },
+ {
+  "ad_id": "a1",
+  "stage": "Lost",
+  "delivery": 1791182400
+ },
+ {
+  "ad_id": "a1",
+  "stage": "Visit",
+  "delivery": 1791183000
+ },
+ {
+  "ad_id": "a1",
+  "stage": "Contactable",
+  "delivery": 1791268200
+ },
+ {
+  "ad_id": "a1",
+  "stage": "Lost",
+  "delivery": 1791268800
+ },
+ {
+  "ad_id": "a1",
+  "stage": "Visit",
+  "delivery": 1791269400
+ },
+ {
+  "ad_id": "a1",
+  "stage": "Contactable",
+  "delivery": 1791354600
+ },
+ {
+  "ad_id": "a1",
+  "stage": "Lost",
+  "delivery": 1791355200
+ },
+ {
+  "ad_id": "a1",
+  "stage": "Visit",
+  "delivery": 1791355800
+ },
+ {
+  "ad_id": "a1",
+  "stage": "Contactable",
+  "delivery": 1791441000
+ },
+ {
+  "ad_id": "a1",
+  "stage": "Lost",
+  "delivery": 1791441600
+ },
+ {
+  "ad_id": "a1",
+  "stage": "Booking",
+  "delivery": 1791442200
+ },
+ {
+  "ad_id": "a2",
+  "stage": "NonContactable",
+  "delivery": 1790836200
+ },
+ {
+  "ad_id": "a2",
+  "stage": "Contactable",
+  "delivery": 1790836800
+ },
+ {
+  "ad_id": "a2",
+  "stage": "NonContactable",
+  "delivery": 1790922600
+ },
+ {
+  "ad_id": "a2",
+  "stage": "Contactable",
+  "delivery": 1790923200
+ },
+ {
+  "ad_id": "a2",
+  "stage": "NonContactable",
+  "delivery": 1791009000
+ },
+ {
+  "ad_id": "a2",
+  "stage": "Contactable",
+  "delivery": 1791009600
+ },
+ {
+  "ad_id": "a2",
+  "stage": "NonContactable",
+  "delivery": 1791095400
+ },
+ {
+  "ad_id": "a2",
+  "stage": "Contactable",
+  "delivery": 1791096000
+ },
+ {
+  "ad_id": "a2",
+  "stage": "NonContactable",
+  "delivery": 1791181800
+ },
+ {
+  "ad_id": "a2",
+  "stage": "Contactable",
+  "delivery": 1791182400
+ },
+ {
+  "ad_id": "a2",
+  "stage": "NonContactable",
+  "delivery": 1791268200
+ },
+ {
+  "ad_id": "a2",
+  "stage": "Contactable",
+  "delivery": 1791268800
+ },
+ {
+  "ad_id": "a2",
+  "stage": "NonContactable",
+  "delivery": 1791354600
+ },
+ {
+  "ad_id": "a2",
+  "stage": "Contactable",
+  "delivery": 1791355200
+ },
+ {
+  "ad_id": "a2",
+  "stage": "NonContactable",
+  "delivery": 1791441000
+ },
+ {
+  "ad_id": "a2",
+  "stage": "Contactable",
+  "delivery": 1791441600
+ },
+ {
+  "ad_id": "a3",
+  "stage": "Lost",
+  "delivery": 1790836200
+ },
+ {
+  "ad_id": "a3",
+  "stage": "NonContactable",
+  "delivery": 1790836800
+ },
+ {
+  "ad_id": "a3",
+  "stage": "Lost",
+  "delivery": 1790922600
+ },
+ {
+  "ad_id": "a3",
+  "stage": "NonContactable",
+  "delivery": 1790923200
+ },
+ {
+  "ad_id": "a3",
+  "stage": "Lost",
+  "delivery": 1791009000
+ },
+ {
+  "ad_id": "a3",
+  "stage": "NonContactable",
+  "delivery": 1791009600
+ },
+ {
+  "ad_id": "a3",
+  "stage": "Lost",
+  "delivery": 1791095400
+ },
+ {
+  "ad_id": "a3",
+  "stage": "NonContactable",
+  "delivery": 1791096000
+ },
+ {
+  "ad_id": "a4",
+  "stage": "Contactable",
+  "delivery": 1790836200
+ },
+ {
+  "ad_id": "a4",
+  "stage": "Lost",
+  "delivery": 1790836800
+ },
+ {
+  "ad_id": "a4",
+  "stage": "Contactable",
+  "delivery": 1790922600
+ },
+ {
+  "ad_id": "a4",
+  "stage": "Lost",
+  "delivery": 1790923200
+ },
+ {
+  "ad_id": "a4",
+  "stage": "Contactable",
+  "delivery": 1791009000
+ },
+ {
+  "ad_id": "a4",
+  "stage": "Lost",
+  "delivery": 1791009600
+ },
+ {
+  "ad_id": "a4",
+  "stage": "Contactable",
+  "delivery": 1791095400
+ },
+ {
+  "ad_id": "a4",
+  "stage": "Lost",
+  "delivery": 1791096000
+ },
+ {
+  "ad_id": "a4",
+  "stage": "Contactable",
+  "delivery": 1791181800
+ },
+ {
+  "ad_id": "a4",
+  "stage": "Lost",
+  "delivery": 1791182400
+ },
+ {
+  "ad_id": "a4",
+  "stage": "Contactable",
+  "delivery": 1791268200
+ },
+ {
+  "ad_id": "a4",
+  "stage": "Lost",
+  "delivery": 1791268800
+ },
+ {
+  "ad_id": "a4",
+  "stage": "Contactable",
+  "delivery": 1791354600
+ },
+ {
+  "ad_id": "a4",
+  "stage": "Lost",
+  "delivery": 1791355200
+ },
+ {
+  "ad_id": "a4",
+  "stage": "Contactable",
+  "delivery": 1791441000
+ },
+ {
+  "ad_id": "a4",
+  "stage": "Lost",
+  "delivery": 1791441600
+ }
+]

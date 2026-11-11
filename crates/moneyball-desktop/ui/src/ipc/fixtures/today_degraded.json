@@ -1,0 +1,177 @@
+{
+  "day": {
+    "day": "Thu 08 Oct",
+    "numbers": [
+      {
+        "label": "spend",
+        "source": "meta",
+        "value": "Rs.7,680"
+      },
+      {
+        "label": "Meta leads",
+        "source": "meta",
+        "value": "12"
+      }
+    ],
+    "numbers_note": "no CRM in this report",
+    "refreshed": "07:31 this morning (manual, 1m 21s)",
+    "report_missing": null,
+    "versus": {
+      "changes": [
+        {
+          "label": "spend",
+          "text": "+Rs.185",
+          "tint": "plain"
+        },
+        {
+          "label": "Meta leads",
+          "text": "-3",
+          "tint": "bad"
+        }
+      ],
+      "day": "Wed 07 Oct"
+    }
+  },
+  "details": [],
+  "fixes": [
+    {
+      "command": "moneyball connect crm",
+      "does": "pick your CRM and give its key; a test pull checks it",
+      "kind": "terminal"
+    }
+  ],
+  "footer": [
+    "Data Thu 08 Oct",
+    "CRM not connected"
+  ],
+  "headline": {
+    "rest": "No CRM is connected, so CRM leads, qualified and every verdict are off.",
+    "text": "Thu 08 Oct has no CRM data.",
+    "tint": "warn"
+  },
+  "health": {
+    "crm_connected": false,
+    "crm_snap_date": null,
+    "failed_today": null,
+    "newest_snap_date": null,
+    "refreshed_at": "2026-10-09T07:31:21+05:30",
+    "run": {
+      "artifacts": {
+        "report": "/Users/demo/acme-homes/.moneyball/reports/2026-10-09/Acme-Homes-Daily-08-Oct-2026.html",
+        "report_json": "/Users/demo/acme-homes/.moneyball/reports/2026-10-09/creative-report.json"
+      },
+      "date": "2026-10-09",
+      "finished_at": "2026-10-09T02:01:21Z",
+      "outcome": "degraded",
+      "schema": "moneyball.run/1",
+      "started_at": "2026-10-09T02:00:00Z",
+      "steps": [
+        {
+          "counts": {
+            "products": 2,
+            "rows": 40
+          },
+          "ms": 64300,
+          "name": "meta",
+          "status": "done"
+        },
+        {
+          "counts": {
+            "adsets": 4,
+            "changes": 3,
+            "creatives": 5,
+            "leads": 96
+          },
+          "ms": 0,
+          "name": "assets",
+          "status": "done"
+        },
+        {
+          "counts": {},
+          "fix": "/connect crm",
+          "message": "no CRM connected for this workspace",
+          "ms": 0,
+          "name": "crm",
+          "status": "skipped"
+        },
+        {
+          "counts": {
+            "creatives": 5
+          },
+          "error_kind": "no_crm",
+          "message": "written without CRM data: CRM figures left out, verdicts withheld",
+          "ms": 1300,
+          "name": "report",
+          "status": "partial"
+        }
+      ],
+      "trigger": "manual",
+      "workspace_id": "0b6f3c1e-5a2d-4e7f-9c41-7d2a6e8b1f30"
+    },
+    "snap_date": "2026-10-09",
+    "state": {
+      "kind": "crm_missing"
+    },
+    "today": "2026-10-09"
+  },
+  "health_label": "CRM missing",
+  "last_run": {
+    "date": "2026-10-08",
+    "day": "Thu 08 Oct",
+    "gaps": "finished without CRM",
+    "outcome": "degraded",
+    "steps": [
+      {
+        "detail": "2 products, 40 rows",
+        "fix": null,
+        "label": "Meta insights",
+        "name": "meta",
+        "reused": false,
+        "status": "done",
+        "time": "1m 04s",
+        "word": "done"
+      },
+      {
+        "detail": "5 creatives, 96 leads, 4 adsets, 3 changes",
+        "fix": null,
+        "label": "creatives and leads",
+        "name": "assets",
+        "reused": false,
+        "status": "done",
+        "time": null,
+        "word": "done"
+      },
+      {
+        "detail": "no CRM connected for this workspace",
+        "fix": {
+          "command": "moneyball connect crm",
+          "does": "pick your CRM and give its key; a test pull checks it",
+          "kind": "terminal"
+        },
+        "label": "CRM",
+        "name": "crm",
+        "reused": false,
+        "status": "skipped",
+        "time": null,
+        "word": "skipped"
+      },
+      {
+        "detail": "5 creatives",
+        "fix": null,
+        "label": "daily report",
+        "name": "report",
+        "reused": false,
+        "status": "partial",
+        "time": "1.3s",
+        "word": "no CRM"
+      }
+    ],
+    "trigger": "manual"
+  },
+  "next": {
+    "does": "reuses today's Meta pull: only CRM and the report run again",
+    "force": false,
+    "kind": "refresh",
+    "label": "Refresh"
+  }
+}

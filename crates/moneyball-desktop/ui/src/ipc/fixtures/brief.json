@@ -1,0 +1,51 @@
+{
+  "brief": {
+    "feasibility": {
+      "best_rpq": 1799,
+      "cur_rpq": 1924,
+      "open_debt": [],
+      "required_at_best": 14392,
+      "required_at_cur": 15392,
+      "tot_goal_per_day": 8.0,
+      "tot_q_per_day": 4.0,
+      "tot_spend_per_day": 7697
+    },
+    "has_crm": true,
+    "rows": [
+      {
+        "cpl": 573,
+        "gap": 3.0,
+        "goal": 6.0,
+        "l7d": 41,
+        "l_to_q": 51.2,
+        "m7d": 72,
+        "product": "Namma Mane",
+        "q7d": 21,
+        "q_per_day": 3.0,
+        "rs_per_q": 1966,
+        "spend_per_day": 5898,
+        "trend": "-"
+      },
+      {
+        "cpl": 663,
+        "gap": 1.0,
+        "goal": 2.0,
+        "l7d": 14,
+        "l_to_q": 50.0,
+        "m7d": 19,
+        "product": "Cityville",
+        "q7d": 7,
+        "q_per_day": 1.0,
+        "rs_per_q": 1799,
+        "spend_per_day": 1799,
+        "trend": "-"
+      }
+    ],
+    "snapshot_date": "2026-10-09"
+  },
+  "cpl_order": "cheapest Meta lead first: Namma Mane Rs.573 < Cityville Rs.663",
+  "crm_note": null,
+  "fault": null,
+  "feasibility_line": "4.0 qualified a day at Rs.7,697 a day is Rs.1,924 per qualified. The goal is 8 a day.",
+  "staleness": null
+}

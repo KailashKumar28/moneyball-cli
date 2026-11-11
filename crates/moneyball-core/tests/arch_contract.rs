@@ -6,6 +6,14 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 
+/// Every crate the rules scan.
+const CRATES: [&str; 4] = [
+    "moneyball",
+    "moneyball-core",
+    "moneyball-tui",
+    "moneyball-desktop",
+];
+
 fn workspace_root() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../..")
@@ -58,7 +66,7 @@ fn network_boundary() {
         "crates/moneyball-core/src/crm/fetch_tests.rs",
     ];
     let mut violations = Vec::new();
-    for krate in ["moneyball", "moneyball-core", "moneyball-tui"] {
+    for krate in CRATES {
         for f in rust_sources(&root.join("crates").join(krate).join("src")) {
             let r = rel(&root, &f);
             if fs::read_to_string(&f).unwrap().contains("reqwest") && !allowed.contains(&r.as_str())
@@ -67,9 +75,12 @@ fn network_boundary() {
             }
         }
     }
-    for krate in ["moneyball", "moneyball-tui"] {
+    for krate in ["moneyball", "moneyball-tui", "moneyball-desktop"] {
         let manifest = root.join("crates").join(krate).join("Cargo.toml");
-        if fs::read_to_string(&manifest).unwrap().contains("reqwest") {
+        let toml = fs::read_to_string(&manifest).unwrap();
+        // The desktop shell has no network of its own, by any client.
+        let clients = ["reqwest", "ureq", "hyper", "tauri-plugin-http"];
+        if clients.iter().any(|c| toml.contains(c)) {
             violations.push(rel(&root, &manifest));
         }
     }
@@ -92,7 +103,8 @@ fn ambient_state_only_in_config() {
     let mut violations = Vec::new();
     let sources = rust_sources(&root.join("crates/moneyball-core/src"))
         .into_iter()
-        .chain(rust_sources(&root.join("crates/moneyball-tui/src")));
+        .chain(rust_sources(&root.join("crates/moneyball-tui/src")))
+        .chain(rust_sources(&root.join("crates/moneyball-desktop/src")));
     for f in sources {
         let r = rel(&root, &f);
         if r == "crates/moneyball-core/src/config.rs" {
@@ -122,7 +134,7 @@ fn ambient_state_only_in_config() {
 fn ascii_only_outside_comments() {
     let root = workspace_root();
     let mut violations = Vec::new();
-    for krate in ["moneyball", "moneyball-core", "moneyball-tui"] {
+    for krate in CRATES {
         for dir in ["src", "examples"] {
             for f in rust_sources(&root.join("crates").join(krate).join(dir)) {
                 for (i, line) in fs::read_to_string(&f).unwrap().lines().enumerate() {
@@ -148,7 +160,7 @@ fn file_size_ratchet() {
     const CAP: usize = 400;
     let root = workspace_root();
     let mut violations = Vec::new();
-    for krate in ["moneyball", "moneyball-core", "moneyball-tui"] {
+    for krate in CRATES {
         for f in rust_sources(&root.join("crates").join(krate).join("src")) {
             let r = rel(&root, &f);
             let lines = fs::read_to_string(&f).unwrap().lines().count();
@@ -162,4 +174,26 @@ fn file_size_ratchet() {
         "files over the size cap (ARCHITECTURE.md \u{a7}3 - split, don't waive):\n{}",
         violations.join("\n")
     );
+}
+
+/// plans/desktop/PLAN.md: the desktop shell sits beside the TUI, not on
+/// it, and core stays free of every front-end toolkit.
+#[test]
+fn front_ends_stay_apart() {
+    let root = workspace_root();
+    let manifest = |krate: &str| {
+        fs::read_to_string(root.join("crates").join(krate).join("Cargo.toml")).unwrap()
+    };
+    assert!(
+        !manifest("moneyball-desktop").contains("moneyball-tui"),
+        "moneyball-desktop must not depend on moneyball-tui"
+    );
+    let core = manifest("moneyball-core");
+    for toolkit in ["tauri", "ratatui"] {
+        assert!(
+            !core.contains(toolkit),
+            "moneyball-core must not depend on {}",
+            toolkit
+        );
+    }
 }

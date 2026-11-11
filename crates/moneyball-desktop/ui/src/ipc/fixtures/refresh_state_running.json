@@ -1,0 +1,47 @@
+{
+  "day": "Thu 08 Oct",
+  "running": true,
+  "started_ms_ago": 52000,
+  "steps": [
+    {
+      "detail": "2 products, 40 rows",
+      "fix": null,
+      "label": "Meta insights",
+      "name": "meta",
+      "reused": false,
+      "status": "done",
+      "time": "1m 04s",
+      "word": "done"
+    },
+    {
+      "detail": "5 creatives, 96 leads, 4 adsets, 3 changes",
+      "fix": null,
+      "label": "creatives and leads",
+      "name": "assets",
+      "reused": false,
+      "status": "done",
+      "time": null,
+      "word": "done"
+    },
+    {
+      "detail": "",
+      "fix": null,
+      "label": "CRM",
+      "name": "crm",
+      "reused": false,
+      "status": "running",
+      "time": null,
+      "word": "running"
+    },
+    {
+      "detail": "",
+      "fix": null,
+      "label": "daily report",
+      "name": "report",
+      "reused": false,
+      "status": "waiting",
+      "time": null,
+      "word": "waits for CRM"
+    }
+  ]
+}

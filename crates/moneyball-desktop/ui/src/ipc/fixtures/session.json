@@ -1,0 +1,25 @@
+{
+  "id": "mb-20261009T020500Z-k3x9",
+  "items": [
+    {
+      "type": "user",
+      "text": "Which Namma Mane ad set should I cut?"
+    },
+    {
+      "type": "tool",
+      "call_id": "call_1",
+      "name": "funnel",
+      "args": {
+        "by": "adset",
+        "product": "Namma Mane"
+      },
+      "status": "ok",
+      "output": "FUNNEL Namma Mane - by adset - 7d - snapshot 2026-10-09\nid  name                    spend   m  cpl   l   q  v  rs_per_q  l_to_q  kill_mult  kill   sufficient  immature  learning\n-------------------------------------------------------------------------------------------------------------------------\ns1  Lookalike 1%            28690  48  598  35  21  7      1366      60       11.5  false  true        true             -\ns2  Pincode Bengaluru East  12595  24  525   6   0  0         -       0          5  true   true        false            -\n\ncpl ranking (cheapest Meta lead first, PRE-COMPUTED - trust this order): Pincode Bengaluru East Rs.525 < Lookalike 1% Rs.598"
+    },
+    {
+      "type": "assistant",
+      "text": "Cut **Pincode Bengaluru East**: it spent past the kill line with no qualified lead, and none of its leads are still maturing.\n\n| Ad set | Verdict |\n|---|---|\n| Lookalike 1% | keep |\n| Pincode Bengaluru East | kill |"
+    }
+  ],
+  "turn_active": false
+}

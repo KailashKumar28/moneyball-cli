@@ -1,0 +1,17 @@
+[
+  {
+    "type": "save_failed",
+    "message": "session save failed: No space left on device (os error 28)"
+  },
+  {
+    "type": "turn_aborted"
+  },
+  {
+    "type": "failed",
+    "error": "prompt is too long: 210000 tokens > 200000 maximum Start a new session to continue."
+  },
+  {
+    "type": "died",
+    "message": "The advisor stopped unexpectedly. Send your message again."
+  }
+]

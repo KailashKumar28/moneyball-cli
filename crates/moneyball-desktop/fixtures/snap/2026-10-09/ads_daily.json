@@ -1,0 +1,812 @@
+[
+ {
+  "campaign_id": "c1",
+  "campaign_name": "NM - Leads",
+  "adset_id": "s1",
+  "adset_name": "Lookalike 1%",
+  "ad_id": "a1",
+  "ad_name": "Carousel - Lake view",
+  "spend": "2437.00",
+  "impressions": "21933",
+  "reach": "14622",
+  "inline_link_clicks": "60",
+  "actions": [
+   {
+    "action_type": "lead",
+    "value": "5"
+   }
+  ],
+  "date_start": "2026-10-01",
+  "date_stop": "2026-10-01",
+  "_product": "Namma Mane"
+ },
+ {
+  "campaign_id": "c1",
+  "campaign_name": "NM - Leads",
+  "adset_id": "s1",
+  "adset_name": "Lookalike 1%",
+  "ad_id": "a1",
+  "ad_name": "Carousel - Lake view",
+  "spend": "2474.00",
+  "impressions": "22266",
+  "reach": "14844",
+  "inline_link_clicks": "61",
+  "actions": [
+   {
+    "action_type": "lead",
+    "value": "4"
+   }
+  ],
+  "date_start": "2026-10-02",
+  "date_stop": "2026-10-02",
+  "_product": "Namma Mane"
+ },
+ {
+  "campaign_id": "c1",
+  "campaign_name": "NM - Leads",
+  "adset_id": "s1",
+  "adset_name": "Lookalike 1%",
+  "ad_id": "a1",
+  "ad_name": "Carousel - Lake view",
+  "spend": "2511.00",
+  "impressions": "22599",
+  "reach": "15066",
+  "inline_link_clicks": "62",
+  "actions": [
+   {
+    "action_type": "lead",
+    "value": "5"
+   }
+  ],
+  "date_start": "2026-10-03",
+  "date_stop": "2026-10-03",
+  "_product": "Namma Mane"
+ },
+ {
+  "campaign_id": "c1",
+  "campaign_name": "NM - Leads",
+  "adset_id": "s1",
+  "adset_name": "Lookalike 1%",
+  "ad_id": "a1",
+  "ad_name": "Carousel - Lake view",
+  "spend": "2548.00",
+  "impressions": "22932",
+  "reach": "15288",
+  "inline_link_clicks": "63",
+  "actions": [
+   {
+    "action_type": "lead",
+    "value": "4"
+   }
+  ],
+  "date_start": "2026-10-04",
+  "date_stop": "2026-10-04",
+  "_product": "Namma Mane"
+ },
+ {
+  "campaign_id": "c1",
+  "campaign_name": "NM - Leads",
+  "adset_id": "s1",
+  "adset_name": "Lookalike 1%",
+  "ad_id": "a1",
+  "ad_name": "Carousel - Lake view",
+  "spend": "2585.00",
+  "impressions": "23265",
+  "reach": "15510",
+  "inline_link_clicks": "64",
+  "actions": [
+   {
+    "action_type": "lead",
+    "value": "5"
+   }
+  ],
+  "date_start": "2026-10-05",
+  "date_stop": "2026-10-05",
+  "_product": "Namma Mane"
+ },
+ {
+  "campaign_id": "c1",
+  "campaign_name": "NM - Leads",
+  "adset_id": "s1",
+  "adset_name": "Lookalike 1%",
+  "ad_id": "a1",
+  "ad_name": "Carousel - Lake view",
+  "spend": "2422.00",
+  "impressions": "21798",
+  "reach": "14532",
+  "inline_link_clicks": "60",
+  "actions": [
+   {
+    "action_type": "lead",
+    "value": "4"
+   }
+  ],
+  "date_start": "2026-10-06",
+  "date_stop": "2026-10-06",
+  "_product": "Namma Mane"
+ },
+ {
+  "campaign_id": "c1",
+  "campaign_name": "NM - Leads",
+  "adset_id": "s1",
+  "adset_name": "Lookalike 1%",
+  "ad_id": "a1",
+  "ad_name": "Carousel - Lake view",
+  "spend": "2459.00",
+  "impressions": "22131",
+  "reach": "14754",
+  "inline_link_clicks": "61",
+  "actions": [
+   {
+    "action_type": "lead",
+    "value": "5"
+   }
+  ],
+  "date_start": "2026-10-07",
+  "date_stop": "2026-10-07",
+  "_product": "Namma Mane"
+ },
+ {
+  "campaign_id": "c1",
+  "campaign_name": "NM - Leads",
+  "adset_id": "s1",
+  "adset_name": "Lookalike 1%",
+  "ad_id": "a1",
+  "ad_name": "Carousel - Lake view",
+  "spend": "2496.00",
+  "impressions": "22464",
+  "reach": "14976",
+  "inline_link_clicks": "62",
+  "actions": [
+   {
+    "action_type": "lead",
+    "value": "4"
+   }
+  ],
+  "date_start": "2026-10-08",
+  "date_stop": "2026-10-08",
+  "_product": "Namma Mane"
+ },
+ {
+  "campaign_id": "c1",
+  "campaign_name": "NM - Leads",
+  "adset_id": "s1",
+  "adset_name": "Lookalike 1%",
+  "ad_id": "a2",
+  "ad_name": "Video - Walkthrough",
+  "spend": "1537.00",
+  "impressions": "13833",
+  "reach": "9222",
+  "inline_link_clicks": "38",
+  "actions": [
+   {
+    "action_type": "lead",
+    "value": "3"
+   }
+  ],
+  "date_start": "2026-10-01",
+  "date_stop": "2026-10-01",
+  "_product": "Namma Mane"
+ },
+ {
+  "campaign_id": "c1",
+  "campaign_name": "NM - Leads",
+  "adset_id": "s1",
+  "adset_name": "Lookalike 1%",
+  "ad_id": "a2",
+  "ad_name": "Video - Walkthrough",
+  "spend": "1574.00",
+  "impressions": "14166",
+  "reach": "9444",
+  "inline_link_clicks": "39",
+  "actions": [
+   {
+    "action_type": "lead",
+    "value": "2"
+   }
+  ],
+  "date_start": "2026-10-02",
+  "date_stop": "2026-10-02",
+  "_product": "Namma Mane"
+ },
+ {
+  "campaign_id": "c1",
+  "campaign_name": "NM - Leads",
+  "adset_id": "s1",
+  "adset_name": "Lookalike 1%",
+  "ad_id": "a2",
+  "ad_name": "Video - Walkthrough",
+  "spend": "1611.00",
+  "impressions": "14499",
+  "reach": "9666",
+  "inline_link_clicks": "40",
+  "actions": [
+   {
+    "action_type": "lead",
+    "value": "3"
+   }
+  ],
+  "date_start": "2026-10-03",
+  "date_stop": "2026-10-03",
+  "_product": "Namma Mane"
+ },
+ {
+  "campaign_id": "c1",
+  "campaign_name": "NM - Leads",
+  "adset_id": "s1",
+  "adset_name": "Lookalike 1%",
+  "ad_id": "a2",
+  "ad_name": "Video - Walkthrough",
+  "spend": "1648.00",
+  "impressions": "14832",
+  "reach": "9888",
+  "inline_link_clicks": "41",
+  "actions": [
+   {
+    "action_type": "lead",
+    "value": "2"
+   }
+  ],
+  "date_start": "2026-10-04",
+  "date_stop": "2026-10-04",
+  "_product": "Namma Mane"
+ },
+ {
+  "campaign_id": "c1",
+  "campaign_name": "NM - Leads",
+  "adset_id": "s1",
+  "adset_name": "Lookalike 1%",
+  "ad_id": "a2",
+  "ad_name": "Video - Walkthrough",
+  "spend": "1685.00",
+  "impressions": "15165",
+  "reach": "10110",
+  "inline_link_clicks": "42",
+  "actions": [
+   {
+    "action_type": "lead",
+    "value": "3"
+   }
+  ],
+  "date_start": "2026-10-05",
+  "date_stop": "2026-10-05",
+  "_product": "Namma Mane"
+ },
+ {
+  "campaign_id": "c1",
+  "campaign_name": "NM - Leads",
+  "adset_id": "s1",
+  "adset_name": "Lookalike 1%",
+  "ad_id": "a2",
+  "ad_name": "Video - Walkthrough",
+  "spend": "1522.00",
+  "impressions": "13698",
+  "reach": "9132",
+  "inline_link_clicks": "38",
+  "actions": [
+   {
+    "action_type": "lead",
+    "value": "2"
+   }
+  ],
+  "date_start": "2026-10-06",
+  "date_stop": "2026-10-06",
+  "_product": "Namma Mane"
+ },
+ {
+  "campaign_id": "c1",
+  "campaign_name": "NM - Leads",
+  "adset_id": "s1",
+  "adset_name": "Lookalike 1%",
+  "ad_id": "a2",
+  "ad_name": "Video - Walkthrough",
+  "spend": "1559.00",
+  "impressions": "14031",
+  "reach": "9354",
+  "inline_link_clicks": "38",
+  "actions": [
+   {
+    "action_type": "lead",
+    "value": "3"
+   }
+  ],
+  "date_start": "2026-10-07",
+  "date_stop": "2026-10-07",
+  "_product": "Namma Mane"
+ },
+ {
+  "campaign_id": "c1",
+  "campaign_name": "NM - Leads",
+  "adset_id": "s1",
+  "adset_name": "Lookalike 1%",
+  "ad_id": "a2",
+  "ad_name": "Video - Walkthrough",
+  "spend": "1596.00",
+  "impressions": "14364",
+  "reach": "9576",
+  "inline_link_clicks": "39",
+  "actions": [
+   {
+    "action_type": "lead",
+    "value": "2"
+   }
+  ],
+  "date_start": "2026-10-08",
+  "date_stop": "2026-10-08",
+  "_product": "Namma Mane"
+ },
+ {
+  "campaign_id": "c1",
+  "campaign_name": "NM - Leads",
+  "adset_id": "s2",
+  "adset_name": "Pincode Bengaluru East",
+  "ad_id": "a3",
+  "ad_name": "Static - Price drop",
+  "spend": "1737.00",
+  "impressions": "15633",
+  "reach": "10422",
+  "inline_link_clicks": "43",
+  "actions": [
+   {
+    "action_type": "lead",
+    "value": "4"
+   }
+  ],
+  "date_start": "2026-10-01",
+  "date_stop": "2026-10-01",
+  "_product": "Namma Mane"
+ },
+ {
+  "campaign_id": "c1",
+  "campaign_name": "NM - Leads",
+  "adset_id": "s2",
+  "adset_name": "Pincode Bengaluru East",
+  "ad_id": "a3",
+  "ad_name": "Static - Price drop",
+  "spend": "1774.00",
+  "impressions": "15966",
+  "reach": "10644",
+  "inline_link_clicks": "44",
+  "actions": [
+   {
+    "action_type": "lead",
+    "value": "3"
+   }
+  ],
+  "date_start": "2026-10-02",
+  "date_stop": "2026-10-02",
+  "_product": "Namma Mane"
+ },
+ {
+  "campaign_id": "c1",
+  "campaign_name": "NM - Leads",
+  "adset_id": "s2",
+  "adset_name": "Pincode Bengaluru East",
+  "ad_id": "a3",
+  "ad_name": "Static - Price drop",
+  "spend": "1811.00",
+  "impressions": "16299",
+  "reach": "10866",
+  "inline_link_clicks": "45",
+  "actions": [
+   {
+    "action_type": "lead",
+    "value": "4"
+   }
+  ],
+  "date_start": "2026-10-03",
+  "date_stop": "2026-10-03",
+  "_product": "Namma Mane"
+ },
+ {
+  "campaign_id": "c1",
+  "campaign_name": "NM - Leads",
+  "adset_id": "s2",
+  "adset_name": "Pincode Bengaluru East",
+  "ad_id": "a3",
+  "ad_name": "Static - Price drop",
+  "spend": "1848.00",
+  "impressions": "16632",
+  "reach": "11088",
+  "inline_link_clicks": "46",
+  "actions": [
+   {
+    "action_type": "lead",
+    "value": "3"
+   }
+  ],
+  "date_start": "2026-10-04",
+  "date_stop": "2026-10-04",
+  "_product": "Namma Mane"
+ },
+ {
+  "campaign_id": "c1",
+  "campaign_name": "NM - Leads",
+  "adset_id": "s2",
+  "adset_name": "Pincode Bengaluru East",
+  "ad_id": "a3",
+  "ad_name": "Static - Price drop",
+  "spend": "1885.00",
+  "impressions": "16965",
+  "reach": "11310",
+  "inline_link_clicks": "47",
+  "actions": [
+   {
+    "action_type": "lead",
+    "value": "4"
+   }
+  ],
+  "date_start": "2026-10-05",
+  "date_stop": "2026-10-05",
+  "_product": "Namma Mane"
+ },
+ {
+  "campaign_id": "c1",
+  "campaign_name": "NM - Leads",
+  "adset_id": "s2",
+  "adset_name": "Pincode Bengaluru East",
+  "ad_id": "a3",
+  "ad_name": "Static - Price drop",
+  "spend": "1722.00",
+  "impressions": "15498",
+  "reach": "10332",
+  "inline_link_clicks": "43",
+  "actions": [
+   {
+    "action_type": "lead",
+    "value": "3"
+   }
+  ],
+  "date_start": "2026-10-06",
+  "date_stop": "2026-10-06",
+  "_product": "Namma Mane"
+ },
+ {
+  "campaign_id": "c1",
+  "campaign_name": "NM - Leads",
+  "adset_id": "s2",
+  "adset_name": "Pincode Bengaluru East",
+  "ad_id": "a3",
+  "ad_name": "Static - Price drop",
+  "spend": "1759.00",
+  "impressions": "15831",
+  "reach": "10554",
+  "inline_link_clicks": "43",
+  "actions": [
+   {
+    "action_type": "lead",
+    "value": "4"
+   }
+  ],
+  "date_start": "2026-10-07",
+  "date_stop": "2026-10-07",
+  "_product": "Namma Mane"
+ },
+ {
+  "campaign_id": "c1",
+  "campaign_name": "NM - Leads",
+  "adset_id": "s2",
+  "adset_name": "Pincode Bengaluru East",
+  "ad_id": "a3",
+  "ad_name": "Static - Price drop",
+  "spend": "1796.00",
+  "impressions": "16164",
+  "reach": "10776",
+  "inline_link_clicks": "44",
+  "actions": [
+   {
+    "action_type": "lead",
+    "value": "3"
+   }
+  ],
+  "date_start": "2026-10-08",
+  "date_stop": "2026-10-08",
+  "_product": "Namma Mane"
+ },
+ {
+  "campaign_id": "c2",
+  "campaign_name": "CV - Leads",
+  "adset_id": "s3",
+  "adset_name": "Advantage+ Broad",
+  "ad_id": "a4",
+  "ad_name": "Static - Launch offer",
+  "spend": "1337.00",
+  "impressions": "12033",
+  "reach": "8022",
+  "inline_link_clicks": "33",
+  "actions": [
+   {
+    "action_type": "lead",
+    "value": "3"
+   }
+  ],
+  "date_start": "2026-10-01",
+  "date_stop": "2026-10-01",
+  "_product": "Cityville"
+ },
+ {
+  "campaign_id": "c2",
+  "campaign_name": "CV - Leads",
+  "adset_id": "s3",
+  "adset_name": "Advantage+ Broad",
+  "ad_id": "a4",
+  "ad_name": "Static - Launch offer",
+  "spend": "1374.00",
+  "impressions": "12366",
+  "reach": "8244",
+  "inline_link_clicks": "34",
+  "actions": [
+   {
+    "action_type": "lead",
+    "value": "2"
+   }
+  ],
+  "date_start": "2026-10-02",
+  "date_stop": "2026-10-02",
+  "_product": "Cityville"
+ },
+ {
+  "campaign_id": "c2",
+  "campaign_name": "CV - Leads",
+  "adset_id": "s3",
+  "adset_name": "Advantage+ Broad",
+  "ad_id": "a4",
+  "ad_name": "Static - Launch offer",
+  "spend": "1411.00",
+  "impressions": "12699",
+  "reach": "8466",
+  "inline_link_clicks": "35",
+  "actions": [
+   {
+    "action_type": "lead",
+    "value": "3"
+   }
+  ],
+  "date_start": "2026-10-03",
+  "date_stop": "2026-10-03",
+  "_product": "Cityville"
+ },
+ {
+  "campaign_id": "c2",
+  "campaign_name": "CV - Leads",
+  "adset_id": "s3",
+  "adset_name": "Advantage+ Broad",
+  "ad_id": "a4",
+  "ad_name": "Static - Launch offer",
+  "spend": "1448.00",
+  "impressions": "13032",
+  "reach": "8688",
+  "inline_link_clicks": "36",
+  "actions": [
+   {
+    "action_type": "lead",
+    "value": "2"
+   }
+  ],
+  "date_start": "2026-10-04",
+  "date_stop": "2026-10-04",
+  "_product": "Cityville"
+ },
+ {
+  "campaign_id": "c2",
+  "campaign_name": "CV - Leads",
+  "adset_id": "s3",
+  "adset_name": "Advantage+ Broad",
+  "ad_id": "a4",
+  "ad_name": "Static - Launch offer",
+  "spend": "1485.00",
+  "impressions": "13365",
+  "reach": "8910",
+  "inline_link_clicks": "37",
+  "actions": [
+   {
+    "action_type": "lead",
+    "value": "3"
+   }
+  ],
+  "date_start": "2026-10-05",
+  "date_stop": "2026-10-05",
+  "_product": "Cityville"
+ },
+ {
+  "campaign_id": "c2",
+  "campaign_name": "CV - Leads",
+  "adset_id": "s3",
+  "adset_name": "Advantage+ Broad",
+  "ad_id": "a4",
+  "ad_name": "Static - Launch offer",
+  "spend": "1322.00",
+  "impressions": "11898",
+  "reach": "7932",
+  "inline_link_clicks": "33",
+  "actions": [
+   {
+    "action_type": "lead",
+    "value": "2"
+   }
+  ],
+  "date_start": "2026-10-06",
+  "date_stop": "2026-10-06",
+  "_product": "Cityville"
+ },
+ {
+  "campaign_id": "c2",
+  "campaign_name": "CV - Leads",
+  "adset_id": "s3",
+  "adset_name": "Advantage+ Broad",
+  "ad_id": "a4",
+  "ad_name": "Static - Launch offer",
+  "spend": "1359.00",
+  "impressions": "12231",
+  "reach": "8154",
+  "inline_link_clicks": "33",
+  "actions": [
+   {
+    "action_type": "lead",
+    "value": "3"
+   }
+  ],
+  "date_start": "2026-10-07",
+  "date_stop": "2026-10-07",
+  "_product": "Cityville"
+ },
+ {
+  "campaign_id": "c2",
+  "campaign_name": "CV - Leads",
+  "adset_id": "s3",
+  "adset_name": "Advantage+ Broad",
+  "ad_id": "a4",
+  "ad_name": "Static - Launch offer",
+  "spend": "1396.00",
+  "impressions": "12564",
+  "reach": "8376",
+  "inline_link_clicks": "34",
+  "actions": [
+   {
+    "action_type": "lead",
+    "value": "2"
+   }
+  ],
+  "date_start": "2026-10-08",
+  "date_stop": "2026-10-08",
+  "_product": "Cityville"
+ },
+ {
+  "campaign_id": "c2",
+  "campaign_name": "CV - Leads",
+  "adset_id": "s4",
+  "adset_name": "Interest - Investors",
+  "ad_id": "a5",
+  "ad_name": "Static - Rental yield",
+  "spend": "337.00",
+  "impressions": "3033",
+  "reach": "2022",
+  "inline_link_clicks": "8",
+  "actions": [],
+  "date_start": "2026-10-01",
+  "date_stop": "2026-10-01",
+  "_product": "Cityville"
+ },
+ {
+  "campaign_id": "c2",
+  "campaign_name": "CV - Leads",
+  "adset_id": "s4",
+  "adset_name": "Interest - Investors",
+  "ad_id": "a5",
+  "ad_name": "Static - Rental yield",
+  "spend": "374.00",
+  "impressions": "3366",
+  "reach": "2244",
+  "inline_link_clicks": "9",
+  "actions": [],
+  "date_start": "2026-10-02",
+  "date_stop": "2026-10-02",
+  "_product": "Cityville"
+ },
+ {
+  "campaign_id": "c2",
+  "campaign_name": "CV - Leads",
+  "adset_id": "s4",
+  "adset_name": "Interest - Investors",
+  "ad_id": "a5",
+  "ad_name": "Static - Rental yield",
+  "spend": "411.00",
+  "impressions": "3699",
+  "reach": "2466",
+  "inline_link_clicks": "10",
+  "actions": [],
+  "date_start": "2026-10-03",
+  "date_stop": "2026-10-03",
+  "_product": "Cityville"
+ },
+ {
+  "campaign_id": "c2",
+  "campaign_name": "CV - Leads",
+  "adset_id": "s4",
+  "adset_name": "Interest - Investors",
+  "ad_id": "a5",
+  "ad_name": "Static - Rental yield",
+  "spend": "448.00",
+  "impressions": "4032",
+  "reach": "2688",
+  "inline_link_clicks": "11",
+  "actions": [
+   {
+    "action_type": "lead",
+    "value": "1"
+   }
+  ],
+  "date_start": "2026-10-04",
+  "date_stop": "2026-10-04",
+  "_product": "Cityville"
+ },
+ {
+  "campaign_id": "c2",
+  "campaign_name": "CV - Leads",
+  "adset_id": "s4",
+  "adset_name": "Interest - Investors",
+  "ad_id": "a5",
+  "ad_name": "Static - Rental yield",
+  "spend": "485.00",
+  "impressions": "4365",
+  "reach": "2910",
+  "inline_link_clicks": "12",
+  "actions": [],
+  "date_start": "2026-10-05",
+  "date_stop": "2026-10-05",
+  "_product": "Cityville"
+ },
+ {
+  "campaign_id": "c2",
+  "campaign_name": "CV - Leads",
+  "adset_id": "s4",
+  "adset_name": "Interest - Investors",
+  "ad_id": "a5",
+  "ad_name": "Static - Rental yield",
+  "spend": "322.00",
+  "impressions": "2898",
+  "reach": "1932",
+  "inline_link_clicks": "8",
+  "actions": [],
+  "date_start": "2026-10-06",
+  "date_stop": "2026-10-06",
+  "_product": "Cityville"
+ },
+ {
+  "campaign_id": "c2",
+  "campaign_name": "CV - Leads",
+  "adset_id": "s4",
+  "adset_name": "Interest - Investors",
+  "ad_id": "a5",
+  "ad_name": "Static - Rental yield",
+  "spend": "359.00",
+  "impressions": "3231",
+  "reach": "2154",
+  "inline_link_clicks": "8",
+  "actions": [],
+  "date_start": "2026-10-07",
+  "date_stop": "2026-10-07",
+  "_product": "Cityville"
+ },
+ {
+  "campaign_id": "c2",
+  "campaign_name": "CV - Leads",
+  "adset_id": "s4",
+  "adset_name": "Interest - Investors",
+  "ad_id": "a5",
+  "ad_name": "Static - Rental yield",
+  "spend": "396.00",
+  "impressions": "3564",
+  "reach": "2376",
+  "inline_link_clicks": "9",
+  "actions": [
+   {
+    "action_type": "lead",
+    "value": "1"
+   }
+  ],
+  "date_start": "2026-10-08",
+  "date_stop": "2026-10-08",
+  "_product": "Cityville"
+ }
+]
