@@ -12,10 +12,7 @@ use moneyball_core::refresh::{self as r, REUSED_NOTE, STEPS};
 use moneyball_core::schema::{Outcome, RunRecord, RunStep, StepStatus};
 
 use crate::chat::ChatCell;
-use words::{gaps, message, verdict};
-
-mod words;
-use crate::widgets::{bold, dim, fg, fix_does, gray, Para, DOT, FAIL, LOAD, OK};
+use crate::widgets::{bold, dim, fg, gray, tint_color, tint_mark, Para, DOT, FAIL, LOAD, OK};
 
 const INDENT: usize = 6;
 const LABEL_W: usize = 23;
@@ -98,7 +95,7 @@ impl RefreshCell {
                         .map_or(1, |i| i + 1);
                     (FAIL, Color::Red, format!("{}stopped at step {}", DOT, at))
                 }
-                Outcome::Degraded => (OK, Color::Yellow, format!("{}{}", DOT, gaps(run))),
+                Outcome::Degraded => (OK, Color::Yellow, format!("{}{}", DOT, r::gaps(run))),
             },
         };
         Line::from(vec![
@@ -219,35 +216,28 @@ impl RefreshCell {
                 last_good,
             } => (run, ms, numbers, report, last_good),
         };
-        if let Some(p) = verdict(run, last_good.as_deref(), &self.day) {
-            paras.push(p);
-        }
-        let fixes: Vec<&String> = run.steps.iter().filter_map(|s| s.fix.as_ref()).collect();
+        paras.extend(r::verdict(run, last_good.as_deref(), &self.day).map(verdict));
+        let fixes = r::fixes(run);
         for fix in &fixes {
             paras.push(
                 Para::new(INDENT, INDENT + 6)
                     .run("fix:  ", gray())
-                    .run(fix.to_string(), bold(Color::Cyan))
-                    .run(format!("   {}", fix_does(fix)), gray()),
+                    .run(fix.command.clone(), bold(Color::Cyan))
+                    .run(format!("   {}", fix.does), gray()),
             );
         }
         if !fixes.is_empty() {
-            let meta_in = run
-                .steps
-                .iter()
-                .any(|s| s.name == "meta" && s.status != StepStatus::Failed);
+            let then = r::rerun(run);
+            let does = if then.does.is_empty() {
+                String::new()
+            } else {
+                format!("   {}", then.does)
+            };
             paras.push(
                 Para::new(INDENT + 6, INDENT + 6)
                     .run("then ", gray())
-                    .run("/refresh", bold(Color::Cyan))
-                    .run(
-                        if meta_in {
-                            "   reuses today's Meta pull: only CRM and the report run again"
-                        } else {
-                            ""
-                        },
-                        gray(),
-                    ),
+                    .run(then.command, bold(Color::Cyan))
+                    .run(does, gray()),
             );
         }
         if paras.len() > 1 && (numbers.is_some() || report.is_some()) {
@@ -286,6 +276,31 @@ impl RefreshCell {
         }
         paras
     }
+}
+
+fn message(s: &RunStep) -> String {
+    s.message.clone().unwrap_or_default()
+}
+
+/// The verdict as one paragraph: its command reads on as the sentence's
+/// second half ("What finished is kept; /refresh runs the rest.").
+fn verdict(v: r::RunVerdict) -> Para {
+    let rest = match &v.next {
+        Some(c) => format!(
+            " {}; {} {}.",
+            v.rest.trim_end_matches('.'),
+            c.command,
+            c.does
+        ),
+        None if v.rest.is_empty() => String::new(),
+        None => format!(" {}", v.rest),
+    };
+    Para::new(INDENT, INDENT + 2)
+        .run(
+            format!("{}{}", tint_mark(v.tint), v.headline),
+            fg(tint_color(v.tint)),
+        )
+        .run(rest, gray())
 }
 
 impl ChatCell for RefreshCell {

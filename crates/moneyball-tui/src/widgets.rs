@@ -8,6 +8,7 @@ use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
 
 use moneyball_core::health::{Health, State, STALE_DAYS};
+use moneyball_core::words::Tint;
 
 pub const BRAND: &str = "\u{25C6}"; // black diamond
 pub const OK: &str = "\u{25CF}"; // black circle
@@ -136,44 +137,29 @@ pub fn context_line(
     Line::from(spans)
 }
 
-/// The day's numbers in one line, as the report has them: spend, Meta
-/// leads, then CRM leads, qualified and cost per qualified when it has CRM.
+/// The day's numbers in one line, as core words them.
 pub fn day_numbers(report: &moneyball_core::schema::CreativeReport) -> String {
-    let k = &report.portfolio;
-    let mut parts = vec![
-        format!(
-            "spend Rs.{}",
-            moneyball_core::text::commas(k.spend.round() as u64)
-        ),
-        format!("Meta leads {}", k.funnel.m_leads),
-    ];
-    if report.source.crm_present {
-        parts.push(format!("CRM leads {}", k.funnel.l_leads));
-        parts.push(format!("qualified {}", k.funnel.qualified));
-        if let Some(c) = k.cost_per_qualified {
-            parts.push(format!(
-                "Rs.{} per qualified",
-                moneyball_core::text::commas(c.round() as u64)
-            ));
-        }
-    } else {
-        parts.push("no CRM in this report".into());
-    }
-    parts.join(DOT)
+    moneyball_core::landing::day_numbers(report)
+        .phrases()
+        .join(DOT)
 }
 
-/// What a fix command does, said once next to it.
-pub fn fix_does(fix: &str) -> &'static str {
-    if fix == "/setup meta" {
-        "paste a fresh Meta token; products and settings stay"
-    } else if fix.contains("crm secret") {
-        "in a shell; it asks for the new token"
-    } else if fix == "/connect crm" {
-        "pick your CRM and give its key; a test pull checks it"
-    } else if fix.contains("crm connect") {
-        "in a shell; it walks you through connecting your CRM"
-    } else {
-        "in a shell"
+/// The colour a tint reads as.
+pub fn tint_color(t: Tint) -> Color {
+    match t {
+        Tint::Plain => Color::Gray,
+        Tint::Good => Color::Green,
+        Tint::Warn => Color::Yellow,
+        Tint::Bad => Color::Red,
+    }
+}
+
+/// The mark that leads a warning or a failure.
+pub fn tint_mark(t: Tint) -> String {
+    match t {
+        Tint::Warn => "! ".into(),
+        Tint::Bad => format!("{} ", FAIL),
+        Tint::Plain | Tint::Good => String::new(),
     }
 }
 
