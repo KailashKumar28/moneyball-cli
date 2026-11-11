@@ -27,7 +27,7 @@ function Body({ v, onAction }: { v: BriefView; onAction: OnAction }) {
   return (
     <>
       {v.staleness && <Notice text={v.staleness} onAction={onAction} />}
-      {v.crm_note && <Notice strong="CRM columns hidden." text={v.crm_note} onAction={onAction} />}
+      {(v.crm_head || v.crm_note) && <Notice strong={v.crm_head ?? undefined} text={v.crm_note ?? undefined} onAction={onAction} />}
       <table className="t">
         <thead>
           <tr>
@@ -62,11 +62,7 @@ function Body({ v, onAction }: { v: BriefView; onAction: OnAction }) {
           ))}
         </tbody>
       </table>
-      <p className="cap">
-        {crm
-          ? "Meta, CRM and Qual. are leads over the 7 days. Gap is qualified per day short of the goal."
-          : "Meta is leads over the 7 days. Goal is qualified per day."}
-      </p>
+      {v.caption && <p className="cap">{v.caption}</p>}
       {v.cpl_order && <p className="cap cap1">{v.cpl_order}</p>}
       <div className="feas">
         <div className="h2">Feasibility</div>

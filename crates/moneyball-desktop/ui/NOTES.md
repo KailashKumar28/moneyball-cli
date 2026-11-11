@@ -67,27 +67,17 @@ States the generated set does not contain. Their words are modelled on core's bu
 | `funnelAllVerdicts` | funnel-verdicts | generated funnels have only keep, kill and no CRM; adds "wait: immature", "wait: low spend", "wait: learning", a zero beside an unknown, and an 80-character ad set name |
 | `noData` | today-, brief-, funnel-, report-, advisor-, refresh-nodata | no generated fixture is a workspace that never pulled |
 | `refreshCrmFailed` | refresh-crm-failed | no generated run has a `failed` step, a step `fix` beside a failure sentence, or a long `detail` |
-| `refreshReused`, `todayReused` | refresh-reused | no generated step has `reused: true` |
+| `refreshReused`, `todayReused` | refresh-reused | no generated step carries a `note` (a step reused from today's earlier pull) |
+| `refreshNeverFinished` | refresh-never-finished | no generated `refresh_state` is a record still marked running (steps, no `finished`) |
+| `todayReportMissing` | behaviour: the Generate report action | no generated Today has `report_missing` |
+| `reportDaysLateMonth` | behaviour: the month window | the demo's data days are the 7th and 8th, so no generated day has "Last 28 days" |
+| `sessionFailed` | behaviour: a failed turn after a reload | no generated snapshot has `failed` |
+| `workspaceChanged` | behaviour: the workspace re-read | the generated workspace is one moment of it |
 
 ## Contract changes
 
-1. `StepView.status` uses core's names: `done | partial | failed | skipped`, plus the UI-only
-   `waiting | running`. IPC.md says `ok`; that was an error, `done` is right. `partial` gets the
-   warning glyph ("no CRM", "4 of 5"), and so does any status the UI does not know.
-2. Day numbers gain optional `source?: "meta" | "crm"` for the source dot. Without it no dot is drawn.
-
-Both confirmed by the lead. From the shell's NOTES ("Contract changes" 3 to 12), as built here:
-
-3. A refresh `Action` carries `force`; the UI passes it to `refresh_start`.
-4. A session's `id` is null until its first turn. The UI asks `session_current` once after the first
-   `turn_start` of such a session resolves, to learn the id; the session list then shows and marks it
-   while the answer streams.
-5. Error kinds are open strings. The UI shows `reason` and `fix` and never branches on `kind`.
-6. `report_days`, the `date` arguments and `ReportView.date` are snapshot dates; `ReportView.day` and
-   `RunView.day` word the data day. See "For the lead" 1.
-7. `StepView.reused` has no sentence in the contract; the UI words it "from today's earlier pull"
-   (core's own note names `--force`, a flag this app does not have). Shown on Refresh and in Today's
-   Data health table.
+None outstanding. `plans/desktop/IPC.md` was brought up to `src/ipc/types.ts` and the pinned
+fixtures on 2026-11-12 (plans/desktop/review-2026-11-12.md, finding 9); the three change together.
 
 ## Where the build differs from the mock, and why
 
@@ -103,15 +93,17 @@ Both confirmed by the lead. From the shell's NOTES ("Contract changes" 3 to 12),
   is "Report for <day>", not the report's summary, which is a page of text.
 - Today's data-health rows use core's labels and words ("Meta insights", "done"). The Day column shows
   the run's day only for a step that brought data in; the contract has no per-source day.
-- Today caption is "Changes are against <day>." (the mock's "last comparable day" is a claim the UI cannot make).
+- Today's caption under the numbers is the shell's (`versus.caption`).
 - Brief subtitle is today's footer line ("Data Thu 08 Oct"); the contract has no worded window.
   Feasibility has no "6.3x today's spend" column: that is a computed figure.
 - Brief/Funnel cells format core's raw numbers (grouping, decimals, %). That is the only number work in the UI.
 - Advisor: no message times and no tool result summary ("5 products, 4ms"): neither is in ViewItem.
   Tool arguments are shown as their values. A tool row expands to its output. A Send button exists when idle.
-- Report day options are formatted from the raw dates; "Month to date" sends the day of the month as `days`.
-- UI-authored static copy (not from Rust): empty/loading lines, the Funnel no-CRM notice (the mock's
-  sentence), column captions, "Turn stopped" / "Bug report filed", the composer status words.
+- Report's day and window options are the shell's (`ReportDay.day`, `ReportDay.windows`); the UI sends
+  the chosen window's `days`.
+- UI-authored static copy (not from Rust): empty/loading lines, column heads, the Refresh screen's
+  title, "Turn stopped" / "Bug report filed", the composer status words. Every sentence about the
+  data (captions, notes, verdicts, fixes) is the shell's.
 - Cmd-O opens the picker. A failed pick shows the empty state with the error and a way back.
 - `data-tauri-drag-region` is on each toolbar and the strip above the sidebar; title text has
   `pointer-events:none` so a press on it still drags.
@@ -124,15 +116,11 @@ Both confirmed by the lead. From the shell's NOTES ("Contract changes" 3 to 12),
 
 Things the Rust side returns that the UI shows as given, without working around them.
 
-1. Report days are snapshot dates. The picker formats what `report_days` returns, so it reads
-   "Fri 09 Oct" for the report that says "Thu 08 Oct" inside, and that Today calls Thu 08 Oct. The UI
-   does not subtract a day (that is core's rule, `Health::data_day`). Suggested: `report_days` returns
-   `{ date, day }[]`. Same cause: "Month to date" sends the day of the month of the date it holds, 9
-   for a data day of the 8th, one day too many. It needs the data date, or a named window that Rust
-   resolves. No test asserts the month-to-date number for that reason.
+1. (Resolved 2026-11-12.) Report days carry their worded data day and their windows, each with the
+   `days` to send; the month window is capped at the 28 days a snapshot holds.
 2. Money. Core says "Rs." in every value and sentence; the design asks for the rupee sign, and the
    report's own HTML uses it, so the Report screen and the rest of the app differ. The UI follows core.
-3. `reused` needs a `note` field (see "Contract changes" 7), and a generated fixture that has one.
+3. (Resolved 2026-11-12.) `StepView.note` carries the reused sentence. No generated fixture has one yet.
 4. The generated fixtures have no: failed step, reused step, "wait" verdict, no-data workspace, Brief
    without CRM (`crm_note`, null columns), `report_missing`, `staleness`, `fault`, `partial` or `stale`
    health, or `refresh_start`'s own `busy` error (the mock answers with `refresh_busy`, whose sentence

@@ -66,6 +66,8 @@ pub struct ChangeView {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct VersusView {
     pub day: String,
+    /// What the changes are measured against, as a sentence.
+    pub caption: String,
     pub changes: Vec<ChangeView>,
 }
 
@@ -119,6 +121,7 @@ fn day_view(block: DayBlock) -> DayView {
             out.numbers = Some(tiles);
             out.numbers_note = note;
             out.versus = versus.map(|v| VersusView {
+                caption: format!("Changes are against {}.", v.day),
                 day: v.day,
                 changes: v.changes.into_iter().map(change).collect(),
             });

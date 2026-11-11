@@ -20,6 +20,8 @@ fn front_end<'a>(commands: &'a [&'a str]) -> prompt::FrontEnd<'a> {
         commands,
         output_style: OUTPUT_STYLE,
         say,
+        // /brief pulls a first snapshot through /refresh (brief_flow.rs).
+        self_heal: Some("/brief"),
     }
 }
 

@@ -14,7 +14,7 @@
         "word": "done",
         "detail": "2 products, 40 rows",
         "time": "1m 04s",
-        "reused": false,
+        "note": null,
         "fix": null
       },
       {
@@ -24,7 +24,7 @@
         "word": "done",
         "detail": "5 creatives, 96 leads, 4 adsets, 3 changes",
         "time": null,
-        "reused": false,
+        "note": null,
         "fix": null
       },
       {
@@ -34,7 +34,7 @@
         "word": "skipped",
         "detail": "no CRM connected for this workspace",
         "time": null,
-        "reused": false,
+        "note": null,
         "fix": {
           "kind": "terminal",
           "command": "moneyball connect crm",
@@ -48,7 +48,7 @@
         "word": "no CRM",
         "detail": "5 creatives",
         "time": "1.3s",
-        "reused": false,
+        "note": null,
         "fix": null
       }
     ]

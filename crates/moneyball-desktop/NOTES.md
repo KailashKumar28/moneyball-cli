@@ -1,9 +1,8 @@
 # moneyball-desktop: shell notes
 
 The Rust half of Moneyball for Mac: a Tauri 2 shell over `moneyball-core`.
-The contract it implements is `plans/desktop/IPC.md`; where this crate and
-that file (or the UI's `types.ts`) differ, the difference is listed under
-"Contract changes" below.
+The contract it implements is `plans/desktop/IPC.md`, which describes
+exactly what this crate sends.
 
 ## Run and build
 
@@ -106,74 +105,33 @@ Safety.
 
 ## Contract changes
 
-Changes the lead already confirmed:
-
-1. `StepView.status` is `done | partial | failed | skipped | waiting |
-   running`. The UI's `types.ts` on `desktop-ui` still says `ok` where this
-   crate sends `done`.
-2. Day numbers carry `source: "meta" | "crm"`. Core does not provide it;
-   `today.rs` derives it from the label and omits it for an unknown label.
-
-Mine, each the smallest choice I could see:
-
-3. `Action` refresh has `force: boolean`. Core's landing asks for
-   `/refresh --force` when a pull missed products; without the flag the
-   button would run a refresh that reuses the incomplete pull. The UI must
-   pass `action.force` to `refresh_start`. Not in `types.ts`.
-4. `session_current` and `session_new` do not create a session file. The
-   file is created by the first `turn_start`, so `id` is `null` until then.
-   Core lists empty sessions, so creating one per launch would fill the
-   list with blanks. The UI's `session_new.json` had a non-null id.
-5. `workspace_pick` returns `busy` while a refresh runs (its events belong
-   to the old workspace's screen). Checked before the dialog opens.
-6. Dates. `report_days`, the `date` arguments and `ReportView.date` are
-   snapshot dates (what core keys reports by). `ReportView.day` and
-   `RunView.date` / `day` are the data day, one day earlier.
-7. Error kinds beyond IPC.md: `no_workspace` (nothing open),
-   `no_workspace_config` (folder has no config; fix is the terminal),
-   `could_not_start` (inside the refresh event), `refused` (report path),
-   `session` (cannot open), `empty` (blank message), `io`, and core's own
-   (`snapshot`, `config`, `crm_auth`, ...). The UI's fixture used
-   `snapshot_unreadable`, `no_meta_token` and fixes like `moneyball connect
-   model`; none of those exist. The UI does not branch on error kinds today.
-8. `RunView.gaps` for a failed run is "stopped at step N" (the TUI's
-   header); IPC.md only describes the degraded case.
-9. `BriefView.cpl_order` and `staleness` are whole sentences:
-   "cheapest Meta lead first: ..." and core's warning without its "!! "
-   terminal mark.
-10. `sessions_list` returns `[]` when the sessions folder cannot be read,
-    not an error.
-11. `StepView` has no field for the "from today's earlier pull" note; the
-    UI has `reused: true` and must word it itself or the contract needs a
-    `note`.
-12. Fixture `fixtures/snap/` in IPC.md does not exist with usable data
-    (core's has one `creatives.json`). The demo data lives in this crate's
-    `fixtures/` (config + two snapshots, generated once, no real names).
+None outstanding: `plans/desktop/IPC.md` describes exactly what is sent
+(`ui/src/ipc/types.ts` and the pinned fixtures are the truth it was
+brought up to on 2026-11-12, review finding 9). Change the three together.
 
 ## Wording, for the lead
 
 - Money is "Rs." everywhere, because core's values are. The design asks
   for the rupee sign; that is a core change or a UI display rule.
-- `translate` turns `/setup` and `/setup meta` into the command
-  `moneyball` with "then type /setup meta there" in `does`, since the
-  binary has no `setup` subcommand. That text is for the terminal app, on
-  screen only. `say` (what the advisor reads) never names a slash command:
-  tested over every fix string, the full system prompt and every tool
-  output for the demo, with and without CRM (`fixtures/wording.rs`).
-- `say("/brief")` is "the Brief screen". Core's sentence around it says it
-  "self-heals"; the Brief screen does not pull data. Core wording issue.
+- No slash command reaches the screen or the advisor. `translate` turns
+  `/setup` and `/setup meta` into the command `moneyball` with "then open
+  its Meta setup" in `does` (the binary has no `setup` subcommand); `say`
+  words the same step for the model. Tested over every fix string, the
+  full system prompt, every tool output for the demo with and without
+  CRM, and every string of every pinned fixture (`fixtures/wording.rs`).
+- The self-heal clause is the front-end's (`FrontEnd::self_heal`): the
+  TUI's /brief pulls a first snapshot, the Brief screen here only reads,
+  so the desktop advisor is pointed at Refresh alone.
 - `front_end::crm_note` loads the snapshot a second time to call
   `CrmHealth::note_for` (only when there is a note). If `brief::Loaded`
   carried the `CrmHealth`, that read would go.
-- `turn.rs` repeats core's private `model_for` check so a refused turn
-  does not create a session file. Exposing it from core would remove the
-  copy.
-- Today's footer lines and the feasibility sentence are worded here
-  (`today.rs`, `brief.rs`), following the TUI's context bar and the mock.
+- Today's footer lines, the captions and the feasibility sentence are
+  worded here (`today.rs`, `brief.rs`), following the TUI's context bar
+  and the mock.
 
 ## Fixtures
 
-`ui/src/ipc/fixtures/*.json`, 21 files, with the UI helper's file names
+`ui/src/ipc/fixtures/*.json`, 22 files, with the UI helper's file names
 (`fixtures.ts` on `desktop-ui`). Built by `src/fixtures/` from a temp copy
 of `fixtures/` through the command bodies. Refresh and turn streams are
 core events fed by hand to the real forwarders, since a real run needs the
@@ -182,5 +140,4 @@ network. The clock is held at 2026-10-09: the health reading's `today`,
 `modified_at`, the report's generated-at stamp and the temp path are
 pinned. `errors.json` has one extra key, `no_workspace`.
 
-Not checked: `tsc` against these files. `types.ts` is not on this branch;
-by reading, the differences are items 1 and 3 above.
+`ui/src/ipc/fixtures.ts` checks every file against `types.ts` under `tsc`.

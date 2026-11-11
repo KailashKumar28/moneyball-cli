@@ -1,7 +1,7 @@
 // The IPC contract (plans/desktop/IPC.md), typed by hand and held to the
 // shell's generated fixtures by ./fixtures.ts: a field added, dropped or
-// retyped on either side fails tsc. Where this file and IPC.md differ, this
-// file is what the shell sends (NOTES.md, "Contract changes").
+// retyped on either side fails tsc. IPC.md describes exactly these shapes;
+// change the three together.
 // "core" types mirror the moneyball-core wire structs named beside each one.
 // CRM-derived fields are nullable: null means "no CRM data", never zero.
 
@@ -25,7 +25,7 @@ export type StepView = {
   word: string;
   detail: string;
   time: string | null;
-  reused: boolean;
+  note: string | null; // a line under the detail: where a carried-over step came from
   fix: Action | null;
 };
 
@@ -93,7 +93,7 @@ export type Today = {
     refreshed: string | null;
     numbers: DayNumber[] | null;
     numbers_note: string | null;
-    versus: { day: string; changes: { label: string; text: string; tint: Tint }[] } | null;
+    versus: { day: string; caption: string; changes: { label: string; text: string; tint: Tint }[] } | null;
     report_missing: { note: string; next: Action } | null;
   } | null;
   last_run: RunView | null;
@@ -133,10 +133,12 @@ export type ProductRowsAndFeasibility = {
 
 export type BriefView = {
   brief: ProductRowsAndFeasibility | null;
+  crm_head: string | null; // said in front of crm_note when the table has no CRM columns
   crm_note: string | null;
   fault: AppError | null;
   staleness: string | null;
   cpl_order: string | null;
+  caption: string | null; // what the table's columns count
   feasibility_line: string | null;
 };
 
@@ -168,10 +170,8 @@ export type FunnelView = {
   notes: string[];
 };
 
-export type RefreshState = { running: boolean; day: string; steps: StepView[]; started_ms_ago: number | null };
-
-export type RefreshFinished = {
-  type: "finished";
+/** A finished run in full. At rest `refresh_state` carries the workspace's last one, built from its run record. */
+export type Finished = {
   run: RunView;
   time: string;
   verdict: { tint: Tint; headline: string; rest: string; next: Action | null } | null;
@@ -181,6 +181,10 @@ export type RefreshFinished = {
   numbers_note: string | null;
   report_path: string | null;
 };
+/** `finished` is null while a run is in flight, before any run, and for a run that never finished. */
+export type RefreshState = { running: boolean; day: string; steps: StepView[]; started_ms_ago: number | null; finished: Finished | null };
+
+export type RefreshFinished = { type: "finished" } & Finished;
 export type RefreshEvent =
   | { type: "begin"; step: StepView }
   | { type: "done"; step: StepView }
@@ -188,9 +192,10 @@ export type RefreshEvent =
   | { type: "could_not_start"; error: AppError }
   | { type: "died"; message: string };
 
-/** `date` is the snapshot date (what `report_days` lists and `report_for` takes); `day` words the data day, one day earlier. */
-/** A day with a snapshot. `date` is what `report_for` / `report_generate` take; `day` words the data day. */
-export type ReportDay = { date: string; day: string; month_to_date: number };
+/** A window the Report screen offers for a day: its words, and the `days` that `report_generate` takes for it. */
+export type ReportWindow = { label: string; days: number };
+/** A day with a snapshot. `date` is what `report_for` / `report_generate` take; `day` words the data day, one day earlier. */
+export type ReportDay = { date: string; day: string; windows: ReportWindow[] };
 
 export type ReportView = { date: string; day: string; days: number; path: string; html: string; summary: string };
 
@@ -212,8 +217,11 @@ export type ViewItem =
   | { type: "turn_interrupted" }
   | { type: "bug_report_filed" };
 
-/** `id` is null for a session with no turn yet: the shell writes the file on the first `turn_start`. */
-export type SessionSnapshot = { id: string | null; items: ViewItem[]; turn_active: boolean };
+/**
+ * `id` is null for a session with no turn yet: the shell writes the file on the first `turn_start`.
+ * `failed` is how the last turn failed or died, until the next one starts (the file has no item for it).
+ */
+export type SessionSnapshot = { id: string | null; items: ViewItem[]; turn_active: boolean; failed: string | null };
 
 // ---- core: agent.rs ----
 export type Item =

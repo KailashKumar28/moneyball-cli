@@ -35,7 +35,8 @@ pub struct StepView {
     /// Its counts, or the reason it failed, fell short or was skipped.
     pub detail: String,
     pub time: Option<String>,
-    pub reused: bool,
+    /// A line under the detail: where a carried-over step came from.
+    pub note: Option<String>,
     pub fix: Option<Action>,
 }
 
@@ -60,7 +61,7 @@ fn blank(name: &str, status: StepState, word: &str) -> StepView {
         word: word.into(),
         detail: String::new(),
         time: None,
-        reused: false,
+        note: None,
         fix: None,
     }
 }
@@ -100,7 +101,8 @@ pub fn done(s: &RunStep) -> StepView {
     StepView {
         detail,
         time: Some(refresh::duration(s.ms)).filter(|t| !t.is_empty()),
-        reused: s.reused && s.status != StepStatus::Skipped,
+        // Core's note, without the flag only a typed refresh takes.
+        note: (s.reused && s.status != StepStatus::Skipped).then(|| refresh::REUSED.into()),
         fix: s.fix.as_deref().map(|f| translate(&Command::fix(f))),
         ..blank(&s.name, status, &refresh::status_word(s))
     }
@@ -122,14 +124,7 @@ pub fn run_view(run: &RunRecord) -> RunView {
     let (date, day) = data_day(&run.date);
     let gaps = match run.outcome {
         Outcome::Ok | Outcome::Running => String::new(),
-        Outcome::Degraded => refresh::gaps(run),
-        Outcome::Failed => {
-            let failed = run
-                .steps
-                .iter()
-                .position(|s| s.status == StepStatus::Failed);
-            format!("stopped at step {}", failed.map_or(1, |i| i + 1))
-        }
+        Outcome::Degraded | Outcome::Failed => refresh::gaps(run),
     };
     let step = |name: &&str| {
         let found = run.steps.iter().find(|s| s.name == **name);
@@ -164,6 +159,13 @@ mod tests {
         assert_eq!(v.detail, "the CRM said 401");
         assert_eq!(v.time.as_deref(), Some("1.2s"));
         assert!(matches!(v.fix, Some(Action::Terminal { .. })));
+        assert_eq!(v.note, None);
+        let mut meta = step("meta", StepStatus::Done);
+        meta.reused = true;
+        assert_eq!(
+            done(&meta).note.as_deref(),
+            Some("from today's earlier pull")
+        );
         let mut report = step("report", StepStatus::Partial);
         report.error_kind = Some("no_crm".into());
         report.counts = [("creatives".to_string(), 12)].into();

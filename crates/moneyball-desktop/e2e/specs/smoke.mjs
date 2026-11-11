@@ -83,11 +83,16 @@ describe("Moneyball for Mac, first launch", () => {
     await expect(steps[0]).toHaveText(expect.stringContaining("failed"));
     await expect(refresh.$(".notice")).toBeDisplayed();
     await expect(refresh.$(".notice")).toHaveText(expect.stringContaining("moneyball"));
+    // The fix is worded for an app with no slash commands.
+    await expect(refresh.$(".notice")).toHaveText(expect.stringContaining("then open its Meta setup"));
+    await expect(refresh.$(".notice")).not.toHaveText(expect.stringContaining("/setup"));
+    await expect(refresh.$(".runhead")).toHaveText(expect.stringContaining("stopped at step 1"));
     await shot("10-refresh-failed");
   });
 
   it("Advisor answers a message with a tool row and then streamed text", async () => {
     const advisor = await open("Advisor", "5");
+    // The workspace holds a session the terminal app wrote; it is not this app's to list.
     await expect(advisor.$(".sess")).toHaveText("No saved sessions yet.");
     const before = await modelCalls();
 

@@ -35,8 +35,14 @@ fn no_crm(run: &RunRecord) -> bool {
     step(run, "report").is_some_and(|s| s.error_kind.as_deref() == Some("no_crm"))
 }
 
-/// The header's few words for a degraded run.
+/// The header's few words for a run that did not go cleanly: where a
+/// failed one stopped, what a degraded one is missing.
 pub fn gaps(run: &RunRecord) -> String {
+    if run.outcome == Outcome::Failed {
+        let failed = |s: &RunStep| s.status == StepStatus::Failed;
+        let at = run.steps.iter().position(failed).map_or(1, |i| i + 1);
+        return format!("stopped at step {}", at);
+    }
     if run.steps.iter().any(cancelled) {
         return "cancelled".into();
     }
@@ -214,6 +220,7 @@ mod tests {
         assert_eq!(v.rest, "Your last good data (27 Sep) is untouched.");
         assert_eq!(fixes(&failed), vec![Command::fix("/setup meta")]);
         assert_eq!(rerun(&failed).does, "");
+        assert_eq!(gaps(&failed), "stopped at step 1");
         let mut crm = step("crm", StepStatus::Failed);
         crm.fix = Some("/connect crm".into());
         let later = run(Outcome::Degraded, vec![step("meta", StepStatus::Done), crm]);

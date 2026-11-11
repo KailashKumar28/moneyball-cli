@@ -6,6 +6,8 @@ use crate::schema::{RunStep, StepStatus};
 use crate::text::commas;
 
 /// Under a step carried over from today's earlier pull.
+pub const REUSED: &str = "from today's earlier pull";
+/// The same where a refresh is typed, with the flag that pulls again.
 pub const REUSED_NOTE: &str = "from today's earlier pull (--force pulls Meta again)";
 
 /// The day a refresh started now fills, for headers ("Wed 07 Oct 2026"):
@@ -152,5 +154,9 @@ mod tests {
         report.error_kind = Some("no_crm".into());
         assert_eq!(status_word(&report), "no CRM");
         assert_eq!(duration(81_000), "1m 21s");
+        assert!(
+            REUSED_NOTE.starts_with(REUSED),
+            "one wording, with and without the flag"
+        );
     }
 }

@@ -65,14 +65,26 @@ function Shell({ workspace, onPick }: { workspace: Workspace; onPick: () => void
   const [version, setVersion] = useState(0); // bumps when the data on disk changed
   const [newSession, setNewSession] = useState(0);
   const report = useRef<ReportHandle>(null);
+  const bump = useCallback(() => setVersion((v) => v + 1), []);
   const td = useAsync(today, [version]);
-  const refresh = useRefresh(useCallback(() => setVersion((v) => v + 1), []));
+  // Read whenever today is: setup in the terminal can rename the workspace or change its products.
+  const ws = useAsync(workspaceCurrent, [version]);
+  const shown = ws.data ?? workspace;
+  const refresh = useRefresh(bump);
 
+  // Coming back to the window: the terminal or the schedule may have changed any of it.
   const { reload } = td;
+  const { reload: reloadWorkspace } = ws;
+  const { sync } = refresh;
   useEffect(() => {
-    window.addEventListener("focus", reload);
-    return () => window.removeEventListener("focus", reload);
-  }, [reload]);
+    const onFocus = () => {
+      reload();
+      reloadWorkspace();
+      sync();
+    };
+    window.addEventListener("focus", onFocus);
+    return () => window.removeEventListener("focus", onFocus);
+  }, [reload, reloadWorkspace, sync]);
 
   const { start } = refresh;
   // Also a click handler, so anything but a literal true means "not forced".
@@ -88,7 +100,7 @@ function Shell({ workspace, onPick }: { workspace: Workspace; onPick: () => void
       if (a.kind === "refresh") startRefresh(a.force);
       if (a.kind === "report") {
         setScreen("report");
-        report.current?.generate();
+        report.current?.daily();
       }
     },
     [startRefresh],
@@ -117,8 +129,8 @@ function Shell({ workspace, onPick }: { workspace: Workspace; onPick: () => void
       <aside className="side">
         <div className="dragzone" data-tauri-drag-region />
         <button className="ws" title="Open another workspace" onClick={onPick}>
-          <b>{workspace.name}</b>
-          <span title={workspace.display_path}>{workspace.display_path}</span>
+          <b>{shown.name}</b>
+          <span title={shown.display_path}>{shown.display_path}</span>
         </button>
         <nav className="nav" aria-label="Views">
           {NAV.map(([id, label], i) => (
@@ -134,8 +146,8 @@ function Shell({ workspace, onPick }: { workspace: Workspace; onPick: () => void
       <main>
         <TodayScreen hidden={screen !== "today"} today={td} {...shared} onRefresh={startRefresh} go={setScreen} />
         <BriefScreen hidden={screen !== "brief"} sub={td.data?.footer[0] ?? ""} {...shared} />
-        <FunnelScreen hidden={screen !== "funnel"} products={workspace.products} {...shared} go={setScreen} />
-        <ReportScreen hidden={screen !== "report"} handle={report} {...shared} />
+        <FunnelScreen hidden={screen !== "funnel"} products={shown.products} {...shared} />
+        <ReportScreen hidden={screen !== "report"} handle={report} {...shared} onGenerated={bump} />
         <Advisor hidden={screen !== "advisor"} newSession={newSession} onAction={onAction} />
         <RefreshScreen hidden={screen !== "refresh"} refresh={refresh} onAction={onAction} go={setScreen} />
       </main>

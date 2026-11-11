@@ -54,6 +54,13 @@ function hermetic(mockUrl) {
   config.model_providers = { mock: { name: "Mock", base_url: `${mockUrl}/v1`, wire_api: "chat_completions" } };
   writeFileSync(join(dot, "config.json"), JSON.stringify(config, null, 2));
 
+  // A session the terminal app wrote in this workspace, slash command and
+  // all: the Mac app must neither list it nor hand it to the model.
+  mkdirSync(join(dot, "sessions"), { recursive: true });
+  const header = { session: { id: "mb-20261008T050000Z-tui1", started_at: "2026-10-08T05:00:00Z", data_root: workspace, front_end: "tui" } };
+  const typed = { type: "user", text: "/funnel Namma Mane" };
+  writeFileSync(join(dot, "sessions/mb-20261008T050000Z-tui1.jsonl"), `${JSON.stringify(header)}\n${JSON.stringify(typed)}\n`);
+
   mkdirSync(join(home, ".moneyball"), { recursive: true });
   writeFileSync(join(home, ".moneyball/config.json"), JSON.stringify({ last_workspace: workspace }));
   const auth = join(home, ".moneyball/auth.json");

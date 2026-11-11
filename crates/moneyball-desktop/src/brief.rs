@@ -15,13 +15,26 @@ use crate::state::AppState;
 pub struct BriefView {
     /// None when there is no snapshot, or it would not load (`fault`).
     pub brief: Option<ProductRowsAndFeasibility>,
+    /// Said in front of `crm_note` when the table has no CRM columns.
+    pub crm_head: Option<String>,
     pub crm_note: Option<String>,
     /// A snapshot exists but would not load.
     pub fault: Option<AppError>,
     pub staleness: Option<String>,
     pub cpl_order: Option<String>,
+    /// What the table's columns count; None with no brief.
+    pub caption: Option<String>,
     /// The one sentence under the table.
     pub feasibility_line: Option<String>,
+}
+
+fn caption(b: &ProductRowsAndFeasibility) -> String {
+    if b.has_crm {
+        "Meta, CRM and Qual. are leads over the 7 days. Gap is qualified per day short of the goal."
+    } else {
+        "Meta is leads over the 7 days. Goal is qualified per day."
+    }
+    .into()
 }
 
 fn feasibility_line(b: &ProductRowsAndFeasibility) -> String {
@@ -47,10 +60,12 @@ pub fn brief_view(loaded: Loaded, crm_note: Option<String>) -> BriefView {
         staleness: b
             .and_then(|b| brief::staleness_warning(&b.snapshot_date))
             .map(|w| w.trim_start_matches("!! ").to_string()),
-        cpl_order: b
-            .and_then(|b| brief::cpl_order(&b.rows))
-            .map(|order| format!("cheapest Meta lead first: {}", order)),
+        cpl_order: b.and_then(|b| brief::cpl_order(&b.rows)),
+        caption: b.map(caption),
         feasibility_line: b.map(feasibility_line),
+        crm_head: b
+            .filter(|b| !b.has_crm)
+            .map(|_| "CRM columns hidden.".into()),
         crm_note,
         fault: loaded.fault.map(AppError::from),
         brief: loaded.brief,

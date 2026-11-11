@@ -7,9 +7,10 @@ use moneyball_core::agent::Session;
 use serde_json::Value;
 
 use super::*;
+use crate::state::Live;
 
 fn session() -> SharedSession {
-    Arc::new(Mutex::new(Session::new(None, Vec::new())))
+    Live::shared(Session::new(None, Vec::new()))
 }
 
 fn delta(text: &str) -> Ev {
@@ -73,7 +74,7 @@ fn deltas_arrive_as_one_and_before_what_follows_them() {
         ]
     );
     assert_eq!(seen[0]["text"], "Spend is up.");
-    assert_eq!(lock(&s).history().len(), 1, "the item was recorded");
+    assert_eq!(lock(&s).session.history().len(), 1, "the item was recorded");
 }
 
 #[test]
@@ -105,9 +106,15 @@ fn text_still_waiting_is_flushed_when_its_time_comes() {
 
 #[test]
 fn a_worker_that_hangs_up_early_is_reported_once_the_text_is_out() {
-    let seen = run(vec![delta("half an ans")], &session(), true);
+    let s = session();
+    let seen = run(vec![delta("half an ans")], &s, true);
     assert_eq!(types(&seen), ["assistant_delta", "died"]);
     assert_eq!(seen[1]["message"], DIED);
+    // A window that was reloading heard none of it: the snapshot says so.
+    assert_eq!(
+        crate::session::snapshot(Some(&s)).failed.as_deref(),
+        Some(DIED)
+    );
 }
 
 #[test]
@@ -119,7 +126,11 @@ fn a_webview_that_is_gone_stops_the_sending_not_the_recording() {
         false,
     );
     assert_eq!(seen.len(), 1, "one failed send, then silence");
-    assert_eq!(lock(&s).history().len(), 2, "the session file stays whole");
+    assert_eq!(
+        lock(&s).session.history().len(),
+        2,
+        "the session file stays whole"
+    );
 }
 
 #[test]
@@ -127,11 +138,15 @@ fn an_overflow_failure_says_to_start_a_new_session() {
     let overflow = Ev::Failed {
         error: "prompt is too long: 210000 tokens".into(),
     };
-    let seen = run(vec![overflow], &session(), true);
+    let s = session();
+    let seen = run(vec![overflow], &s, false);
     assert_eq!(types(&seen), ["failed"]);
+    let hinted = "prompt is too long: 210000 tokens. Start a new session to continue.";
+    assert_eq!(seen[0]["error"], hinted);
+    // The webview was gone (the send failed): a reload still reads it.
     assert_eq!(
-        seen[0]["error"],
-        "prompt is too long: 210000 tokens. Start a new session to continue."
+        crate::session::snapshot(Some(&s)).failed.as_deref(),
+        Some(hinted)
     );
     let other = Ev::Failed {
         error: "HTTP 500".into(),

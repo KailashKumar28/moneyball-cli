@@ -5,7 +5,7 @@
 // generated fixtures (tests/fixtures.ts), never typed in here.
 import { expect, test, type Locator, type Page } from "@playwright/test";
 import type { Action, RefreshEvent, StepView } from "../src/ipc/types";
-import { event, funnelAllVerdicts, fx, noData, refreshCrmFailed, refreshReused, todayReused } from "./fixtures";
+import { event, funnelAllVerdicts, fx, noData, refreshCrmFailed, refreshNeverFinished, refreshReused, REUSED, todayReused } from "./fixtures";
 import { emitRefresh, emitTurn, open } from "./mock";
 
 const SIZES = [
@@ -125,6 +125,7 @@ async function expectToday(page: Page, t: typeof fx.today) {
   const changes = day.numbers!.flatMap((n) => day.versus!.changes.filter((c) => c.label === n.label).map((c) => c.text));
   expect(changes.length).toBe(day.versus!.changes.length);
   await expect(s.locator(".strip .dl")).toHaveText(changes);
+  await expect(s.locator(".body")).toContainText(day.versus!.caption); // the shell's sentence, not one composed here
   await expectStepRows(s.locator("tbody tr"), t.last_run!.steps);
   await expect(page.locator(".health")).toContainText(t.health_label);
   for (const line of t.footer) await expect(page.locator(".health")).toContainText(line);
@@ -159,6 +160,7 @@ state("brief", "", async (page) => {
   await expect(s.locator("thead th")).toHaveCount(10);
   await expectCells(rows, b.rows.map((r) => [r.spend_per_day, r.m7d, r.l7d, r.q7d, r.q_per_day, r.rs_per_q, r.l_to_q, r.goal, r.gap]), 1);
   await expect(s.locator(".feas .line")).toHaveText(fx.brief.feasibility_line!);
+  await expect(s.locator(".body")).toContainText(fx.brief.caption!);
   await expect(s.locator(".body")).toContainText(fx.brief.cpl_order!);
 });
 
@@ -183,7 +185,9 @@ state("funnel", "", async (page) => {
 
 state("funnel-nocrm", "degraded", async (page) => {
   const s = await expectFunnel(page, fx.funnelNocrm);
-  await expect(s.locator(".notice")).toContainText("Verdicts withheld.");
+  // why kill is withheld is said once, in the shell's notes (expectFunnel), with no sentence of the UI's own
+  await expect(s.locator(".notice")).toHaveCount(0);
+  await expect(s.locator(".body")).not.toContainText("Verdicts withheld");
   await expect(s.locator("thead th")).toHaveText(["Ad set", "Spend", "Meta", "Per lead", "Verdict"]);
   await expect(s.locator(".v.nocrm")).toHaveCount(fx.funnelNocrm.rows.length);
 });
@@ -239,6 +243,8 @@ state("report", "", async (page) => {
   await expect(frame).toHaveAttribute("sandbox", "");
   await expect(frame).toHaveAttribute("srcdoc", fx.report.html);
   await expect(s.getByLabel("Report day")).toHaveValue(fx.report.date);
+  // the windows are the shell's, words and all
+  await expect(s.getByLabel("Window").locator("option")).toHaveText(fx.reportDays[0]!.windows.map((w) => w.label));
   const values = await s.getByLabel("Report day").locator("option").evaluateAll((os) => os.map((o) => (o as HTMLOptionElement).value));
   expect(values).toEqual(fx.reportDays.map((d) => d.date));
   await expect(s.getByRole("button", { name: "Open in Browser" })).toBeEnabled();
@@ -436,8 +442,43 @@ state("refresh-could-not-start", "", async (page) => {
   await expect(s.locator(".notice")).toContainText(error.reason);
   await expectSteps(s.locator(".notice li"), error.fix ? [error.fix] : []);
   await expect(s.locator(".g.run")).toHaveCount(0);
-  await expect(s.getByRole("button", { name: "Refresh", exact: true })).toBeVisible();
+  // nothing ran, so the last recorded run is back under the reason, not four blank steps
+  await expectStepRows(s.locator("tbody tr"), fx.refreshState.steps);
+  await expect(s.getByRole("heading", { name: `Refreshed ${fx.refreshState.finished!.run.day}` })).toBeVisible();
+  await expect(s.getByRole("button", { name: "Refresh Again" })).toBeVisible();
 });
+
+state("refresh-recorded", "degraded", async (page) => {
+  // no run in this window: the workspace's last recorded run, in full, as refresh_state gives it
+  await page.locator(".health").click();
+  const s = screen(page, "Refresh");
+  const f = fx.refreshStateDegraded.finished!;
+  await expect(s.getByRole("heading", { name: `Refreshed ${f.run.day}` })).toBeVisible();
+  await expect(s.locator(".runhead")).toContainText(f.time);
+  await expect(s.locator(".runhead")).toContainText(f.run.gaps);
+  await expectStepRows(s.locator("tbody tr"), f.run.steps);
+  await expect(s.locator(".sum .notice")).toContainText(f.verdict!.headline);
+  await expectSteps(s.locator(".sum .notice li"), [...f.fixes, ...(f.rerun ? [f.rerun] : [])]);
+  for (const n of f.numbers!) await expect(s.locator(".sum")).toContainText(n.value);
+  await expect(s.locator(".sum")).toContainText(f.numbers_note!);
+  await expect(s.getByRole("button", { name: "Open Report" })).toBeVisible();
+});
+
+state(
+  "refresh-never-finished",
+  "",
+  async (page) => {
+    // a record still marked running: the steps that finished, bare rings for the rest, no verdict
+    await page.locator(".health").click();
+    const s = screen(page, "Refresh");
+    await expect(s.getByRole("heading", { name: `Last refresh, ${refreshNeverFinished.day}` })).toBeVisible();
+    await expect(s.locator("tbody tr")).toHaveCount(refreshNeverFinished.steps.length);
+    await expect(s.locator(".g.run")).toHaveCount(0);
+    await expect(s.locator(".sum")).toHaveCount(0);
+    await expect(s.getByRole("button", { name: "Refresh", exact: true })).toBeVisible();
+  },
+  { refresh_state: refreshNeverFinished },
+);
 
 state("refresh-died", "", async (page) => {
   await startRefresh(page, begins("assets"));
@@ -570,13 +611,13 @@ state(
   "",
   async (page) => {
     // a step carried over from today's earlier pull says so, on Refresh and in Today's table
-    const reused = refreshReused.run.steps.filter((x) => x.reused).length;
+    const reused = refreshReused.run.steps.filter((x) => x.note).length;
     await expect(screen(page, "Today").locator("tbody .tag")).toHaveCount(reused);
     await startRefresh(page, ends("assets"));
     await emitRefresh(page, refreshReused);
     const s = screen(page, "Refresh");
     await expectStepRows(s.locator("tbody tr"), refreshReused.run.steps);
-    await expect(s.locator("tbody .tag")).toHaveText(Array<string>(reused).fill("from today's earlier pull"));
+    await expect(s.locator("tbody .tag")).toHaveText(Array<string>(reused).fill(REUSED));
   },
   { today: todayReused },
 );

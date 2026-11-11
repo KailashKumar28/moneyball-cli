@@ -10,6 +10,7 @@ use chrono::{Duration, NaiveDate};
 use crate::config::AppConfig;
 use crate::error::{Error, Result};
 use crate::snapshot::Snapshot;
+use crate::words::CHEAPEST_FIRST;
 
 pub mod print;
 mod wire;
@@ -269,15 +270,15 @@ mod tests;
 /// "mid-pack" against Rs.1,216 "cheapest" - bug mb-20260808T143646Z-rrrr).
 /// None when fewer than two rows have a CPL.
 pub fn cpl_ranking(rows: &[FunnelRow]) -> Option<String> {
-    ranked(rows).map(|r| format!("cheapest Meta lead first: {}", r))
+    ranked(rows).map(|r| format!("{}: {}", CHEAPEST_FIRST, r))
 }
 
 /// The same order for the model, which mis-sorted it when left to itself.
 pub fn cpl_ranking_for_model(rows: &[FunnelRow]) -> Option<String> {
     ranked(rows).map(|r| {
         format!(
-            "cpl ranking (cheapest Meta lead first, PRE-COMPUTED - trust this order): {}",
-            r
+            "cpl ranking ({}, PRE-COMPUTED - trust this order): {}",
+            CHEAPEST_FIRST, r
         )
     })
 }

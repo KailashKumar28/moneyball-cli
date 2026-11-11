@@ -1,9 +1,8 @@
 import { useState } from "react";
-import type { Screen } from "../App";
 import { funnel, type By, type FunnelView } from "../ipc";
-import { Notice, num, Pending, RS, useAsync, type OnAction } from "../lib";
+import { num, Pending, RS, useAsync, type OnAction } from "../lib";
 
-type Props = { hidden: boolean; products: string[]; version: number; onAction: OnAction; go: (s: Screen) => void };
+type Props = { hidden: boolean; products: string[]; version: number; onAction: OnAction };
 type Days = 7 | 14 | 28;
 const DAYS: Days[] = [7, 14, 28];
 const LEVELS: [By, string][] = [
@@ -12,8 +11,10 @@ const LEVELS: [By, string][] = [
   ["ad", "Ad"],
 ];
 
-export function FunnelScreen({ hidden, products, version, onAction, go }: Props) {
-  const [product, setProduct] = useState(products[0] ?? "");
+export function FunnelScreen({ hidden, products, version, onAction }: Props) {
+  const [picked, setProduct] = useState("");
+  // The list is re-read with the workspace: setup in the terminal can add or rename a product.
+  const product = products.includes(picked) ? picked : (products[0] ?? "");
   const [days, setDays] = useState<Days>(7);
   const [by, setBy] = useState<By>("adset");
   const state = useAsync(() => funnel({ product, days, by }), [product, days, by, version]);
@@ -45,7 +46,7 @@ export function FunnelScreen({ hidden, products, version, onAction, go }: Props)
           <p className="cap">This workspace has no products configured.</p>
         ) : (
           <Pending state={state} onAction={onAction}>
-            {(v) => <Body v={v} level={level} onAction={onAction} toToday={() => go("today")} />}
+            {(v) => <Body v={v} level={level} />}
           </Pending>
         )}
       </div>
@@ -69,19 +70,10 @@ function Verdict({ text }: { text: string }) {
   return <span className={`v ${shape}`}>{text}</span>;
 }
 
-function Body({ v, level, onAction, toToday }: { v: FunnelView; level: string; onAction: OnAction; toToday: () => void }) {
+function Body({ v, level }: { v: FunnelView; level: string }) {
   const crm = v.has_crm;
   return (
     <>
-      {!crm && (
-        <Notice strong="Verdicts withheld." text="This snapshot has no CRM data: qualified is unknown, not zero. Fix it on" onAction={onAction}>
-          {" "}
-          <button className="link" onClick={toToday}>
-            Today
-          </button>
-          .
-        </Notice>
-      )}
       {v.rows.length === 0 ? (
         <p className="cap">Nothing ran for {v.product} in this window.</p>
       ) : (

@@ -1,7 +1,7 @@
 // Keys, re-reads and the trust boundary. No screenshots here.
 import { expect, test, type Page } from "@playwright/test";
 import type { Action } from "../src/ipc/types";
-import { event, fx } from "./fixtures";
+import { event, fx, reportDaysLateMonth, sessionFailed, todayReportMissing, workspaceChanged } from "./fixtures";
 import { calls, emitTurn, open } from "./mock";
 
 test.use({ timezoneId: "Asia/Kolkata", viewport: { width: 1200, height: 800 } });
@@ -149,7 +149,7 @@ test("report: day and window drive generate; open in browser passes the path", a
   const older = fx.reportDays.find((d) => d.date !== fx.report.date)!.date;
   await r.getByLabel("Report day").selectOption(older);
   await expect.poll(async () => (await calls(page, "report_for")).at(-1)).toEqual({ date: older });
-  await r.getByLabel("Window").selectOption("7");
+  await r.getByLabel("Window").selectOption({ label: "7 days" });
   await r.getByRole("button", { name: "Generate" }).click();
   expect((await calls(page, "report_generate")).at(-1)).toEqual({ date: older, days: 7 });
   await r.getByRole("button", { name: "Open in Browser" }).click();
@@ -163,6 +163,81 @@ test("Generate builds a report where none is written", async ({ page }) => {
   await r.getByRole("button", { name: "Generate" }).click();
   await expect(r.locator("iframe")).toBeVisible();
   expect((await calls(page, "report_generate")).at(-1)).toEqual({ date: fx.reportDays[0]!.date, days: 1 });
+});
+
+test("report: the month window sends the days the shell gave it, capped where a snapshot ends", async ({ page }) => {
+  await open(page, "", { report_days: reportDaysLateMonth });
+  await page.keyboard.press("Meta+4");
+  const r = region(page, "Report");
+  await expect(r.getByLabel("Window").locator("option")).toHaveText(["1 day", "7 days", "Last 28 days"]);
+  await r.getByLabel("Window").selectOption({ label: "Last 28 days" });
+  await r.getByRole("button", { name: "Generate" }).click();
+  expect((await calls(page, "report_generate")).at(-1)).toEqual({ date: fx.report.date, days: 28 });
+});
+
+test("a Generate report action builds the data day's daily report, whatever Report had selected, and Today re-reads", async ({ page }) => {
+  await open(page, "", { today: todayReportMissing });
+  // Report was left on an older day and a 7-day window
+  await page.keyboard.press("Meta+4");
+  const r = region(page, "Report");
+  const older = fx.reportDays.find((d) => d.date !== fx.report.date)!.date;
+  await r.getByLabel("Report day").selectOption(older);
+  await r.getByLabel("Window").selectOption({ label: "7 days" });
+  await page.keyboard.press("Meta+1");
+  const before = (await calls(page, "today")).length;
+  await region(page, "Today").getByRole("button", { name: "Generate report" }).click();
+  await expect(r).toBeVisible();
+  // no date (the shell picks the data day) and one day, not the screen's old selections
+  expect((await calls(page, "report_generate")).at(-1)).toEqual({ days: 1 });
+  await expect(r.locator("iframe")).toBeVisible();
+  await expect(r.getByLabel("Report day")).toHaveValue(fx.report.date);
+  await expect(r.getByLabel("Window")).toHaveValue("0");
+  // the report is on disk now: Today is read again without waiting for a focus
+  await expect.poll(async () => (await calls(page, "today")).length).toBeGreaterThan(before);
+});
+
+test("a generate on the Report screen keeps its report on screen and re-reads today", async ({ page }) => {
+  await open(page);
+  await page.keyboard.press("Meta+4");
+  const r = region(page, "Report");
+  await expect(r.locator("iframe")).toBeVisible();
+  const before = (await calls(page, "today")).length;
+  await r.getByLabel("Window").selectOption({ label: "7 days" });
+  await r.getByRole("button", { name: "Generate" }).click();
+  await expect.poll(async () => (await calls(page, "today")).length).toBeGreaterThan(before);
+  // the 7-day report it made stays up through the re-read it caused
+  await expect(r.locator("iframe")).toHaveAttribute("title", `Report for ${fx.report.day}`);
+  await expect(r.getByRole("button", { name: "Open in Browser" })).toBeEnabled();
+});
+
+test("the workspace is re-read with today: a product added in the terminal shows after a focus", async ({ page }) => {
+  await open(page, "", { workspace_current: fx.workspace });
+  await expect(page.locator(".ws b")).toHaveText(fx.workspace.name);
+  const before = (await calls(page, "workspace_current")).length;
+  await page.evaluate((w) => void (window.__replies!.workspace_current = w), workspaceChanged);
+  await page.evaluate(() => window.dispatchEvent(new Event("focus")));
+  await expect.poll(async () => (await calls(page, "workspace_current")).length).toBe(before + 1);
+  await expect(page.locator(".ws b")).toHaveText(workspaceChanged.name);
+  await page.keyboard.press("Meta+3");
+  await expect(region(page, "Funnel").getByLabel("Product").locator("option")).toHaveText(workspaceChanged.products);
+  // and the refresh state with it: the terminal or the schedule may have run
+  expect((await calls(page, "refresh_state")).length).toBeGreaterThan(1);
+});
+
+test("a turn that failed while the window was reloading is shown from the snapshot", async ({ page }) => {
+  await open(page, "", { session_current: sessionFailed });
+  await page.keyboard.press("Meta+5");
+  const adv = region(page, "Advisor");
+  await expect(adv.locator(".note")).toHaveText(sessionFailed.failed!);
+  await expect(adv.getByRole("button", { name: "Send" })).toBeVisible();
+});
+
+test("a copy that fails does not say Copied", async ({ page }) => {
+  await open(page, "degraded,copyfail");
+  const today = region(page, "Today");
+  await today.getByRole("button", { name: "Copy" }).first().click();
+  await expect.poll(() => calls(page, "copy_text")).toHaveLength(1);
+  await expect(today.getByRole("button", { name: "Copied" })).toHaveCount(0);
 });
 
 test("the empty state opens a workspace; Cmd-O does the same", async ({ page }) => {

@@ -255,6 +255,7 @@ fn clear_conversation(app: &mut App) {
     match moneyball_core::session::SessionLog::create(
         app.cfg.data_root.clone(),
         app.cfg.sessions_root(),
+        crate::FRONT_END,
     ) {
         Ok(log) => {
             app.session = Session::new(Some(log), Vec::new());

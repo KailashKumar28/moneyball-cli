@@ -6,7 +6,7 @@
 //!
 //!     MB_UPDATE_FIXTURES=1 cargo test -p moneyball-desktop fixtures
 
-mod demo;
+pub(crate) mod demo;
 mod streams;
 mod wording;
 
@@ -128,6 +128,7 @@ fn fixtures_match_the_command_bodies() {
     let mut pins = Pins(Vec::new());
     screens(&mut pins);
     streams::turns(&mut pins);
+    wording::nothing_shown_is_a_slash_command(&pins.0);
     let update = std::env::var_os("MB_UPDATE_FIXTURES").is_some();
     let dir = fixtures_dir();
     let mut stale = Vec::new();

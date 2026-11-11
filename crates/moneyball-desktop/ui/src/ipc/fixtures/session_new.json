@@ -1,5 +1,6 @@
 {
   "id": null,
   "items": [],
-  "turn_active": false
+  "turn_active": false,
+  "failed": null
 }

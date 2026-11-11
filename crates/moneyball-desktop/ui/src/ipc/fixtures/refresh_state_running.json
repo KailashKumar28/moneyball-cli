@@ -1,5 +1,6 @@
 {
   "day": "Thu 08 Oct",
+  "finished": null,
   "running": true,
   "started_ms_ago": 52000,
   "steps": [
@@ -8,7 +9,7 @@
       "fix": null,
       "label": "Meta insights",
       "name": "meta",
-      "reused": false,
+      "note": null,
       "status": "done",
       "time": "1m 04s",
       "word": "done"
@@ -18,7 +19,7 @@
       "fix": null,
       "label": "creatives and leads",
       "name": "assets",
-      "reused": false,
+      "note": null,
       "status": "done",
       "time": null,
       "word": "done"
@@ -28,7 +29,7 @@
       "fix": null,
       "label": "CRM",
       "name": "crm",
-      "reused": false,
+      "note": null,
       "status": "running",
       "time": null,
       "word": "running"
@@ -38,7 +39,7 @@
       "fix": null,
       "label": "daily report",
       "name": "report",
-      "reused": false,
+      "note": null,
       "status": "waiting",
       "time": null,
       "word": "waits for CRM"

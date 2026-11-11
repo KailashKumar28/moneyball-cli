@@ -46,6 +46,9 @@ use moneyball_core::AppConfig;
 
 pub type Tui = Terminal<CrosstermBackend<Stdout>>;
 
+/// This front-end's name in the header of a session file it writes.
+pub(crate) const FRONT_END: &str = "tui";
+
 pub fn init() -> Result<Tui> {
     // Panic hook FIRST (codex-tui pattern): a panic anywhere in the
     // event loop unwinds past the normal restore() call, and without
@@ -120,7 +123,11 @@ pub fn run_with_cfg(
         // Fresh session: appended items persist from the first turn.
         // A create failure degrades to an unpersisted session with a
         // visible warning, never a dead REPL.
-        None => match SessionLog::create(app.cfg.data_root.clone(), app.cfg.sessions_root()) {
+        None => match SessionLog::create(
+            app.cfg.data_root.clone(),
+            app.cfg.sessions_root(),
+            FRONT_END,
+        ) {
             Ok(log) => app.session = Session::new(Some(log), Vec::new()),
             Err(e) => app.status = Some(format!("session log unavailable: {}", e)),
         },

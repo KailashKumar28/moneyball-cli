@@ -32,6 +32,10 @@ pub struct SessionMeta {
     pub id: String,
     pub started_at: DateTime<Utc>,
     pub data_root: PathBuf,
+    /// The front-end that wrote the file ("tui", "desktop"). None in a
+    /// file from before this was recorded.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub front_end: Option<String>,
 }
 
 /// One line of the file: the header or an item. The serde tags cannot
@@ -53,16 +57,18 @@ pub struct SessionLog {
 
 impl SessionLog {
     /// Start a new session file (writes the header line). `root` is the
-    /// workspace to store it under - None falls back to the global dir.
+    /// workspace to store it under - None falls back to the global dir;
+    /// `front_end` names the caller in the header.
     /// create_new: an id collision must ERROR, never truncate another
     /// session mid-flight - session files are bug-report evidence.
-    pub fn create(data_root: PathBuf, root: Option<&Path>) -> Result<Self> {
+    pub fn create(data_root: PathBuf, root: Option<&Path>, front_end: &str) -> Result<Self> {
         use std::io::Write as _;
         for _ in 0..3 {
             let meta = SessionMeta {
                 id: make_session_id(),
                 started_at: Utc::now(),
                 data_root: data_root.clone(),
+                front_end: Some(front_end.into()),
             };
             let path = session_path(&meta.id, root)?;
             let mut f = match std::fs::File::create_new(&path) {
@@ -228,7 +234,7 @@ mod tests {
         std::fs::create_dir_all(&dir).unwrap();
         std::env::set_var("MONEYBALL_SESSIONS_DIR", &dir);
 
-        let log = SessionLog::create(PathBuf::from("/w"), None).unwrap();
+        let log = SessionLog::create(PathBuf::from("/w"), None, "tui").unwrap();
         let id = log.meta.id.clone();
         let items = vec![
             Item::User { text: "hi".into() },
@@ -250,6 +256,7 @@ mod tests {
 
         let (reopened, replayed) = SessionLog::open(&id, None).unwrap();
         assert_eq!(reopened.meta.id, id);
+        assert_eq!(reopened.meta.front_end.as_deref(), Some("tui"));
         assert_eq!(replayed.len(), items.len());
         assert!(matches!(&replayed[0], Item::User { text } if text == "hi"));
         assert!(matches!(&replayed[3], Item::Assistant { text } if text == "a"));
@@ -274,6 +281,7 @@ mod tests {
             id: "mb-test".into(),
             started_at: Utc::now(),
             data_root: PathBuf::from("/w"),
+            front_end: None,
         };
         let mut raw = format!(
             "{}\n",
@@ -304,6 +312,21 @@ mod tests {
         let (m, back) = parse_session(&raw).unwrap();
         assert_eq!(m.id, meta.id);
         assert_eq!(back.len(), items.len());
+    }
+
+    /// The front-end is an additive header field: a file from before it
+    /// reads as written by no one in particular, and writes back as it was.
+    #[test]
+    fn a_header_without_a_front_end_still_reads() {
+        let old =
+            r#"{"session":{"id":"mb-old","started_at":"2026-11-01T10:00:00Z","data_root":"/w"}}"#;
+        let meta = parse_header_line(old).unwrap();
+        assert_eq!(meta.front_end, None);
+        let line = serde_json::to_string(&Line::Header { session: meta }).unwrap();
+        assert_eq!(line, old);
+        let new = old.replace(r#""/w""#, r#""/w","front_end":"desktop""#);
+        let meta = parse_header_line(&new).unwrap();
+        assert_eq!(meta.front_end.as_deref(), Some("desktop"));
     }
 
     #[test]
@@ -349,7 +372,7 @@ mod tests {
         let dir = std::env::temp_dir().join(format!("mb-noclobber-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
         std::env::set_var("MONEYBALL_SESSIONS_DIR", &dir);
-        let log = SessionLog::create(PathBuf::from("/w"), None).unwrap();
+        let log = SessionLog::create(PathBuf::from("/w"), None, "tui").unwrap();
         log.append(&Item::User {
             text: "precious evidence".into(),
         })

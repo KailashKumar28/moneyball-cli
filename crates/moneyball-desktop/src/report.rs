@@ -4,7 +4,7 @@
 
 use std::path::{Path, PathBuf};
 
-use chrono::NaiveDate;
+use chrono::{Datelike, NaiveDate};
 use moneyball_core::schema::CreativeReport;
 use moneyball_core::{report, AppConfig};
 use serde::Serialize;
@@ -12,6 +12,7 @@ use tauri::{AppHandle, State};
 use tauri_plugin_opener::OpenerExt;
 
 use crate::error::AppError;
+use crate::refresh::SNAPSHOT_DAYS;
 use crate::run_view::data_day;
 use crate::state::AppState;
 
@@ -54,19 +55,43 @@ pub struct ReportDay {
     pub date: String,
     /// The data day it reports on, "Thu 08 Oct" (the day before `date`).
     pub day: String,
-    /// The window that reaches back to the 1st of the data day's month.
-    pub month_to_date: u32,
+    /// The windows a report ending on that day can cover, shortest first.
+    pub windows: Vec<Window>,
+}
+
+/// A window the Report screen offers: its words, and the `days` that
+/// `report_generate` takes for it.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct Window {
+    pub label: String,
+    pub days: u32,
+}
+
+/// The windows for a report ending on `data_day`: one day, a week, and
+/// the month so far - when the snapshot holds all of it. Past the 28th
+/// it does not (a refresh pulls SNAPSHOT_DAYS), so the option becomes
+/// the longest window it can answer for rather than a short month under
+/// a "month to date" label.
+fn windows(data_day: NaiveDate) -> Vec<Window> {
+    let window = |label: &str, days| Window {
+        label: label.into(),
+        days,
+    };
+    let month = match data_day.day() {
+        days if days <= SNAPSHOT_DAYS => window("Month to date", days),
+        _ => window(&format!("Last {} days", SNAPSHOT_DAYS), SNAPSHOT_DAYS),
+    };
+    vec![window("1 day", 1), window("7 days", 7), month]
 }
 
 /// The days with a snapshot, newest first.
 pub fn report_days_of(cfg: &AppConfig) -> Vec<ReportDay> {
     let day = |date: String| {
         let (iso, day) = data_day(&date);
-        let month_to_date = day_of(&iso).map_or(1, |d| chrono::Datelike::day(&d));
         ReportDay {
+            windows: day_of(&iso).map(windows).unwrap_or_default(),
             date,
             day,
-            month_to_date,
         }
     };
     snapshot_dates(cfg).into_iter().map(day).collect()
@@ -111,9 +136,10 @@ pub fn report_for_date(
     }
 }
 
+/// `days` is held to what a snapshot holds, whatever is asked.
 pub fn generate(cfg: &AppConfig, date: Option<String>, days: u32) -> Result<ReportView, AppError> {
     let date = snapshot_date(cfg, date)?;
-    let out = report::generate(cfg, date.as_deref(), days.max(1))?;
+    let out = report::generate(cfg, date.as_deref(), days.clamp(1, SNAPSHOT_DAYS))?;
     view(&out.report, &out.html_path)
 }
 
@@ -183,6 +209,28 @@ pub fn report_open_in_browser(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn month_to_date_is_offered_only_while_the_snapshot_holds_the_month() {
+        let last = |y, m, d| {
+            let day = NaiveDate::from_ymd_opt(y, m, d).unwrap();
+            let all = windows(day);
+            assert_eq!((all[0].days, all[1].days), (1, 7));
+            assert_eq!(
+                (all[0].label.as_str(), all[1].label.as_str()),
+                ("1 day", "7 days")
+            );
+            all.into_iter()
+                .next_back()
+                .map(|w| (w.label, w.days))
+                .unwrap()
+        };
+        assert_eq!(last(2026, 10, 8), ("Month to date".to_string(), 8));
+        assert_eq!(last(2026, 10, 28), ("Month to date".to_string(), 28));
+        for day in [29, 30, 31] {
+            assert_eq!(last(2026, 10, day), ("Last 28 days".to_string(), 28));
+        }
+    }
 
     #[test]
     fn only_an_html_file_under_the_workspace_reports_folder_opens() {

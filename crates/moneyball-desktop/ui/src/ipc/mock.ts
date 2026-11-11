@@ -75,7 +75,8 @@ export function install() {
       case "funnel":
         return { ...(flags.has("degraded") ? fx.funnelNocrm : fx.funnel), product: a.product };
       case "refresh_state":
-        return refreshing ?? fx.refreshState;
+        // at rest: the workspace's last recorded run, in full
+        return refreshing ?? (flags.has("degraded") ? fx.refreshStateDegraded : fx.refreshState);
       case "refresh_start":
         if (refreshing) fail(fx.errors.refresh_busy);
         refreshCh = a.onEvent as Chan<RefreshEvent>;
@@ -118,8 +119,10 @@ export function install() {
       case "turn_cancel":
         if (turnBusy) setTimeout(() => mock.turn({ type: "turn_aborted" }), 50);
         return;
-      case "report_open_in_browser":
       case "copy_text":
+        if (flags.has("copyfail")) fail({ kind: "io", reason: "Could not copy: pbcopy ended with exit status: 1", fix: null });
+        return;
+      case "report_open_in_browser":
         return;
       default:
         throw { kind: "unknown_command", reason: `The mock has no command '${cmd}'.`, fix: null } satisfies AppError;

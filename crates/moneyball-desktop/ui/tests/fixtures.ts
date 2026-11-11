@@ -20,6 +20,7 @@ export const fx = {
   funnel: load<T.FunnelView>("funnel"),
   funnelNocrm: load<T.FunnelView>("funnel_nocrm"),
   refreshState: load<T.RefreshState>("refresh_state"),
+  refreshStateDegraded: load<T.RefreshState>("refresh_state_degraded"),
   refreshStateRunning: load<T.RefreshState>("refresh_state_running"),
   refreshStateWaiting: load<T.RefreshState>("refresh_state_waiting"),
   refreshEvents: load<T.RefreshEvent[]>("refresh_events"),
@@ -73,9 +74,9 @@ export const noData: Record<string, unknown> = {
     day: null,
     last_run: null,
   } satisfies T.Today,
-  brief: { brief: null, crm_note: null, fault: null, staleness: null, cpl_order: null, feasibility_line: null } satisfies T.BriefView,
+  brief: { brief: null, crm_head: null, crm_note: null, fault: null, staleness: null, cpl_order: null, caption: null, feasibility_line: null } satisfies T.BriefView,
   funnel: { product: fx.workspace.products[0]!, has_crm: true, rows: [], cpl_ranking: null, notes: [] } satisfies T.FunnelView,
-  refresh_state: { running: false, day: "", steps: [], started_ms_ago: null } satisfies T.RefreshState,
+  refresh_state: { running: false, day: "", steps: [], started_ms_ago: null, finished: null } satisfies T.RefreshState,
   report_days: [] satisfies T.ReportDay[],
   report_for: null,
   sessions_list: [] satisfies T.SessionSummary[],
@@ -108,15 +109,47 @@ export const refreshCrmFailed: T.RefreshFinished = {
 
 /**
  * HAND-WRITTEN. A second refresh on the same day: Meta and the assets come
- * from the earlier pull (`reused`), which no generated fixture has.
+ * from the earlier pull and carry the shell's `note` (run_view.rs, core's
+ * REUSED), which no generated fixture has.
  */
+export const REUSED = "from today's earlier pull";
 export const refreshReused: T.RefreshFinished = {
   ...finished,
   time: "11s",
   run: {
     ...finished.run,
-    steps: finished.run.steps.map((s) => (s.name === "meta" || s.name === "assets" ? { ...s, reused: true, time: null } : s)),
+    steps: finished.run.steps.map((s) => (s.name === "meta" || s.name === "assets" ? { ...s, note: REUSED, time: null } : s)),
   },
 };
 /** HAND-WRITTEN. Today after that run: the same reused steps in the Data health table. */
 export const todayReused: T.Today = { ...fx.today, last_run: refreshReused.run };
+
+/** HAND-WRITTEN. The last recorded run died or is running elsewhere: its record is still marked running, so there are steps and no verdict. */
+export const refreshNeverFinished: T.RefreshState = {
+  ...fx.refreshState,
+  steps: fx.refreshStateRunning.steps.map((s) => (s.status === "running" ? fx.refreshStateWaiting.steps.find((w) => w.name === s.name)! : s)),
+  finished: null,
+};
+
+/** HAND-WRITTEN. The day's report is missing and Today offers to generate it (core's landing, DayReport::Missing). */
+export const todayReportMissing: T.Today = {
+  ...fx.today,
+  day: {
+    ...fx.today.day!,
+    numbers: null,
+    versus: null,
+    report_missing: { note: "no daily report for this day yet", next: { kind: "report", label: "Generate report", does: "builds it from the snapshot" } },
+  },
+};
+
+/** HAND-WRITTEN. The data day is past the 28th: the shell offers the longest window a snapshot holds in place of the month. */
+export const reportDaysLateMonth: T.ReportDay[] = fx.reportDays.map((d) => ({
+  ...d,
+  windows: [...d.windows.slice(0, 2), { label: "Last 28 days", days: 28 }],
+}));
+
+/** HAND-WRITTEN. A turn failed while the window was reloading: only the snapshot says so. */
+export const sessionFailed: T.SessionSnapshot = { ...fx.session, failed: event(fx.turnEventsOther, "failed").error };
+
+/** HAND-WRITTEN. The workspace after setup ran in the terminal: renamed, with one more product. */
+export const workspaceChanged: T.Workspace = { ...fx.workspace, name: "acme-homes-2", products: [...fx.workspace.products, "Lakeside"] };

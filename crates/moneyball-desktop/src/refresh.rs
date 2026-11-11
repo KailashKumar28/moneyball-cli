@@ -1,6 +1,8 @@
 //! The refresh: core's worker on its own thread, and a forwarder thread
 //! that turns each of its events into the interface's words, keeps the
-//! state a reload reads (`refresh_state`), and sends it down the channel.
+//! state a reload reads while it runs (`refresh_state`), and sends it
+//! down the channel. At rest the state is the workspace's own last run
+//! record, so nothing about a run lives only in memory or the webview.
 
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::Receiver;
@@ -8,21 +10,27 @@ use std::sync::{Arc, Mutex};
 use std::time::Instant;
 
 use moneyball_core::refresh::{self, Ev, Options, STEPS};
-use moneyball_core::schema::{RunRecord, Trigger};
+use moneyball_core::schema::{Outcome, Trigger};
 use moneyball_core::{runs, secrets, AppConfig};
 use serde::Serialize;
 use tauri::ipc::Channel;
 use tauri::State;
 
 use crate::error::AppError;
-use crate::refresh_end::{finished, Finished};
+use crate::refresh_end::{finished, recorded_ms, Finished};
 use crate::run_view::{all_waiting, done, run_view, running, StepView};
 use crate::state::{lock, AppState};
 
 const DIED: &str =
     "The refresh stopped unexpectedly. Its run record keeps the steps that finished.";
 
-/// The refresh in flight, or the last one this app ran.
+/// The longest window a snapshot can answer for: a refresh pulls this
+/// many trailing days, so a funnel or a report asking for more would
+/// come up short without saying so.
+pub const SNAPSHOT_DAYS: u32 = 28;
+
+/// The refresh in flight. Read only while `running`: once a run is
+/// over, its record on disk is the truth.
 #[derive(Default)]
 pub struct RefreshRun {
     pub running: bool,
@@ -33,12 +41,15 @@ pub struct RefreshRun {
     cancel: Option<Arc<AtomicBool>>,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Default, Serialize)]
 pub struct RefreshState {
     pub running: bool,
     pub day: String,
     pub steps: Vec<StepView>,
     pub started_ms_ago: Option<u64>,
+    /// The last run as its `finished` event gave it; None while one
+    /// runs, before any run, and for a run that never finished.
+    pub finished: Option<Finished>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -80,28 +91,42 @@ impl RefreshRun {
     }
 }
 
-/// The refresh as the screen shows it on mount. Before any run in this
-/// launch that is the workspace's last recorded run (the terminal or the
-/// schedule may have made it), or nothing at all.
-pub fn state_view(run: &RefreshRun, last: Option<&RunRecord>) -> RefreshState {
-    if run.steps.is_empty() {
-        let last = last.map(run_view);
-        return RefreshState {
-            running: false,
-            day: last.as_ref().map_or(String::new(), |r| r.day.clone()),
-            steps: last.map_or(Vec::new(), |r| r.steps),
-            started_ms_ago: None,
-        };
-    }
-    RefreshState {
-        running: run.running,
+/// The run in flight as a reload reads it; None when none is running.
+fn in_flight(run: &RefreshRun) -> Option<RefreshState> {
+    run.running.then(|| RefreshState {
+        running: true,
         day: run.day.clone(),
         steps: run.steps.clone(),
-        started_ms_ago: run
-            .started
-            .filter(|_| run.running)
-            .map(|t| t.elapsed().as_millis() as u64),
+        started_ms_ago: run.started.map(|t| t.elapsed().as_millis() as u64),
+        finished: None,
+    })
+}
+
+/// The workspace's last recorded run, whoever made it (this app, the
+/// terminal, the schedule), in full: built through `finished`, the code
+/// behind the live event. A record still marked running is a run in
+/// flight elsewhere or one that died: its steps, and no verdict.
+fn recorded(cfg: &AppConfig) -> Option<RefreshState> {
+    let run = runs::latest(cfg)?;
+    let view = run_view(&run);
+    let over = run.outcome != Outcome::Running;
+    Some(RefreshState {
+        running: false,
+        day: view.day,
+        steps: view.steps,
+        started_ms_ago: None,
+        finished: over.then(|| finished(&run, recorded_ms(&run), last_good(cfg).as_deref())),
+    })
+}
+
+/// The refresh as the screen shows it on mount, on focus and after a
+/// reload: the run in flight while there is one, else the open
+/// workspace's last recorded run, else nothing.
+pub fn state_view(run: &Mutex<RefreshRun>, cfg: Option<&AppConfig>) -> RefreshState {
+    if let Some(live) = in_flight(&lock(run)) {
+        return live;
     }
+    cfg.and_then(recorded).unwrap_or_default()
 }
 
 fn set_step(run: &Mutex<RefreshRun>, step: &StepView) {
@@ -138,14 +163,9 @@ pub fn forward(
                 RefreshEvent::Done { step }
             }
             Ev::Finished { run, ms } => {
-                let day = {
-                    let mut state = lock(shared);
-                    state.steps = run_view(&run).steps;
-                    state.running = false;
-                    state.day.clone()
-                };
+                over();
                 ended = true;
-                RefreshEvent::Finished(Box::new(finished(&run, ms, last_good.as_deref(), &day)))
+                RefreshEvent::Finished(Box::new(finished(&run, ms, last_good.as_deref())))
             }
             Ev::CouldNotStart { error } => {
                 over();
@@ -165,7 +185,8 @@ pub fn forward(
     }
 }
 
-/// The data day on screen before a run ("27 Sep"), kept when it fails.
+/// The data day of the newest snapshot ("27 Sep"): what is on screen
+/// before a run, and still is after one that failed.
 fn last_good(cfg: &AppConfig) -> Option<String> {
     let snap = cfg.snap_for(None).ok()?;
     let date = chrono::NaiveDate::parse_from_str(snap.file_name()?.to_str()?, "%Y-%m-%d").ok()?;
@@ -191,7 +212,7 @@ pub fn start(
     let opts = Options {
         trigger: Trigger::Manual,
         force,
-        days: 28,
+        days: SNAPSHOT_DAYS,
         cancel: Some(cancel),
     };
     // The token is read here, at the edge, and goes to core only.
@@ -226,8 +247,7 @@ pub fn refresh_cancel(state: State<'_, AppState>) {
 
 #[tauri::command]
 pub fn refresh_state(state: State<'_, AppState>) -> RefreshState {
-    let last = state.workspace().ok().and_then(|cfg| runs::latest(&cfg));
-    state_view(&lock(&state.refresh), last.as_ref())
+    state_view(&state.refresh, state.workspace().ok().as_ref())
 }
 
 #[cfg(test)]

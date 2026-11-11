@@ -115,7 +115,7 @@ fn every_other_command_is_a_shell_command_to_paste() {
         terminal_of(&act("/setup meta")),
         Some((
             "moneyball",
-            "then type /setup meta there - paste a fresh Meta token; products and settings stay"
+            "then open its Meta setup - paste a fresh Meta token; products and settings stay"
         ))
     );
     assert_eq!(
@@ -139,13 +139,26 @@ fn every_other_command_is_a_shell_command_to_paste() {
 }
 
 #[test]
-fn no_slash_command_reaches_the_command_line_and_json_is_tagged_by_kind() {
-    for c in CORE_COMMANDS {
+fn no_slash_command_reaches_the_screen_and_json_is_tagged_by_kind() {
+    assert_eq!(
+        terminal_of(&act("/setup")),
+        Some(("moneyball", "then open its setup"))
+    );
+    assert_eq!(
+        terminal_of(&translate(&Command::new("/no-such-command now", "does it"))),
+        Some(("moneyball", "does it"))
+    );
+    for c in CORE_COMMANDS.iter().chain(SAID_ONLY) {
         let action = act(c);
         if let Some((command, _)) = terminal_of(&action) {
             assert!(!command.contains('/'), "{} -> {}", c, command);
             assert!(command.starts_with(CLI), "{} -> {}", c, command);
         }
+        // Neither the label nor what it does names one: all of it is shown.
+        let (Action::Refresh { does, .. }
+        | Action::Report { does, .. }
+        | Action::Terminal { does, .. }) = &action;
+        assert_eq!(slash_command(does), None, "{} -> {}", c, does);
         let json = serde_json::to_value(&action).unwrap();
         let kind = json["kind"].as_str().unwrap();
         assert!(
