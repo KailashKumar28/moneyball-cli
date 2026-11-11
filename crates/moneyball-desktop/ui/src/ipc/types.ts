@@ -5,7 +5,7 @@
 export type Tint = "plain" | "good" | "warn" | "bad";
 
 export type Action =
-  | { kind: "refresh"; label: string; does: string }
+  | { kind: "refresh"; label: string; does: string; force: boolean }
   | { kind: "report"; label: string; does: string }
   | { kind: "terminal"; command: string; does: string };
 

@@ -75,13 +75,17 @@ function Shell({ workspace, onPick }: { workspace: Workspace; onPick: () => void
   }, [reload]);
 
   const { start } = refresh;
-  const startRefresh = useCallback(() => {
-    start();
-    setScreen("refresh");
-  }, [start]);
+  // Also a click handler, so anything but a literal true means "not forced".
+  const startRefresh = useCallback(
+    (force?: unknown) => {
+      start(force === true);
+      setScreen("refresh");
+    },
+    [start],
+  );
   const onAction = useCallback(
     (a: Action) => {
-      if (a.kind === "refresh") startRefresh();
+      if (a.kind === "refresh") startRefresh(a.force);
       if (a.kind === "report") {
         setScreen("report");
         report.current?.generate();

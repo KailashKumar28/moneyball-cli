@@ -28,7 +28,7 @@ const noData: Today = {
   health_label: "No data",
   footer: ["Nothing pulled yet", ""],
   headline: { tint: "warn", text: "No data yet.", rest: "This workspace has no snapshot." },
-  fixes: [{ kind: "refresh", label: "Refresh", does: "pulls Meta, the CRM and writes the first report" }],
+  fixes: [{ kind: "refresh", label: "Refresh", does: "pulls Meta, the CRM and writes the first report", force: false }],
   day: null,
   last_run: null,
 };
