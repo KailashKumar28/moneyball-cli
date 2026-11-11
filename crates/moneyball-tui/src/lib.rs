@@ -26,7 +26,6 @@ mod setup;
 mod status_view;
 mod stream_drain;
 pub mod widgets;
-pub(crate) use app::snapshot_load;
 pub(crate) use app::View;
 pub use app::{App, StreamEvent};
 use event::event_loop;

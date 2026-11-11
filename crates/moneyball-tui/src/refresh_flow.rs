@@ -12,16 +12,8 @@ use crate::chat::Cell;
 use crate::refresh_cell::{End, RefreshCell, Row};
 use crate::widgets::day_numbers;
 use crate::*;
-use moneyball_core::refresh::{self, Options, Progress};
-use moneyball_core::schema::{RunRecord, RunStep, Trigger};
-
-/// What the worker tells the event loop.
-pub enum Ev {
-    Begin(&'static str),
-    Done(Box<RunStep>),
-    Finished { run: Box<RunRecord>, ms: u64 },
-    CouldNotStart { err: String },
-}
+use moneyball_core::refresh::{self, Ev, Options};
+use moneyball_core::schema::{RunRecord, Trigger};
 
 /// A refresh in flight: its events, its cancel flag, and whether the
 /// brief runs once it lands (/brief's self-heal).
@@ -55,34 +47,15 @@ pub(crate) fn run_refresh(app: &mut App, force: bool, then_brief: bool) {
         short,
         app.schedule.is_none(),
     ))));
-    let (tx, rx) = std::sync::mpsc::channel::<Ev>();
-    let cancel = Arc::new(AtomicBool::new(false));
-    let cfg = app.cfg.clone();
     let opts = Options {
         trigger: Trigger::Manual,
         force,
         days: 28,
-        cancel: Some(cancel.clone()),
+        cancel: None,
     };
-    std::thread::spawn(move || {
-        let started = std::time::Instant::now();
-        // The token is resolved at the edge (core never reads it itself).
-        let token = moneyball_core::secrets::load_meta_token();
-        let step_tx = tx.clone();
-        let result = refresh::run(&cfg, token.as_deref(), &opts, &mut |p| {
-            let _ = step_tx.send(match p {
-                Progress::Begin(name) => Ev::Begin(name),
-                Progress::Done(step) => Ev::Done(Box::new(step.clone())),
-            });
-        });
-        let _ = tx.send(match result {
-            Ok(run) => Ev::Finished {
-                run: Box::new(run),
-                ms: started.elapsed().as_millis() as u64,
-            },
-            Err(e) => Ev::CouldNotStart { err: e.reason() },
-        });
-    });
+    // The token is resolved at the edge (core never reads it itself).
+    let token = moneyball_core::secrets::load_meta_token();
+    let (rx, cancel) = refresh::spawn(app.cfg.clone(), token, opts);
     app.refresh = Some(RefreshJob {
         rx,
         cancel,
@@ -110,7 +83,7 @@ pub(crate) fn drain(app: &mut App) {
             None => return,
         };
         match ev {
-            Ok(Ev::Begin(name)) => {
+            Ok(Ev::Begin { step: name }) => {
                 if let Some(job) = &mut app.refresh {
                     job.step = refresh::STEPS
                         .iter()
@@ -127,9 +100,9 @@ pub(crate) fn drain(app: &mut App) {
                 let then_brief = app.refresh.take().is_some_and(|j| j.then_brief);
                 return finished(app, *run, ms, then_brief);
             }
-            Ok(Ev::CouldNotStart { err }) => {
+            Ok(Ev::CouldNotStart { error }) => {
                 app.refresh = None;
-                return with_cell(app, |c| c.end = Some(End::CouldNotStart(err)));
+                return with_cell(app, |c| c.end = Some(End::CouldNotStart(error)));
             }
             Err(TryRecvError::Empty) => return,
             Err(TryRecvError::Disconnected) => {

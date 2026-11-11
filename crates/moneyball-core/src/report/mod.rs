@@ -215,6 +215,7 @@ pub fn build(
 }
 
 /// A generated report on disk - what both the CLI and the TUI surface.
+#[derive(serde::Serialize)]
 pub struct ReportOutput {
     pub report: CreativeReport,
     pub json_path: std::path::PathBuf,

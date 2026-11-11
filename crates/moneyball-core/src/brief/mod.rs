@@ -6,8 +6,11 @@
 //! Presentation (table + stdout print) lives in print.rs.
 
 pub mod history;
+mod load;
 pub mod print;
+mod wire;
 pub use history::load_history;
+pub use load::{load, Loaded};
 pub use print::{cpl_order, format_brief_table, print_brief};
 
 use std::collections::HashMap;

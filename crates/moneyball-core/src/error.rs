@@ -90,3 +90,44 @@ impl Error {
         }
     }
 }
+
+/// An error as a front-end receives it: exactly `kind`, `reason` and
+/// `fix` (null when no command fixes it), so `Result<T, Error>` can be a
+/// command's return type as is. Never the Debug form or a source chain.
+impl serde::Serialize for Error {
+    fn serialize<S: serde::Serializer>(&self, s: S) -> std::result::Result<S::Ok, S::Error> {
+        use serde::ser::SerializeStruct;
+        let mut view = s.serialize_struct("Error", 3)?;
+        view.serialize_field("kind", self.kind())?;
+        view.serialize_field("reason", &self.reason())?;
+        view.serialize_field("fix", &self.fix())?;
+        view.end()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn serializes_as_kind_reason_fix_and_nothing_else() {
+        let auth = serde_json::to_value(Error::CrmAuth {
+            message: "the CRM said 401".into(),
+            fix: "moneyball crm secret lz".into(),
+        })
+        .unwrap();
+        assert_eq!(
+            auth,
+            serde_json::json!({
+                "kind": "crm_auth",
+                "reason": "the CRM said 401",
+                "fix": "moneyball crm secret lz",
+            })
+        );
+        let plain = serde_json::to_value(Error::Config("bad date".into())).unwrap();
+        assert_eq!(
+            plain,
+            serde_json::json!({"kind": "config", "reason": "bad date", "fix": null})
+        );
+    }
+}

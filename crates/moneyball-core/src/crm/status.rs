@@ -14,7 +14,8 @@ use crate::snapshot::Snapshot;
 /// Where a snapshot's CRM data stands: one type and one sentence for every
 /// surface (brief, the agent's tools, the TUI, /crm), so "connect a CRM"
 /// is never said to a user whose CRM is connected but not fetched.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
+#[serde(tag = "kind", rename_all = "snake_case")]
 pub enum CrmHealth {
     /// No crm.toml: the CRM was never connected.
     NoSpec,
