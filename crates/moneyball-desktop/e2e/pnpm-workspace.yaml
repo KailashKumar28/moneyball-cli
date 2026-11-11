@@ -1,0 +1,7 @@
+# Install scripts nothing here needs: esbuild arrives through
+# @wdio/tauri-plugin, the two browser drivers through webdriverio (the app
+# carries its own WebDriver server).
+allowBuilds:
+  edgedriver: false
+  esbuild: false
+  geckodriver: false

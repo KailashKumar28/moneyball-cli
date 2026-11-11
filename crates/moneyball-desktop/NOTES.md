@@ -16,6 +16,7 @@ dependency of `ui/` (`pnpm add -D @tauri-apps/cli@^2`).
 | Release bundle (`.app` and `.dmg`) | `./ui/node_modules/.bin/tauri build --bundles app,dmg` (signed release: `scripts/release-desktop.sh`) |
 | Rust only | `cargo build -p moneyball-desktop` |
 | Tests | `cargo test -p moneyball-desktop` |
+| End to end, the real app (`e2e/README.md`) | `node e2e/run.mjs` |
 | Regenerate the IPC fixtures | `MB_UPDATE_FIXTURES=1 cargo test -p moneyball-desktop fixtures` |
 | Regenerate the icon set | `python3 icons/make_icon.py` |
 
@@ -27,9 +28,13 @@ dependency of `ui/` (`pnpm add -D @tauri-apps/cli@^2`).
   `ui/dist` and `gen/schemas` are ignored by this crate's `.gitignore`.
 - A plain `cargo build` binary loads `devUrl` (localhost:5173), not the
   embedded page. Only `tauri build` produces an app that serves `ui/dist`.
-- Checked by hand: the debug binary starts and stays up, and a second
-  launch exits at once (single instance). Nothing else was driven end to
-  end, because there is no UI on this branch.
+- `devUrl` and `devCsp` name port 1420, the one `ui/vite.config.ts` pins
+  (they said 5173, which nothing listens on). Changed by reading; `tauri
+  dev` itself has not been run.
+- The real app is driven end to end by `e2e/` (WebdriverIO over a
+  WebDriver server compiled in by the `e2e` cargo feature only). A normal
+  build has neither the feature, the plugins, `withGlobalTauri` nor any
+  extra permission: all of that lives in `e2e/tauri.e2e.conf.json`.
 
 ## Layout
 
@@ -95,8 +100,9 @@ Safety.
 - CSP is the research doc's, `connect-src ipc: http://ipc.localhost` only.
   `dangerousDisableAssetCspModification: ["style-src"]` is set so Tauri
   adds no style nonce: a nonce would switch off `'unsafe-inline'` and blank
-  the report's inline `<style>` in the `srcdoc` iframe. `devCsp` adds the
-  vite origin and inline scripts; untested until the UI runs under it.
+  the report's inline `<style>` in the `srcdoc` iframe. Checked in the
+  real WKWebView by `e2e/` (the report renders styled under this CSP).
+  `devCsp` adds the vite origin and inline scripts; untested.
 
 ## Contract changes
 

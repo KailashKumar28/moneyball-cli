@@ -14,6 +14,11 @@ name = "moneyball_desktop"
 name = "moneyball-desktop"
 path = "src/main.rs"
 
+[features]
+# Test only: the WebdriverIO plugins that let e2e/ drive the real app over
+# a loopback WebDriver port. Never on in a normal build (e2e/README.md).
+e2e = ["dep:tauri-plugin-wdio", "dep:tauri-plugin-wdio-webdriver"]
+
 [build-dependencies]
 tauri-build.workspace = true
 
@@ -27,6 +32,8 @@ serde.workspace = true
 serde_json.workspace = true
 chrono.workspace = true
 thiserror.workspace = true
+tauri-plugin-wdio = { version = "1.5", optional = true }
+tauri-plugin-wdio-webdriver = { version = "1.5", optional = true }
 
 [lints]
 workspace = true
