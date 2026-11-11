@@ -46,10 +46,10 @@ button,select,textarea{font:inherit;color:inherit}
 .navb kbd{font:11px var(--sans);color:var(--faint)}
 .navb[aria-current=page]{background:var(--sel);font-weight:600}
 .side .grow{flex:1}
-.health{display:grid;grid-template-columns:14px 1fr;column-gap:6px;align-items:baseline;width:100%;text-align:left;background:none;border:0;border-top:1px solid var(--rule);padding:10px 10px 8px;cursor:pointer;border-radius:0 0 var(--r-ctl) var(--r-ctl)}
+.health{display:grid;grid-template-columns:14px minmax(0,1fr);column-gap:6px;align-items:baseline;width:100%;text-align:left;background:none;border:0;border-top:1px solid var(--rule);padding:10px 10px 8px;cursor:pointer;border-radius:0 0 var(--r-ctl) var(--r-ctl)}
 .health[aria-current=page]{background:var(--sel)}
 .health b{font-weight:600;white-space:nowrap}
-.health span{grid-column:2;font-size:11px;color:var(--faint);white-space:nowrap}
+.health span{grid-column:2;font-size:11px;color:var(--faint);overflow-wrap:anywhere}
 
 /* main pane */
 main{min-width:0;min-height:0;display:flex;flex-direction:column}

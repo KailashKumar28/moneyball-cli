@@ -141,7 +141,7 @@ fn footer(h: &Health) -> [String; 2] {
         return ["No data yet".into(), String::new()];
     };
     let data = if age >= STALE_DAYS && h.state != Fresh::Pinned {
-        format!("Data {}, pulled {} days ago", day.format("%d %b"), age)
+        format!("Data {}, {} days old", day.format("%d %b"), age)
     } else {
         format!("Data {}", day.format(DAY))
     };

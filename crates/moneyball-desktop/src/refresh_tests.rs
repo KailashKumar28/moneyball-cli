@@ -68,7 +68,7 @@ fn steps_update_the_state_and_a_finished_run_ends_it() {
     assert_eq!(end["fixes"][0]["kind"], "terminal");
     assert_eq!(end["rerun"]["kind"], "refresh");
     assert!(end["numbers"].is_null() && end["report_path"].is_null());
-    let state = state_view(&lock(&shared));
+    let state = state_view(&lock(&shared), None);
     assert!(!state.running && state.started_ms_ago.is_none());
     assert_eq!(state.steps[0].status, StepState::Failed);
     assert_eq!(state.steps[1].status, StepState::Waiting);
@@ -95,12 +95,12 @@ fn a_worker_that_dies_says_so_and_frees_the_state() {
 }
 
 #[test]
-fn a_second_refresh_is_refused_while_one_runs_and_idle_state_waits() {
+fn a_second_refresh_is_refused_while_one_runs_and_idle_state_is_empty() {
     let shared = Arc::new(in_flight());
     let cfg = AppConfig::resolve_optional(Some("/nonexistent/mb-desktop-refresh"), None);
     let err = start(cfg, shared, false, |_| true).unwrap_err();
     assert_eq!(err.kind, "busy");
-    let idle = state_view(&RefreshRun::default());
-    assert!(!idle.running && !idle.day.is_empty());
-    assert!(idle.steps.iter().all(|s| s.status == StepState::Waiting));
+    // Before any run in this launch: nothing, or the last recorded run.
+    let idle = state_view(&RefreshRun::default(), None);
+    assert!(!idle.running && idle.day.is_empty() && idle.steps.is_empty());
 }

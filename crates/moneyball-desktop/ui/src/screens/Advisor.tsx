@@ -72,9 +72,11 @@ export function Advisor({ hidden, newSession, onAction }: Props) {
   }, [polling, show, reloadSessions]);
 
   const swap = useCallback(
-    (to: Promise<SessionSnapshot>) => {
+    (to: Promise<SessionSnapshot>, fresh = false) => {
       to.then(
         (s) => {
+          // A new session starts with an empty composer; a reopened one keeps the draft.
+          if (fresh) setText("");
           show(s);
           reloadSessions();
           input.current?.focus();
@@ -85,7 +87,7 @@ export function Advisor({ hidden, newSession, onAction }: Props) {
     [show, reloadSessions],
   );
   useEffect(() => {
-    if (newSession > 0) swap(sessionNew());
+    if (newSession > 0) swap(sessionNew(), true);
   }, [newSession, swap]);
 
   const onEvent = useCallback(
@@ -218,7 +220,10 @@ export function Advisor({ hidden, newSession, onAction }: Props) {
         <h1>Advisor</h1>
         <span className="sub">Reads your data. Never changes your ads or your CRM.</span>
         <div className="tools">
-          <button className="btn" onClick={() => swap(sessionNew())}>
+          <button
+            className="btn"
+            onClick={() => swap(sessionNew(), true)}
+          >
             New Session <kbd>{"⌘"}N</kbd>
           </button>
         </div>

@@ -47,7 +47,7 @@ fn refresh_run(events: Vec<RefreshEv>) -> (Vec<RefreshEvent>, Vec<Value>, Value)
     let shared = Mutex::new(RefreshRun::begin(Arc::default()));
     let clock = [("/day", json!("Thu 08 Oct"))];
     let state = |ms: Value| {
-        let mut v = pinned(state_view(&lock(&shared)), &clock);
+        let mut v = pinned(state_view(&lock(&shared), None), &clock);
         if !v["started_ms_ago"].is_null() {
             v["started_ms_ago"] = ms;
         }

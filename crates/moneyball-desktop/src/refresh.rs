@@ -8,8 +8,8 @@ use std::sync::{Arc, Mutex};
 use std::time::Instant;
 
 use moneyball_core::refresh::{self, Ev, Options, STEPS};
-use moneyball_core::schema::Trigger;
-use moneyball_core::{secrets, AppConfig};
+use moneyball_core::schema::{RunRecord, Trigger};
+use moneyball_core::{runs, secrets, AppConfig};
 use serde::Serialize;
 use tauri::ipc::Channel;
 use tauri::State;
@@ -80,16 +80,23 @@ impl RefreshRun {
     }
 }
 
-pub fn state_view(run: &RefreshRun) -> RefreshState {
-    let fresh = run.steps.is_empty();
+/// The refresh as the screen shows it on mount. Before any run in this
+/// launch that is the workspace's last recorded run (the terminal or the
+/// schedule may have made it), or nothing at all.
+pub fn state_view(run: &RefreshRun, last: Option<&RunRecord>) -> RefreshState {
+    if run.steps.is_empty() {
+        let last = last.map(run_view);
+        return RefreshState {
+            running: false,
+            day: last.as_ref().map_or(String::new(), |r| r.day.clone()),
+            steps: last.map_or(Vec::new(), |r| r.steps),
+            started_ms_ago: None,
+        };
+    }
     RefreshState {
         running: run.running,
-        day: if fresh { day_label() } else { run.day.clone() },
-        steps: if fresh {
-            all_waiting()
-        } else {
-            run.steps.clone()
-        },
+        day: run.day.clone(),
+        steps: run.steps.clone(),
         started_ms_ago: run
             .started
             .filter(|_| run.running)
@@ -219,7 +226,8 @@ pub fn refresh_cancel(state: State<'_, AppState>) {
 
 #[tauri::command]
 pub fn refresh_state(state: State<'_, AppState>) -> RefreshState {
-    state_view(&lock(&state.refresh))
+    let last = state.workspace().ok().and_then(|cfg| runs::latest(&cfg));
+    state_view(&lock(&state.refresh), last.as_ref())
 }
 
 #[cfg(test)]

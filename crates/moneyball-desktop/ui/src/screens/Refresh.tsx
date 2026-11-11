@@ -7,7 +7,15 @@ type Props = { hidden: boolean; refresh: Refresh; onAction: OnAction; go: (s: Sc
 export function RefreshScreen({ hidden, refresh: r, onAction, go }: Props) {
   const now = useNow(r.running);
   const f = r.running ? null : r.finished;
-  const title = r.running ? `Refreshing ${r.day}` : f ? `Refreshed ${f.run.day}` : r.day;
+  const title = r.running
+    ? `Refreshing ${r.day}`
+    : f
+      ? f.run.outcome === "failed"
+        ? "Refresh failed"
+        : `Refreshed ${f.run.day}`
+      : r.steps.length > 0
+        ? `Last refresh, ${r.day}`
+        : "";
   const aside = r.running
     ? r.startedAt !== null && `${clock(now - r.startedAt)} so far`
     : f && [f.time, f.run.gaps].filter(Boolean).join(", ");
