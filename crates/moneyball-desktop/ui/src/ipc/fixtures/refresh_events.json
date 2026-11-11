@@ -1,0 +1,191 @@
+[
+  {
+    "type": "begin",
+    "step": {
+      "name": "meta",
+      "label": "Meta insights",
+      "status": "running",
+      "word": "running",
+      "detail": "",
+      "time": null,
+      "reused": false,
+      "fix": null
+    }
+  },
+  {
+    "type": "done",
+    "step": {
+      "name": "meta",
+      "label": "Meta insights",
+      "status": "done",
+      "word": "done",
+      "detail": "5 products, 1,104 rows",
+      "time": "18.2s",
+      "reused": false,
+      "fix": null
+    }
+  },
+  {
+    "type": "begin",
+    "step": {
+      "name": "assets",
+      "label": "creatives and leads",
+      "status": "running",
+      "word": "running",
+      "detail": "",
+      "time": null,
+      "reused": false,
+      "fix": null
+    }
+  },
+  {
+    "type": "done",
+    "step": {
+      "name": "assets",
+      "label": "creatives and leads",
+      "status": "done",
+      "word": "done",
+      "detail": "64 creatives, 1,812 leads",
+      "time": "21.0s",
+      "reused": false,
+      "fix": null
+    }
+  },
+  {
+    "type": "begin",
+    "step": {
+      "name": "crm",
+      "label": "CRM",
+      "status": "running",
+      "word": "running",
+      "detail": "",
+      "time": null,
+      "reused": false,
+      "fix": null
+    }
+  },
+  {
+    "type": "done",
+    "step": {
+      "name": "crm",
+      "label": "CRM",
+      "status": "done",
+      "word": "done",
+      "detail": "655 tickets, 12 pages",
+      "time": "41.6s",
+      "reused": false,
+      "fix": null
+    }
+  },
+  {
+    "type": "begin",
+    "step": {
+      "name": "report",
+      "label": "daily report",
+      "status": "running",
+      "word": "running",
+      "detail": "",
+      "time": null,
+      "reused": false,
+      "fix": null
+    }
+  },
+  {
+    "type": "done",
+    "step": {
+      "name": "report",
+      "label": "daily report",
+      "status": "done",
+      "word": "done",
+      "detail": "64 creatives",
+      "time": "0.7s",
+      "reused": false,
+      "fix": null
+    }
+  },
+  {
+    "type": "finished",
+    "run": {
+      "date": "2026-10-08",
+      "day": "Thu 08 Oct",
+      "trigger": "manual",
+      "outcome": "ok",
+      "gaps": "",
+      "steps": [
+        {
+          "name": "meta",
+          "label": "Meta insights",
+          "status": "done",
+          "word": "done",
+          "detail": "5 products, 1,104 rows",
+          "time": "18.2s",
+          "reused": false,
+          "fix": null
+        },
+        {
+          "name": "assets",
+          "label": "creatives and leads",
+          "status": "done",
+          "word": "done",
+          "detail": "64 creatives, 1,812 leads",
+          "time": "21.0s",
+          "reused": false,
+          "fix": null
+        },
+        {
+          "name": "crm",
+          "label": "CRM",
+          "status": "done",
+          "word": "done",
+          "detail": "655 tickets, 12 pages",
+          "time": "41.6s",
+          "reused": false,
+          "fix": null
+        },
+        {
+          "name": "report",
+          "label": "daily report",
+          "status": "done",
+          "word": "done",
+          "detail": "64 creatives",
+          "time": "0.7s",
+          "reused": false,
+          "fix": null
+        }
+      ]
+    },
+    "time": "finished 07:32 in 1m 21s",
+    "verdict": null,
+    "fixes": [],
+    "rerun": null,
+    "numbers": [
+      {
+        "label": "Spend",
+        "value": "₹98,412",
+        "source": "meta"
+      },
+      {
+        "label": "Meta leads",
+        "value": "47",
+        "source": "meta"
+      },
+      {
+        "label": "CRM leads",
+        "value": "44",
+        "source": "crm"
+      },
+      {
+        "label": "Qualified",
+        "value": "9",
+        "source": "crm"
+      },
+      {
+        "label": "Per qualified",
+        "value": "₹10,935",
+        "source": "crm"
+      }
+    ],
+    "numbers_note": null,
+    "report_path": "/Users/me/DEV/moneyball-test/.moneyball/reports/2026-10-08/Fincity-Daily-08-Oct-2026.html"
+  }
+]

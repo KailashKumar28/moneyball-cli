@@ -1,0 +1,89 @@
+{
+  "type": "finished",
+  "run": {
+    "date": "2026-10-08",
+    "day": "Thu 08 Oct",
+    "trigger": "manual",
+    "outcome": "degraded",
+    "gaps": "finished without CRM",
+    "steps": [
+      {
+        "name": "meta",
+        "label": "Meta insights",
+        "status": "done",
+        "word": "done",
+        "detail": "5 products, 1,104 rows",
+        "time": "1.1s",
+        "reused": true,
+        "fix": null
+      },
+      {
+        "name": "assets",
+        "label": "creatives and leads",
+        "status": "done",
+        "word": "done",
+        "detail": "64 creatives, 1,812 leads",
+        "time": "0.6s",
+        "reused": true,
+        "fix": null
+      },
+      {
+        "name": "crm",
+        "label": "CRM",
+        "status": "failed",
+        "word": "failed",
+        "detail": "CRM refused the stored token (HTTP 401); last good pull 11 Aug",
+        "time": "0.2s",
+        "reused": false,
+        "fix": {
+          "kind": "terminal",
+          "command": "moneyball crm secret leadzump_token",
+          "does": "asks for the new token"
+        }
+      },
+      {
+        "name": "report",
+        "label": "daily report",
+        "status": "partial",
+        "word": "no CRM",
+        "detail": "CRM columns and verdicts hidden, not zero",
+        "time": "0.1s",
+        "reused": false,
+        "fix": null
+      }
+    ]
+  },
+  "time": "finished 16:19 in 2.0s",
+  "verdict": {
+    "tint": "warn",
+    "headline": "Thu 08 Oct has no CRM data.",
+    "rest": "CRM refused the stored token (HTTP 401); it has likely expired.",
+    "next": null
+  },
+  "fixes": [
+    {
+      "kind": "terminal",
+      "command": "moneyball crm secret leadzump_token",
+      "does": "asks for the new token"
+    }
+  ],
+  "rerun": {
+    "kind": "refresh",
+    "label": "Refresh",
+    "does": "reuses today's Meta pull: only CRM and the report run again"
+  },
+  "numbers": [
+    {
+      "label": "Spend",
+      "value": "₹98,412",
+      "source": "meta"
+    },
+    {
+      "label": "Meta leads",
+      "value": "47",
+      "source": "meta"
+    }
+  ],
+  "numbers_note": "No CRM in this report",
+  "report_path": null
+}

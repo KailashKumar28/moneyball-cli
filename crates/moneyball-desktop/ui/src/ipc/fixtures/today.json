@@ -1,0 +1,182 @@
+{
+  "health": {
+    "today": "2026-10-09",
+    "snap_date": "2026-10-09",
+    "crm_snap_date": "2026-10-09",
+    "crm_connected": true,
+    "run": {
+      "schema": "moneyball.run/1",
+      "workspace_id": "ws_fincity",
+      "date": "2026-10-09",
+      "trigger": "schedule",
+      "started_at": "2026-10-09T07:30:00+05:30",
+      "finished_at": "2026-10-09T07:31:21+05:30",
+      "outcome": "ok",
+      "steps": [
+        {
+          "name": "meta",
+          "status": "done",
+          "ms": 18200,
+          "counts": {
+            "products": 5,
+            "rows": 1104
+          }
+        },
+        {
+          "name": "assets",
+          "status": "done",
+          "ms": 21000,
+          "counts": {
+            "creatives": 64,
+            "leads": 1812
+          }
+        },
+        {
+          "name": "crm",
+          "status": "done",
+          "ms": 41600,
+          "counts": {
+            "tickets": 655,
+            "pages": 12
+          }
+        },
+        {
+          "name": "report",
+          "status": "done",
+          "ms": 700,
+          "counts": {
+            "creatives": 64
+          }
+        }
+      ],
+      "artifacts": {}
+    },
+    "refreshed_at": "2026-10-09T07:31:21+05:30",
+    "failed_today": null,
+    "newest_snap_date": null,
+    "state": {
+      "kind": "fresh"
+    }
+  },
+  "health_label": "Fresh",
+  "footer": [
+    "Data Thu 08 Oct",
+    "CRM 08 Oct"
+  ],
+  "headline": null,
+  "details": [],
+  "fixes": [],
+  "next": null,
+  "day": {
+    "day": "Thu 08 Oct",
+    "refreshed": "07:30 this morning (scheduled, 1m 18s)",
+    "numbers": [
+      {
+        "label": "Spend",
+        "value": "₹98,412",
+        "source": "meta"
+      },
+      {
+        "label": "Meta leads",
+        "value": "47",
+        "source": "meta"
+      },
+      {
+        "label": "CRM leads",
+        "value": "44",
+        "source": "crm"
+      },
+      {
+        "label": "Qualified",
+        "value": "9",
+        "source": "crm"
+      },
+      {
+        "label": "Per qualified",
+        "value": "₹10,935",
+        "source": "crm"
+      }
+    ],
+    "numbers_note": null,
+    "versus": {
+      "day": "Wed 07 Oct",
+      "changes": [
+        {
+          "label": "Spend",
+          "text": "-₹2,856",
+          "tint": "plain"
+        },
+        {
+          "label": "Meta leads",
+          "text": "-4",
+          "tint": "plain"
+        },
+        {
+          "label": "CRM leads",
+          "text": "+2",
+          "tint": "good"
+        },
+        {
+          "label": "Qualified",
+          "text": "+2",
+          "tint": "good"
+        },
+        {
+          "label": "Per qualified",
+          "text": "-₹3,532",
+          "tint": "good"
+        }
+      ]
+    },
+    "report_missing": null
+  },
+  "last_run": {
+    "date": "2026-10-08",
+    "day": "Thu 08 Oct",
+    "trigger": "schedule",
+    "outcome": "ok",
+    "gaps": "",
+    "steps": [
+      {
+        "name": "meta",
+        "label": "Meta insights",
+        "status": "done",
+        "word": "done",
+        "detail": "5 products, 1,104 rows",
+        "time": "18.2s",
+        "reused": false,
+        "fix": null
+      },
+      {
+        "name": "assets",
+        "label": "creatives and leads",
+        "status": "done",
+        "word": "done",
+        "detail": "64 creatives, 1,812 leads",
+        "time": "21.0s",
+        "reused": false,
+        "fix": null
+      },
+      {
+        "name": "crm",
+        "label": "CRM",
+        "status": "done",
+        "word": "done",
+        "detail": "655 tickets, 12 pages",
+        "time": "41.6s",
+        "reused": false,
+        "fix": null
+      },
+      {
+        "name": "report",
+        "label": "daily report",
+        "status": "done",
+        "word": "done",
+        "detail": "64 creatives",
+        "time": "0.7s",
+        "reused": false,
+        "fix": null
+      }
+    ]
+  }
+}

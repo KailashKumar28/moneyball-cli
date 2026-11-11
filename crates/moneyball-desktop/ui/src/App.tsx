@@ -1,0 +1,177 @@
+import { useCallback, useEffect, useRef, useState } from "react";
+import { today, toAppError, workspaceCurrent, workspacePick, type Action, type AppError, type HealthState, type Workspace } from "./ipc";
+import { clock, Glyph, useAsync, useNow, type Async, type GlyphKind } from "./lib";
+import { Advisor } from "./screens/Advisor";
+import { BriefScreen } from "./screens/Brief";
+import { Empty } from "./screens/Empty";
+import { FunnelScreen } from "./screens/Funnel";
+import { RefreshScreen } from "./screens/Refresh";
+import { ReportScreen, type ReportHandle } from "./screens/Report";
+import { TodayScreen } from "./screens/Today";
+import type { Today } from "./ipc";
+import { useRefresh, type Refresh } from "./useRefresh";
+
+export type Screen = "today" | "brief" | "funnel" | "report" | "advisor" | "refresh";
+const NAV: [Screen, string][] = [
+  ["today", "Today"],
+  ["brief", "Brief"],
+  ["funnel", "Funnel"],
+  ["report", "Report"],
+  ["advisor", "Advisor"],
+];
+
+export function App() {
+  const current = useAsync(workspaceCurrent, []);
+  const [picked, setPicked] = useState<Workspace | null>(null);
+  const [pickError, setPickError] = useState<AppError | null>(null);
+  const workspace = picked ?? current.data ?? null;
+
+  const pick = useCallback(() => {
+    workspacePick().then(
+      (w) => {
+        setPickError(null);
+        if (w) setPicked(w);
+      },
+      (e: unknown) => setPickError(toAppError(e)),
+    );
+  }, []);
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.metaKey && !e.shiftKey && !e.altKey && e.key.toLowerCase() === "o") {
+        e.preventDefault();
+        pick();
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [pick]);
+
+  if (!workspace || pickError)
+    return (
+      <Empty
+        loading={current.loading}
+        error={pickError ?? current.error}
+        onPick={pick}
+        back={workspace && pickError ? { name: workspace.name, go: () => setPickError(null) } : null}
+      />
+    );
+  // A new workspace is a new app: every screen remounts and re-reads.
+  return <Shell key={workspace.path} workspace={workspace} onPick={pick} />;
+}
+
+function Shell({ workspace, onPick }: { workspace: Workspace; onPick: () => void }) {
+  const [screen, setScreen] = useState<Screen>("today");
+  const [version, setVersion] = useState(0); // bumps when the data on disk changed
+  const [newSession, setNewSession] = useState(0);
+  const report = useRef<ReportHandle>(null);
+  const td = useAsync(today, [version]);
+  const refresh = useRefresh(useCallback(() => setVersion((v) => v + 1), []));
+
+  const { reload } = td;
+  useEffect(() => {
+    window.addEventListener("focus", reload);
+    return () => window.removeEventListener("focus", reload);
+  }, [reload]);
+
+  const { start } = refresh;
+  const startRefresh = useCallback(() => {
+    start();
+    setScreen("refresh");
+  }, [start]);
+  const onAction = useCallback(
+    (a: Action) => {
+      if (a.kind === "refresh") startRefresh();
+      if (a.kind === "report") {
+        setScreen("report");
+        report.current?.generate();
+      }
+    },
+    [startRefresh],
+  );
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (!e.metaKey || e.shiftKey || e.altKey || e.ctrlKey) return;
+      const key = e.key.toLowerCase();
+      const nav = NAV[Number(key) - 1];
+      if (nav) setScreen(nav[0]);
+      else if (key === "n") {
+        setScreen("advisor");
+        setNewSession((n) => n + 1);
+      } else if (key === "r") startRefresh();
+      else return;
+      e.preventDefault();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [startRefresh]);
+
+  const shared = { onAction, version };
+  return (
+    <div className="frame">
+      <aside className="side">
+        <div className="dragzone" data-tauri-drag-region />
+        <button className="ws" title="Open another workspace" onClick={onPick}>
+          <b>{workspace.name}</b>
+          <span>{workspace.display_path}</span>
+        </button>
+        <nav className="nav" aria-label="Views">
+          {NAV.map(([id, label], i) => (
+            <button key={id} className="navb" aria-current={screen === id ? "page" : undefined} onClick={() => setScreen(id)}>
+              {label}
+              <kbd>{"⌘"}{i + 1}</kbd>
+            </button>
+          ))}
+        </nav>
+        <div className="grow" />
+        <HealthFooter today={td} refresh={refresh} current={screen === "refresh"} open={() => setScreen("refresh")} />
+      </aside>
+      <main>
+        <TodayScreen hidden={screen !== "today"} today={td} {...shared} onRefresh={startRefresh} go={setScreen} />
+        <BriefScreen hidden={screen !== "brief"} sub={td.data?.footer[0] ?? ""} {...shared} />
+        <FunnelScreen hidden={screen !== "funnel"} products={workspace.products} {...shared} go={setScreen} />
+        <ReportScreen hidden={screen !== "report"} handle={report} {...shared} />
+        <Advisor hidden={screen !== "advisor"} newSession={newSession} onAction={onAction} />
+        <RefreshScreen hidden={screen !== "refresh"} refresh={refresh} onAction={onAction} go={setScreen} />
+      </main>
+    </div>
+  );
+}
+
+const HEALTH_GLYPH: Record<HealthState["kind"], GlyphKind> = {
+  fresh: "dot",
+  crm_missing: "warn",
+  partial: "warn",
+  stale: "warn",
+  pinned: "warn",
+  no_data: "warn",
+  failed: "bad",
+};
+
+/** How fresh the data is, and the way into Refresh. Shows the step in flight on every screen. */
+function HealthFooter(props: { today: Async<Today>; refresh: Refresh; current: boolean; open: () => void }) {
+  const { refresh, today: td } = props;
+  const now = useNow(refresh.running);
+  const step = refresh.steps.find((s) => s.status === "running");
+  let glyph: GlyphKind = "idle";
+  let lines: [string, string, string] = ["", "", ""];
+  if (refresh.running) {
+    glyph = "run";
+    lines = ["Refreshing", step?.label ?? "", refresh.startedAt ? `${clock(now - refresh.startedAt)} so far` : ""];
+  } else if (td.data) {
+    glyph = HEALTH_GLYPH[td.data.health.state.kind] ?? "warn";
+    lines = [td.data.health_label, ...td.data.footer];
+  } else if (td.error) {
+    glyph = "bad";
+    lines = ["Unavailable", "", ""];
+  }
+  return (
+    <button className="health" aria-current={props.current ? "page" : undefined} onClick={props.open} title="Open Refresh">
+      <Glyph kind={glyph} />
+      <b className="cap1">{lines[0]}</b>
+      <span className="cap1">{lines[1]}</span>
+      <span>{lines[2]}</span>
+    </button>
+  );
+}

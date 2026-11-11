@@ -1,0 +1,79 @@
+[
+  {
+    "type": "item_done",
+    "item": {
+      "type": "user",
+      "text": "yes, start with Namma Mane. which ad sets?"
+    }
+  },
+  {
+    "type": "tool_begin",
+    "call_id": "c2",
+    "name": "funnel",
+    "args": {
+      "product": "Disha Namma Mane",
+      "by": "adset",
+      "days": 7
+    }
+  },
+  {
+    "type": "tool_end",
+    "call_id": "c2",
+    "output": "ad set  spend  meta  crm  qual  verdict\nLookalike  24,471  40  33  13  keep\n...",
+    "ok": true
+  },
+  {
+    "type": "item_done",
+    "item": {
+      "type": "tool_call",
+      "call_id": "c2",
+      "name": "funnel",
+      "args": {
+        "product": "Disha Namma Mane",
+        "by": "adset",
+        "days": 7
+      }
+    }
+  },
+  {
+    "type": "item_done",
+    "item": {
+      "type": "tool_output",
+      "call_id": "c2",
+      "output": "...",
+      "is_error": false
+    }
+  },
+  {
+    "type": "assistant_delta",
+    "text": "Feed **Lookalike**: 13 qualified at ₹1,882 each, and the cheapest Meta lead in the product at ₹612. **Pincode Ad** has s"
+  },
+  {
+    "type": "assistant_delta",
+    "text": "pent ₹50,237 for 1 qualified, which is past the kill line. NonAdvantage+ RK looks fine at ₹7,050 per qualified, but its leads are still inside the 72 hour"
+  },
+  {
+    "type": "assistant_delta",
+    "text": " window, so wait before judging it."
+  },
+  {
+    "type": "assistant_done",
+    "text": "Feed **Lookalike**: 13 qualified at ₹1,882 each, and the cheapest Meta lead in the product at ₹612. **Pincode Ad** has spent ₹50,237 for 1 qualified, which is past the kill line. NonAdvantage+ RK looks fine at ₹7,050 per qualified, but its leads are still inside the 72 hour window, so wait before judging it."
+  },
+  {
+    "type": "item_done",
+    "item": {
+      "type": "assistant",
+      "text": "Feed **Lookalike**: 13 qualified at ₹1,882 each, and the cheapest Meta lead in the product at ₹612. **Pincode Ad** has spent ₹50,237 for 1 qualified, which is past the kill line. NonAdvantage+ RK looks fine at ₹7,050 per qualified, but its leads are still inside the 72 hour window, so wait before judging it."
+    }
+  },
+  {
+    "type": "turn_complete",
+    "ms": 5210,
+    "provider": "anthropic",
+    "usage": {
+      "input": 8123,
+      "output": 214
+    }
+  }
+]
