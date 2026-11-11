@@ -26,7 +26,7 @@ use tauri::Manager;
 
 /// Build and run the app; returns when the last window closes.
 pub fn run() {
-    let app = tauri::Builder::default()
+    let builder = tauri::Builder::default()
         // First, as the plugin requires: a second launch focuses this
         // window instead of opening another writer of the same sessions.
         .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
@@ -36,7 +36,14 @@ pub fn run() {
             }
         }))
         .plugin(tauri_plugin_opener::init())
-        .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_dialog::init());
+    // Test only: the page-side helper and the WebDriver server the e2e
+    // harness drives the app through. Not compiled into a normal build.
+    #[cfg(feature = "e2e")]
+    let builder = builder
+        .plugin(tauri_plugin_wdio::init())
+        .plugin(tauri_plugin_wdio_webdriver::init());
+    let app = builder
         .manage(state::AppState::default())
         .invoke_handler(tauri::generate_handler![
             workspace::workspace_current,

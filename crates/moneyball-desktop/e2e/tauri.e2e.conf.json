@@ -1,0 +1,24 @@
+{
+  "identifier": "ai.moneyball.desktop.e2e",
+  "build": {
+    "frontendDist": "./e2e/dist",
+    "beforeBuildCommand": {
+      "script": "pnpm exec tsc --noEmit && pnpm exec vite build --config ../e2e/vite.config.mjs",
+      "cwd": "ui"
+    }
+  },
+  "app": {
+    "withGlobalTauri": true,
+    "security": {
+      "capabilities": [
+        "main",
+        {
+          "identifier": "e2e",
+          "description": "Test only, merged in by the e2e build: lets the WebdriverIO plugins answer the harness.",
+          "windows": ["main"],
+          "permissions": ["wdio:default", "wdio-webdriver:default"]
+        }
+      ]
+    }
+  }
+}

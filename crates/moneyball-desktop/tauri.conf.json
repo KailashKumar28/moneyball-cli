@@ -4,7 +4,7 @@
   "identifier": "ai.moneyball.desktop",
   "build": {
     "frontendDist": "./ui/dist",
-    "devUrl": "http://localhost:5173",
+    "devUrl": "http://localhost:1420",
     "beforeDevCommand": { "script": "pnpm dev", "cwd": "ui" },
     "beforeBuildCommand": { "script": "pnpm build", "cwd": "ui" }
   },
@@ -33,7 +33,7 @@
       },
       "devCsp": {
         "default-src": "'self'",
-        "connect-src": "ipc: http://ipc.localhost ws://localhost:5173 http://localhost:5173",
+        "connect-src": "ipc: http://ipc.localhost ws://localhost:1420 http://localhost:1420",
         "script-src": "'self' 'unsafe-inline'",
         "img-src": "'self' data:",
         "style-src": "'self' 'unsafe-inline'",
