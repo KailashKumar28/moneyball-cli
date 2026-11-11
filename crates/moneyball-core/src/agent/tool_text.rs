@@ -1,6 +1,7 @@
 //! What the brief, funnel and diagnose tools return to the model. A
 //! typed command hands the model the same text, so both paths read the
-//! same numbers.
+//! same numbers. `say` words the fixes in them the front-end's way
+//! (`FrontEnd::say`).
 
 use crate::brief::{self, ProductRow, ProductRowsAndFeasibility};
 use crate::config::AppConfig;
@@ -23,10 +24,14 @@ pub fn brief_text(b: &ProductRowsAndFeasibility, crm_note: Option<&str>) -> Stri
 }
 
 /// The brief tool's output for a snapshot.
-pub(super) fn brief_output(cfg: &AppConfig, snap: &Snapshot) -> String {
+pub(super) fn brief_output(
+    cfg: &AppConfig,
+    snap: &Snapshot,
+    say: &dyn Fn(&str) -> String,
+) -> String {
     let history = brief::load_history(&cfg.history_dir().join("scoreboard.csv"));
     let b = brief::compute(snap, cfg, &history);
-    let note = CrmHealth::of(cfg, snap).note();
+    let note = CrmHealth::of(cfg, snap).note_for(say);
     brief_text(&b, note.as_deref())
 }
 
@@ -134,13 +139,19 @@ fn cpl(r: &ProductRow) -> String {
 
 /// What the funnel tool returns: the full table the model reasons from
 /// (ids, kill multiple, maturity) and the pre-computed CPL order.
-pub fn funnel_output(cfg: &AppConfig, snap: &Snapshot, product: &str, by: By) -> String {
+pub fn funnel_output(
+    cfg: &AppConfig,
+    snap: &Snapshot,
+    product: &str,
+    by: By,
+    say: &dyn Fn(&str) -> String,
+) -> String {
     let rows = funnel::compute(snap, cfg, product, 7, by);
     let rank = funnel::cpl_ranking_for_model(&rows)
         .map(|r| format!("\n{}", r))
         .unwrap_or_default();
     let crm = CrmHealth::of(cfg, snap)
-        .note()
+        .note_for(say)
         .map(|n| format!("\nIMPORTANT: {}", n))
         .unwrap_or_default();
     format!(
@@ -156,9 +167,14 @@ pub fn funnel_output(cfg: &AppConfig, snap: &Snapshot, product: &str, by: By) ->
 
 /// What the diagnose tool returns: the four checks, and the CRM state
 /// the model must not read past.
-pub fn diagnose_output(cfg: &AppConfig, snap: &Snapshot, product: &str) -> String {
-    let mut out = crate::diagnose::text(&crate::diagnose::compute(snap, cfg, product));
-    if let Some(note) = CrmHealth::of(cfg, snap).note() {
+pub fn diagnose_output(
+    cfg: &AppConfig,
+    snap: &Snapshot,
+    product: &str,
+    say: &dyn Fn(&str) -> String,
+) -> String {
+    let mut out = crate::diagnose::text_for(&crate::diagnose::compute(snap, cfg, product), say);
+    if let Some(note) = CrmHealth::of(cfg, snap).note_for(say) {
         out.push_str(&format!("IMPORTANT: {}\n", note));
     }
     out

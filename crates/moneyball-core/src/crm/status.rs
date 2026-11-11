@@ -50,27 +50,37 @@ impl CrmHealth {
     }
 
     /// The one sentence for a state that isn't fresh; None when fresh.
+    /// In the TUI's and the shell's words (`note_for` for another's).
     pub fn note(&self) -> Option<String> {
+        self.note_for(&|fix| fix.to_string())
+    }
+
+    /// `note`, with every fix as the front-end says it. `say` gets a
+    /// slash command ("/refresh", "/connect crm") or a shell command and
+    /// returns how its user does that; one returned unchanged is typed
+    /// as is, so its shell form goes beside it.
+    pub fn note_for(&self, say: &dyn Fn(&str) -> String) -> Option<String> {
         const UNKNOWN: &str =
             "CRM leads and qualified are unknown, not zero, and verdicts are withheld";
+        let refresh = || fix_words(say, "/refresh", "moneyball refresh");
         match self {
             CrmHealth::Fresh => None,
             CrmHealth::NoSpec => Some(format!(
-                "no CRM connected - {}. Fix: /connect crm (moneyball connect crm in a shell)",
-                UNKNOWN
+                "no CRM connected - {}. Fix: {}",
+                UNKNOWN,
+                fix_words(say, "/connect crm", "moneyball connect crm")
             )),
             CrmHealth::NoData {
                 failed: Some((why, fix)),
                 ..
             } => {
                 let fix = match fix.as_deref() {
-                    Some(f) if f.starts_with('/') => format!(
-                        "{} ({} in a shell), then /refresh",
-                        f,
-                        crate::connections::fix_in_shell(f)
+                    Some(f) => format!(
+                        "{}, then {}",
+                        fix_words(say, f, &crate::connections::fix_in_shell(f)),
+                        say("/refresh")
                     ),
-                    Some(f) => format!("{} in a shell, then /refresh", f),
-                    None => "/refresh (moneyball refresh in a shell) once the CRM answers".into(),
+                    None => format!("{} once the CRM answers", refresh()),
                 };
                 Some(format!(
                     "no CRM data in this snapshot: its CRM pull failed ({}) - {}. Fix: {}",
@@ -81,17 +91,34 @@ impl CrmHealth {
                 last: Some(d),
                 failed: None,
             } => Some(format!(
-                "no CRM data in this snapshot (newest CRM pull: snapshot {}) - {}. Fix: /refresh (moneyball refresh in a shell)",
-                d, UNKNOWN
+                "no CRM data in this snapshot (newest CRM pull: snapshot {}) - {}. Fix: {}",
+                d,
+                UNKNOWN,
+                refresh()
             )),
             CrmHealth::NoData {
                 last: None,
                 failed: None,
             } => Some(format!(
-                "no CRM data pulled yet - {}. Fix: /refresh (moneyball refresh in a shell)",
-                UNKNOWN
+                "no CRM data pulled yet - {}. Fix: {}",
+                UNKNOWN,
+                refresh()
             )),
         }
+    }
+}
+
+/// One fix in the front-end's words. A front-end that types it as is
+/// (the TUI, the shell) is also told where else it runs: a slash
+/// command's `shell` twin, or that a shell command belongs in a shell.
+fn fix_words(say: &dyn Fn(&str) -> String, fix: &str, shell: &str) -> String {
+    let said = say(fix);
+    if said != fix {
+        said
+    } else if fix.starts_with('/') {
+        format!("{} ({} in a shell)", fix, shell)
+    } else {
+        format!("{} in a shell", fix)
     }
 }
 

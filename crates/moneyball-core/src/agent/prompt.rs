@@ -64,40 +64,16 @@ pub struct FrontEnd<'a> {
     /// How its transcript renders the model's text (one "Output style:
     /// ..." sentence group, no trailing newline).
     pub output_style: &'a str,
-    /// How the user refreshes the data here, as the object of "run"
-    /// (the TUI: "/refresh"; a GUI: "the Refresh button").
-    pub refresh: &'a str,
-    /// How the user sets up a workspace here (the TUI: "/setup").
-    pub setup: &'a str,
-    /// What shows the brief here (the TUI: "/brief"). The model is told
-    /// it pulls a first snapshot by itself - name a surface that does.
-    pub brief: &'a str,
-    /// How the user marks a recommendation applied, after "when they",
-    /// with `{id}` where its id goes (the TUI: "type /ledger {id} applied").
-    pub mark_applied: &'a str,
+    /// How this front-end tells its user to do a step. Core's prompts,
+    /// tool outputs and notes name steps as the TUI types them - a slash
+    /// command ("/refresh", "/connect crm", "/ledger r7 applied") or a
+    /// shell command - and pass each through here before the model reads
+    /// it. Return it unchanged only if the user can type it here as is.
+    pub say: Say,
 }
 
-impl FrontEnd<'_> {
-    /// The tools' answer when there is no snapshot to read.
-    pub(super) fn no_snapshot(&self) -> String {
-        format!(
-            "no snapshot on disk - tell the user to run {} (or {}, which \
-             self-heals) before asking for numbers",
-            self.refresh, self.brief
-        )
-    }
-
-    /// The recommend tool's answer for a recorded recommendation;
-    /// `{id}` and `{check}` are filled in when one is recorded.
-    pub(super) fn recorded(&self) -> String {
-        format!(
-            "recorded {{id}}. Give the user its id. moneyball marks it applied when the \
-             change shows in the ad account's change log (or when they {}) and checks \
-             the prediction after {{check}}.",
-            self.mark_applied
-        )
-    }
-}
+/// `FrontEnd::say`: a plain fn, so the turn's worker can carry it.
+pub type Say = fn(&str) -> String;
 
 /// Live app state injected into every LLM system prompt so the model
 /// never hallucinates about setup/data (codex + claude code both ground
@@ -128,7 +104,9 @@ pub fn app_state_block(
              is configured; otherwise an external pipeline can write \
              <workspace>/.moneyball/history/snap/<YYYY-MM-DD>/*.json. \
              {} does NOT create snapshots - never suggest it for missing data.\n",
-            front.brief, front.refresh, front.setup
+            (front.say)("/brief"),
+            (front.say)("/refresh"),
+            (front.say)("/setup")
         )),
     }
     if front.commands.is_empty() {
@@ -143,7 +121,10 @@ pub fn app_state_block(
 
 fn workspace_lines(cfg: &AppConfig, front: &FrontEnd) -> String {
     let Some(w) = cfg.workspace.as_ref() else {
-        return format!("workspace: NOT configured - {} is the fix\n", front.setup);
+        return format!(
+            "workspace: NOT configured - {} is the fix\n",
+            (front.say)("/setup")
+        );
     };
     let prods: Vec<String> = w
         .products
@@ -156,7 +137,7 @@ fn workspace_lines(cfg: &AppConfig, front: &FrontEnd) -> String {
          When you name a product or suggest a command, use these product \
          names EXACTLY as listed - suggested commands must run verbatim when typed.\n",
         cfg.data_root.display(),
-        front.setup,
+        (front.say)("/setup"),
         prods.len(),
         prods.join(", ")
     )
@@ -173,10 +154,7 @@ mod tests {
     const FRONT: FrontEnd = FrontEnd {
         commands: &[],
         output_style: "",
-        refresh: "/refresh",
-        setup: "/setup",
-        brief: "/brief",
-        mark_applied: "type /ledger {id} applied",
+        say: |step| step.to_string(),
     };
 
     #[test]

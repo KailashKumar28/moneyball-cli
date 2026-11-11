@@ -144,7 +144,10 @@ impl Session {
         let (tx, events) = std::sync::mpsc::channel();
         let system = format!("{}\n\n{}", system, prompt::RECORD_RULE);
         let history = self.history.clone();
-        let exec = exec::SnapshotTools::new(cfg.clone(), front);
+        let exec = exec::SnapshotTools {
+            cfg: cfg.clone(),
+            say: front.say,
+        };
         let cancel = self.cancel.clone();
         std::thread::spawn(move || {
             let tools = exec::tools();

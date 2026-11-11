@@ -12,6 +12,12 @@ const ADS_SHOWN: usize = 10;
 const CHANGES_SHOWN: usize = 12;
 
 pub fn text(d: &Diagnosis) -> String {
+    text_for(d, &|fix| fix.to_string())
+}
+
+/// `text`, with the step it names as the front-end says it (`say` as in
+/// `CrmHealth::note_for`).
+pub fn text_for(d: &Diagnosis, say: &dyn Fn(&str) -> String) -> String {
     format!(
         "DIAGNOSE {} - snapshot {}\n{}{}{}{}",
         d.product,
@@ -19,7 +25,7 @@ pub fn text(d: &Diagnosis) -> String {
         stages(d),
         ads(d),
         trend(d),
-        changes(d)
+        changes(d, say)
     )
 }
 
@@ -239,13 +245,16 @@ fn trend(d: &Diagnosis) -> String {
     out
 }
 
-fn changes(d: &Diagnosis) -> String {
+fn changes(d: &Diagnosis, say: &dyn Fn(&str) -> String) -> String {
     let mut out = format!(
         "\n4. What changed in its ad account (the last {} days)\n",
         RECENT_DAYS
     );
     let Some(rows) = &d.changes else {
-        out.push_str("this snapshot has no change log - the next /refresh pulls it.\n");
+        out.push_str(&format!(
+            "this snapshot has no change log - the next {} pulls it.\n",
+            say("/refresh")
+        ));
         return out;
     };
     if rows.is_empty() {
