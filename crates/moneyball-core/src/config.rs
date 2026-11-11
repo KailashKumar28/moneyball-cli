@@ -11,6 +11,8 @@ use serde::{Deserialize, Serialize};
 use crate::error::{Error, Result};
 use crate::provider::ModelProviderInfo;
 
+const GLOBAL_CONFIG: &str = ".moneyball/config.json"; // relative to $HOME
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Product {
     pub name: String,
@@ -343,9 +345,20 @@ fn resolve_data_root(cli_arg: Option<&str>) -> Result<PathBuf> {
             return Ok(cwd);
         }
     }
-    // ~/.moneyball/config.json data_root: the last workspace a GUI opened.
-    if let Some(root) = crate::workspace::last() {
-        return Ok(root);
+    // ~/.moneyball/config.json data_root
+    if let Some(home) = home_dir() {
+        let gc = home.join(GLOBAL_CONFIG);
+        if gc.is_file() {
+            if let Ok(raw) = std::fs::read_to_string(&gc) {
+                if let Ok(v) = serde_json::from_str::<serde_json::Value>(&raw) {
+                    if let Some(dr) = v.get("data_root").and_then(|x| x.as_str()) {
+                        return Ok(PathBuf::from(dr)
+                            .canonicalize()
+                            .unwrap_or_else(|_| PathBuf::from(dr)));
+                    }
+                }
+            }
+        }
     }
     // Walk up from CWD looking for a sibling `fin_campaign_analysis/` or `data/`.
     if let Ok(cwd) = std::env::current_dir() {

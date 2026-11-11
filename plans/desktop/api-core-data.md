@@ -10,7 +10,7 @@ gained no dependency.
 | Item | Signature | A non-TUI caller |
 |---|---|---|
 | `workspace::open` (workspace.rs) | `fn open(dir: &Path, date: Option<&str>) -> Result<AppConfig>` | `workspace_open(path)`: opens exactly `dir`. No flag, env, cwd, walk-up, home paths or `moneyball-data` fallback. `Err(Error::NoWorkspaceConfig)` when `dir` has no `.moneyball/config.json` - show it, there is no setup in v1. `date` pins a snapshot (problem 10). Always `workspace: Some`, so sessions go to the workspace (problem 5). `agent` is false; set the field if you call something that prints. |
-| `workspace::remember` | `fn remember(dir: &Path) -> Result<()>` | Call after a successful `open`. Writes `data_root` into `~/.moneyball/config.json`, atomically, keeping every other key. Refuses (Err, file untouched) when that file is not a JSON object. |
+| `workspace::remember` | `fn remember(dir: &Path) -> Result<()>` | Call after a successful `open`. Writes its own key, `last_workspace`, into `~/.moneyball/config.json`, atomically, keeping every other key. Refuses (Err, file untouched) when that file is not a JSON object. |
 | `workspace::last` | `fn last() -> Option<PathBuf>` | `workspace_current` at launch: `last().map(|d| open(&d, None))`. None on a first run. The directory may be gone: `open` says so. |
 | `refresh::Ev` (refresh/worker.rs) | `enum Ev { Begin { step: &'static str }, Done(Box<RunStep>), Finished { run: Box<RunRecord>, ms: u64 }, CouldNotStart { error: String } }`; Debug, Clone, Serialize, `tag = "type"`, snake_case | Forward each to the webview channel as is. JSON: `{"type":"begin","step":"meta"}`, `{"type":"done", ...RunStep fields}`, `{"type":"finished","run":{...},"ms":1234}`, `{"type":"could_not_start","error":"..."}`. Exactly one of the last two ends a run; a channel that closes without either means the worker died (the TUI then says "its run record keeps the steps that finished"). |
 | `refresh::spawn` | `fn spawn(cfg: AppConfig, meta_token: Option<String>, opts: Options) -> (Receiver<Ev>, Arc<AtomicBool>)` | `refresh_start`: pass `secrets::load_meta_token()` (the caller resolves the token, as for `refresh::run`; never send it over IPC) and `Options { trigger: Trigger::Manual, force, days: 28, cancel: None }`. Keep the returned flag; `refresh_cancel` is `flag.store(true, SeqCst)` and takes effect after the step in flight. A flag passed in `opts.cancel` is used and returned instead. |
@@ -28,7 +28,6 @@ gained no dependency.
 | `crm::status::CrmHealth` | derives Serialize, `tag = "kind"`: `{"kind":"no_spec"}`, `{"kind":"no_data","last":..,"failed":[why, fix]}`, `{"kind":"fresh"}` | `failed` is a 2-element array or null. |
 | `report::ReportOutput` | derives Serialize | `report`, `json_path`, `html_path`. |
 | `health::Health`, `health::State` | derive Serialize; `State` is `tag = "kind"`: `{"kind":"fresh"}`, `{"kind":"partial","have":1,"of":2}` | Needed for `Loaded`. Not in my item list, but PLAN.md and seam section 4 name them for core-data. |
-| `config.rs` step 4 | reads `data_root` through `workspace::last()` (same file, same key, same position) | CLI and TUI resolution order is unchanged. |
 
 Not Serialize, on purpose: `Snapshot` (lead PII), `AppConfig`, and
 `brief::ProductRow` / `brief::Feasibility` on their own (next section).
@@ -71,11 +70,10 @@ wave 2 must type them by hand or generate from the wire structs.
 
 ## What the lead and the others should know
 
-- Once the desktop app calls `workspace::remember`, the CLI and TUI
-  started in a directory with no workspace of its own open that
-  remembered workspace (step 4) instead of falling to the walk-up, the
-  home paths or `<cwd>/moneyball-data`. The order is unchanged; step 4
-  simply has a writer now.
+- `workspace::remember` / `last` use the `last_workspace` key, not
+  `data_root`. `config.rs` is byte-identical to before this branch:
+  step 4 still reads `data_root`, nothing writes it, and the CLI and TUI
+  resolve exactly as they did (an empty directory still gets setup).
 - `refresh/mod.rs` gained `mod worker;` and `pub use worker::{spawn, Ev};`
   next to `mod show;` - core-words adds its words module in the same
   lines.
