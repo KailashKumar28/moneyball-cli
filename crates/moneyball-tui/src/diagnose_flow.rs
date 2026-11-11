@@ -35,7 +35,7 @@ pub(crate) fn run_diagnose(app: &mut App, arg: &str) {
         }
     };
     // The cell shows exactly what the advisor reads.
-    let output = diagnose_output(&app.cfg, &snap, &product);
+    let output = diagnose_output(&app.cfg, &snap, &product, &crate::agent_turn::say);
     let lines = output.lines().map(String::from).collect();
     app.chat.push_tool(
         "diagnose",

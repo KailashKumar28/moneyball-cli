@@ -7,10 +7,7 @@ use crate::config::WorkspaceConfig;
 const FRONT: prompt::FrontEnd = prompt::FrontEnd {
     commands: &[],
     output_style: "",
-    refresh: "refresh",
-    setup: "setup",
-    brief: "the brief",
-    mark_applied: "mark {id} applied",
+    say: |step| step.to_string(),
 };
 
 fn user(text: &str) -> Item {

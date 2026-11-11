@@ -15,7 +15,7 @@ use crate::schema::ChangeRow;
 use crate::snapshot::{AdsDailyRow, Snapshot};
 
 mod print;
-pub use print::{run, text};
+pub use print::{run, text, text_for};
 
 /// The recent window, in complete days before the snapshot day.
 pub const RECENT_DAYS: i64 = 7;

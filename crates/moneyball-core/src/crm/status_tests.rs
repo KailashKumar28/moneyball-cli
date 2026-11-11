@@ -102,3 +102,64 @@ fn crm_health_says_fetch_not_connect_when_connected() {
     assert_eq!(CrmHealth::of(&cfg, &fresh).note(), None);
     std::fs::remove_dir_all(&tmp).ok();
 }
+
+fn failed(fix: Option<&str>) -> CrmHealth {
+    CrmHealth::NoData {
+        last: Some("2026-08-12".into()),
+        failed: Some(("401 bad key".into(), fix.map(String::from))),
+    }
+}
+
+/// `note` word for word as it read before `note_for` existed: the TUI,
+/// the shell and the model on the TUI all read these.
+#[test]
+fn note_keeps_its_wording_in_every_state() {
+    const UNKNOWN: &str =
+        "CRM leads and qualified are unknown, not zero, and verdicts are withheld";
+    let no_data = |last: Option<&str>| CrmHealth::NoData {
+        last: last.map(String::from),
+        failed: None,
+    };
+    let cases = [
+        (CrmHealth::NoSpec, format!("no CRM connected - {UNKNOWN}. Fix: /connect crm (moneyball connect crm in a shell)")),
+        (failed(Some("/connect crm")), format!("no CRM data in this snapshot: its CRM pull failed (401 bad key) - {UNKNOWN}. Fix: /connect crm (moneyball connect crm in a shell), then /refresh")),
+        (failed(Some("/setup meta")), format!("no CRM data in this snapshot: its CRM pull failed (401 bad key) - {UNKNOWN}. Fix: /setup meta (open moneyball and run /setup meta in a shell), then /refresh")),
+        (failed(Some("moneyball crm secret api_key")), format!("no CRM data in this snapshot: its CRM pull failed (401 bad key) - {UNKNOWN}. Fix: moneyball crm secret api_key in a shell, then /refresh")),
+        (failed(None), format!("no CRM data in this snapshot: its CRM pull failed (401 bad key) - {UNKNOWN}. Fix: /refresh (moneyball refresh in a shell) once the CRM answers")),
+        (no_data(Some("2026-08-12")), format!("no CRM data in this snapshot (newest CRM pull: snapshot 2026-08-12) - {UNKNOWN}. Fix: /refresh (moneyball refresh in a shell)")),
+        (no_data(None), format!("no CRM data pulled yet - {UNKNOWN}. Fix: /refresh (moneyball refresh in a shell)")),
+    ];
+    for (health, said) in cases {
+        assert_eq!(health.note(), Some(said));
+    }
+    assert_eq!(CrmHealth::Fresh.note(), None);
+}
+
+/// A front-end with its own words gets them, and no shell aside.
+#[test]
+fn note_for_says_each_fix_the_front_ends_way() {
+    let say = |fix: &str| match fix {
+        "/refresh" => "the Refresh button".to_string(),
+        f => format!(
+            "{} in Terminal",
+            f.strip_prefix('/')
+                .map_or(f.into(), |c| format!("moneyball {c}"))
+        ),
+    };
+    let note = failed(Some("/connect crm")).note_for(&say).unwrap();
+    assert!(
+        note.ends_with("Fix: moneyball connect crm in Terminal, then the Refresh button"),
+        "{}",
+        note
+    );
+    let note = failed(Some("moneyball crm secret k"))
+        .note_for(&say)
+        .unwrap();
+    assert!(note.ends_with("Fix: moneyball crm secret k in Terminal, then the Refresh button"));
+    let note = CrmHealth::NoSpec.note_for(&say).unwrap();
+    assert!(
+        note.ends_with("Fix: moneyball connect crm in Terminal"),
+        "{}",
+        note
+    );
+}

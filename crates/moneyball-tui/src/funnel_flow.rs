@@ -76,7 +76,7 @@ pub(crate) fn run_funnel(app: &mut App, arg: &str) {
     );
 
     let sys = system_prompt(app, FUNNEL_SYSTEM_PROMPT);
-    let output = funnel_output(&app.cfg, &snap, &product, by);
+    let output = funnel_output(&app.cfg, &snap, &product, by, &crate::agent_turn::say);
     let args = serde_json::json!({ "product": product, "by": by.name() });
     let turn = app
         .session

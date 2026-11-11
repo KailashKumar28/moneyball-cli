@@ -19,11 +19,13 @@ fn front_end<'a>(commands: &'a [&'a str]) -> prompt::FrontEnd<'a> {
     prompt::FrontEnd {
         commands,
         output_style: OUTPUT_STYLE,
-        refresh: "/refresh",
-        setup: "/setup",
-        brief: "/brief",
-        mark_applied: "type /ledger {id} applied",
+        say,
     }
+}
+
+/// Every step core names is a command of this front-end, typed as is.
+pub(crate) fn say(step: &str) -> String {
+    step.to_string()
 }
 
 fn commands() -> Vec<&'static str> {
