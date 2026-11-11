@@ -1,4 +1,5 @@
-//! What the refresh cell says for each way a run can end.
+//! What the refresh cell draws for each way a run can end (the verdict's
+//! words are tested in moneyball_core::refresh).
 
 use super::*;
 use moneyball_core::refresh::CANCELLED;
@@ -69,22 +70,6 @@ fn a_run_that_never_started_shows_no_steps() {
 }
 
 #[test]
-fn no_crm_says_meta_is_complete_only_when_it_is() {
-    let mut meta = step("meta", StepStatus::Partial);
-    meta.counts = [("products".into(), 4), ("products_failed".into(), 1)].into();
-    let mut report = step("report", StepStatus::Partial);
-    report.error_kind = Some("no_crm".into());
-    let t = text(&finished(Outcome::Degraded, vec![meta, report.clone()]));
-    assert!(t.contains("4 of 5") && t.contains("went out without CRM"));
-    assert!(!t.contains("Meta numbers are complete"), "{}", t);
-    let whole = text(&finished(
-        Outcome::Degraded,
-        vec![step("meta", StepStatus::Done), report],
-    ));
-    assert!(whole.contains("Meta numbers are complete"));
-}
-
-#[test]
 fn cancel_crash_and_carry_over_say_what_happened() {
     let mut crm = step("crm", StepStatus::Skipped);
     crm.error_kind = Some(CANCELLED.into());
@@ -98,7 +83,10 @@ fn cancel_crash_and_carry_over_say_what_happened() {
         ],
     ));
     assert!(
-        t.contains("cancelled") && t.contains("Cancelled after step 2"),
+        t.contains("cancelled")
+            && t.contains(
+                "! Cancelled after step 2. What finished is kept; /refresh runs the rest."
+            ),
         "{}",
         t
     );

@@ -9,7 +9,7 @@ use ratatui::style::Color;
 use moneyball_core::connections::{self, Link};
 
 use crate::chat::{cells, Cell};
-use crate::widgets::{bold, dim, fg, fix_does, gray, Para, OK};
+use crate::widgets::{bold, dim, fg, gray, Para, OK};
 use crate::App;
 
 pub(crate) fn run_connect(app: &mut App) {
@@ -44,7 +44,10 @@ pub(crate) fn run_connect(app: &mut App) {
                 Para::new(NAME_AT, NAME_AT + "fix:  ".len())
                     .run("fix:  ", gray())
                     .run(fix.clone(), bold(Color::Cyan))
-                    .run(format!("   {}", fix_does(&fix)), gray()),
+                    .run(
+                        format!("   {}", moneyball_core::words::fix_does(&fix)),
+                        gray(),
+                    ),
             );
         }
     }

@@ -16,6 +16,7 @@ pub mod error;
 pub mod fetch;
 pub mod funnel;
 pub mod health;
+pub mod landing;
 pub mod ledger;
 pub mod llm;
 pub mod logo;
@@ -33,6 +34,7 @@ pub mod snapshot;
 pub mod status;
 pub mod text;
 pub mod tools;
+pub mod words;
 pub mod workspace;
 
 pub use logo::LOGO;

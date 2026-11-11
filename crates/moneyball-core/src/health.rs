@@ -3,6 +3,7 @@
 //! screen, the newest snapshot holding CRM data, and the run records.
 
 use chrono::{DateTime, Local, NaiveDate};
+use serde::Serialize;
 
 use crate::config::AppConfig;
 use crate::schema::{Outcome, RunRecord, StepStatus};
@@ -12,7 +13,7 @@ use crate::snapshot::Snapshot;
 pub const STALE_DAYS: i64 = 2;
 
 /// The bar's state; when several hold, the first listed wins.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum State {
     /// Today's refresh failed: nothing new was written. Outranks NoData,
@@ -33,7 +34,7 @@ pub enum State {
     Fresh,
 }
 
-#[derive(Debug, Clone, serde::Serialize)]
+#[derive(Debug, Clone, Serialize)]
 pub struct Health {
     pub today: NaiveDate,
     /// The date of the snapshot on screen, and of the newest holding CRM.

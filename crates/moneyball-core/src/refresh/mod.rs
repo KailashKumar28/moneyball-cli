@@ -8,6 +8,7 @@
 //! when something is missing (CRM failed or not connected, a product's
 //! account, the creatives/leads/adsets capture, a cancel); `ok` otherwise.
 
+mod finish;
 mod show;
 mod worker;
 
@@ -16,6 +17,8 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::Instant;
 
+pub(crate) use finish::REUSES_META;
+pub use finish::{cancelled, fixes, gaps, rerun, verdict, RunVerdict};
 pub use show::*;
 pub use worker::{spawn, Ev};
 
