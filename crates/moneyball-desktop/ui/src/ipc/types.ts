@@ -16,8 +16,8 @@ export type Workspace = { name: string; path: string; display_path: string; prod
 export type StepView = {
   name: "meta" | "assets" | "crm" | "report";
   label: string;
-  // "partial" is a contract change (see NOTES.md): core's StepStatus has it.
-  status: "ok" | "partial" | "failed" | "skipped" | "waiting" | "running";
+  // core's StepStatus names, plus the UI-only waiting and running
+  status: "done" | "partial" | "failed" | "skipped" | "waiting" | "running";
   word: string;
   detail: string;
   time: string | null;

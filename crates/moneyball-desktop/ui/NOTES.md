@@ -1,6 +1,6 @@
 # Moneyball for Mac - UI notes
 
-Status: built and tested, but the screenshot review is NOT finished (see "Left to do").
+Status: built, tested, and every screenshot reviewed against the design (see "Verification").
 
 ## Scripts (pnpm, in this directory)
 
@@ -39,10 +39,11 @@ and dark, runs the design's own wrap/clip/overflow check, and saves `shots/<stat
 (names match `plans/desktop/design/shots`). `tests/behaviour.spec.ts` covers keys, re-reads, copy,
 controls and the untrusted-markdown boundary. The clock is fixed, so elapsed times read 00:00.
 
-## Contract changes (please confirm or reject)
+## Contract changes (both confirmed by the lead)
 
-1. `StepView.status` gains `"partial"` (core's StepStatus has it; "no CRM" / "4 of 5" need the warning
-   glyph, not a check). Any unknown status also falls back to the warning glyph.
+1. `StepView.status` uses core's names: `done | partial | failed | skipped`, plus the UI-only
+   `waiting | running`. IPC.md says `ok`; that was an error, `done` is right. `partial` gets the
+   warning glyph ("no CRM", "4 of 5"), and so does any status the UI does not know.
 2. Day numbers gain optional `source?: "meta" | "crm"` for the source dot. Without it no dot is drawn.
 
 ## Where the build differs from the mock, and why
@@ -64,13 +65,19 @@ controls and the untrusted-markdown boundary. The clock is fixed, so elapsed tim
 - `data-tauri-drag-region` is on each toolbar and the strip above the sidebar; title text has
   `pointer-events:none` so a press on it still drags.
 
-## Left to do (work stopped at a usage limit)
+- A tool call left `pending` when no turn is in flight (an interrupt cut it short) shows a ring and
+  "stopped", not a spinner. Same idea on Refresh: after a run died or could not start, a step still
+  marked running or waiting is a bare ring with no word.
 
-- Only 6 of the 108 screenshots were compared with the design shots (today-degraded light 1200,
-  advisor-stream dark 900, refresh-running light 900, brief dark 900, funnel light 900,
-  refresh-degraded light 900). They matched apart from the differences above; the Brief feasibility
-  grid was broken and is fixed in CSS, but `shots/` was NOT regenerated after that fix or after the
-  composer focus change. Run `pnpm test`, then look at the rest (report, empty, refresh-done,
-  funnel-nocrm, every advisor state, all 1200 dark).
-- The full suite last ran green (39 tests) before those two CSS tweaks and the abort-marker fix;
-  the behaviour tests ran green after the fix.
+## Verification
+
+- `pnpm check`: tsc, eslint, 40 Playwright tests (webkit), `vite build` - all clean.
+- `shots/` holds 108 screenshots: 27 states x light/dark x 1200x800/900x600. The 11 design states
+  were compared with `plans/desktop/design/shots` at full size (at least one variant each, both
+  sizes and both themes covered); every one of the 108 was then looked at on contact sheets.
+- Fixed from that review: the Brief feasibility grid, a double "Turn stopped" marker (StrictMode
+  ran a state updater twice), the notice inside the empty state (wrong margin and color), spinners
+  left running on dead runs and cut-short tool calls, and the report-none shot showing a report.
+- Known rendering differences from the design shots, not defects: WebKit draws New York slightly
+  heavier than the Chromium the mock was shot in, and rows sit about 1px differently.
+- Not verified here: the real WKWebView inside Tauri, native window drag, and real IPC timing.

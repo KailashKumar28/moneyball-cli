@@ -269,3 +269,5 @@ td.cap1{display:table-cell}
 .compose textarea:focus-visible{outline:none;border-color:var(--focus)}
 /* two columns: the mock's third (the "6.3x" multiplier) is a figure core does not send */
 .feas dl{grid-template-columns:max-content max-content}
+.empty .notice{margin:0 0 var(--s4)}
+.empty .notice p{margin:0;color:var(--ink)}

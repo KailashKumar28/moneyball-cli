@@ -128,6 +128,15 @@ test("report: day and window drive generate; open in browser passes the path", a
   expect((await calls(page, "report_open_in_browser"))[0]).toMatchObject({ path: expect.stringContaining(".moneyball/reports/") });
 });
 
+test("Generate builds a report where none is written", async ({ page }) => {
+  await open(page, "noreport");
+  await page.keyboard.press("Meta+4");
+  const r = region(page, "Report");
+  await r.getByRole("button", { name: "Generate" }).click();
+  await expect(r.locator("iframe")).toBeVisible();
+  expect((await calls(page, "report_generate")).at(-1)).toEqual({ date: "2026-10-08", days: 1 });
+});
+
 test("the empty state opens a workspace; Cmd-O does the same", async ({ page }) => {
   await open(page, "noworkspace");
   await page.keyboard.press("Meta+o");

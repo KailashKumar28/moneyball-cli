@@ -72,7 +72,7 @@ function Body({ t, onAction }: { t: Today; onAction: OnAction }) {
                 <tr key={s.name}>
                   <td className="nm cap1">{s.label}</td>
                   {/* The run's day is only true of a step that brought data in. */}
-                  <td className="tx">{s.status === "ok" || s.status === "partial" ? run.day : ""}</td>
+                  <td className="tx">{s.status === "done" || s.status === "partial" ? run.day : ""}</td>
                   <td className="tx">
                     <span className="st">
                       <Glyph kind={stepGlyph(s.status)} />

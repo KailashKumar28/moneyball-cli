@@ -250,6 +250,9 @@ state("advisor-markers", "markers", async (page) => {
   const s = screen(page, "Advisor");
   await expect(s.locator(".tool .g.bad")).toHaveCount(1);
   await expect(s.locator(".tool").first()).toContainText("failed");
+  // a call the interrupt cut short is not shown as still running
+  await expect(s.locator(".tool").nth(1)).toContainText("stopped");
+  await expect(s.locator(".tool .g.run")).toHaveCount(0);
   await expect(s.locator(".mark")).toHaveText(["Turn stopped", "Bug report filed"]);
   await s.locator(".tool").first().click();
   await expect(s.locator(".out")).toContainText("did you mean");
@@ -287,8 +290,8 @@ state("report-none", "noreport", async (page) => {
   const s = screen(page, "Report");
   await expect(s.locator(".blank")).toContainText("No report is written for Thu 08 Oct");
   await expect(s.getByRole("button", { name: "Open in Browser" })).toBeDisabled();
-  await s.getByRole("button", { name: "Generate" }).click();
-  await expect(s.locator("iframe")).toBeVisible();
+  await expect(s.getByRole("button", { name: "Generate" })).toBeEnabled();
+  await expect(s.locator("iframe")).toHaveCount(0);
 });
 
 state("refresh-degraded", "degraded", async (page) => {
@@ -320,7 +323,12 @@ state("refresh-could-not-start", "", async (page) => {
 state("refresh-died", "", async (page) => {
   await startRefresh(page, 3);
   await emitRefresh(page, refreshDied!);
-  await expect(screen(page, "Refresh").locator(".notice")).toContainText("stopped without finishing");
+  const s = screen(page, "Refresh");
+  await expect(s.locator(".notice")).toContainText("stopped without finishing");
+  // nothing still spins: the step that was in flight is a bare ring
+  await expect(s.locator(".g.run")).toHaveCount(0);
+  await expect(s.locator("tbody .g.ok")).toHaveCount(1);
+  await expect(s.locator("tbody .g.idle")).toHaveCount(3);
 });
 
 state("workspace-gone", "wsgone", async (page) => {

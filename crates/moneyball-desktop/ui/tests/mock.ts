@@ -11,6 +11,8 @@ export async function open(page: Page, flags = "") {
   await page.clock.setFixedTime(NOW);
   await page.goto(`/?mock=manual${flags ? "," + flags : ""}`);
   await page.waitForFunction(() => !!window.__mock);
+  // the key handlers exist once the workspace has resolved, either way
+  await page.locator(".frame, .empty h2").first().waitFor();
 }
 export const emitRefresh = (page: Page, ev: RefreshEvent) => page.evaluate((e) => window.__mock!.refresh(e), ev);
 export const emitTurn = (page: Page, ev: TurnEvent) => page.evaluate((e) => window.__mock!.turn(e), ev);

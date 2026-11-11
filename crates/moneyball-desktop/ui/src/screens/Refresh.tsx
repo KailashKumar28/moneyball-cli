@@ -44,6 +44,7 @@ export function RefreshScreen({ hidden, refresh: r, onAction, go }: Props) {
         {r.steps.length > 0 ? (
           <Steps
             steps={r.steps}
+            live={r.running}
             resultHead={r.running ? "Progress" : "Result"}
             elapsed={r.stepStartedAt !== null ? clock(now - r.stepStartedAt) : ""}
           />

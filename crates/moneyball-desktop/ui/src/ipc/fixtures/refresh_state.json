@@ -5,7 +5,7 @@
     {
       "name": "meta",
       "label": "Meta insights",
-      "status": "ok",
+      "status": "done",
       "word": "done",
       "detail": "5 products, 1,104 rows",
       "time": "18.2s",
@@ -15,7 +15,7 @@
     {
       "name": "assets",
       "label": "creatives and leads",
-      "status": "ok",
+      "status": "done",
       "word": "done",
       "detail": "64 creatives, 1,812 leads",
       "time": "21.0s",
@@ -25,7 +25,7 @@
     {
       "name": "crm",
       "label": "CRM",
-      "status": "ok",
+      "status": "done",
       "word": "done",
       "detail": "655 tickets, 12 pages",
       "time": "41.6s",
@@ -35,7 +35,7 @@
     {
       "name": "report",
       "label": "daily report",
-      "status": "ok",
+      "status": "done",
       "word": "done",
       "detail": "64 creatives",
       "time": "0.7s",

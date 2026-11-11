@@ -89,7 +89,7 @@ export type GlyphKind = "ok" | "bad" | "warn" | "idle" | "dot" | "run";
 export const Glyph = ({ kind }: { kind: GlyphKind }) => <i className={`g ${kind}`} aria-hidden="true" />;
 
 const STEP_GLYPH: Record<StepView["status"], GlyphKind> = {
-  ok: "ok",
+  done: "ok",
   partial: "warn",
   failed: "bad",
   skipped: "warn",
@@ -206,8 +206,14 @@ export function Strip(props: { numbers: DayNumber[]; note: string | null; change
   );
 }
 
-/** The four refresh steps. `elapsed` is the ticking time of the step in flight. */
-export function Steps({ steps, elapsed, resultHead }: { steps: StepView[]; elapsed?: string; resultHead: string }) {
+/**
+ * The four refresh steps. `elapsed` is the ticking time of the step in flight.
+ * When the run is not `live`, a step still marked running or waiting never
+ * finished (the run died or did not start): a bare ring, no spinner, no word.
+ */
+export function Steps(props: { steps: StepView[]; live: boolean; elapsed?: string; resultHead: string }) {
+  const { steps, live, elapsed, resultHead } = props;
+  const open = (s: StepView) => s.status === "running" || s.status === "waiting";
   return (
     <table className="t steps">
       <thead>
@@ -221,20 +227,20 @@ export function Steps({ steps, elapsed, resultHead }: { steps: StepView[]; elaps
       </thead>
       <tbody>
         {steps.map((s, i) => (
-          <tr key={s.name} className={s.status === "waiting" ? "wait" : undefined}>
+          <tr key={s.name} className={s.status === "waiting" || (open(s) && !live) ? "wait" : undefined}>
             <td>{i + 1}</td>
             <td className="nm cap1">{s.label}</td>
             <td className="tx">
               <span className="st">
-                <Glyph kind={stepGlyph(s.status)} />
-                {s.word}
+                <Glyph kind={open(s) && !live ? "idle" : stepGlyph(s.status)} />
+                {open(s) && !live ? "" : s.word}
               </span>
             </td>
             <td className="tx">
               {s.detail}
               {s.reused && <span className="tag">reused</span>}
             </td>
-            <td>{s.status === "running" ? elapsed : s.time}</td>
+            <td>{s.status === "running" ? (live ? elapsed : "") : s.time}</td>
           </tr>
         ))}
       </tbody>

@@ -229,7 +229,7 @@ export function Advisor({ hidden, newSession, onAction }: Props) {
             {loadError ? <ErrorNote error={loadError} onAction={onAction} /> : !loaded && <Loading />}
             {loaded && rows.length === 0 && !live && <p className="cap">Ask about spend, leads, qualified and what to keep or kill. Answers come from your snapshots.</p>}
             {rows.map((r, i) => (
-              <RowView key={i} row={r} />
+              <RowView key={i} row={r} active={active} />
             ))}
             {live && <Say text={live} live />}
             {refusal && (
@@ -280,14 +280,14 @@ export function Advisor({ hidden, newSession, onAction }: Props) {
   );
 }
 
-function RowView({ row }: { row: Row }) {
+function RowView({ row, active }: { row: Row; active: boolean }) {
   switch (row.type) {
     case "user":
       return <div className="me">{row.text}</div>;
     case "assistant":
       return <Say text={row.text} />;
     case "tool":
-      return <ToolRow row={row} />;
+      return <ToolRow row={row} active={active} />;
     case "turn_interrupted":
       return <p className="mark">Turn stopped</p>;
     case "bug_report_filed":
@@ -309,17 +309,19 @@ function argText(args: unknown): string {
     .join(", ");
 }
 
-function ToolRow({ row }: { row: Extract<ViewItem, { type: "tool" }> }) {
+function ToolRow({ row, active }: { row: Extract<ViewItem, { type: "tool" }>; active: boolean }) {
   const [open, setOpen] = useState(false);
-  const glyph = row.status === "pending" ? "run" : row.status === "ok" ? "ok" : "bad";
+  // Pending with no turn in flight is a call an interrupt cut short: it never got a result.
+  const running = row.status === "pending" && active;
+  const glyph = running ? "run" : row.status === "pending" ? "idle" : row.status === "ok" ? "ok" : "bad";
   const arg = argText(row.args);
   return (
     <>
-      <button className="tool" aria-expanded={row.output ? open : undefined} aria-busy={row.status === "pending"} onClick={() => setOpen((o) => !o)}>
+      <button className="tool" aria-expanded={row.output ? open : undefined} aria-busy={running} onClick={() => setOpen((o) => !o)}>
         <Glyph kind={glyph} />
         <code>{row.name}</code>
         {arg && <span className="arg">{arg}</span>}
-        {row.status !== "ok" && <span className="res">{row.status === "pending" ? "running" : "failed"}</span>}
+        {row.status !== "ok" && <span className="res">{running ? "running" : row.status === "pending" ? "stopped" : "failed"}</span>}
       </button>
       {open && row.output && <pre className="out">{row.output}</pre>}
     </>
