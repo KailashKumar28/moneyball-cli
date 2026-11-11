@@ -1,0 +1,590 @@
+<!doctype html>
+<html lang="en" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Moneyball for Mac - v1 design mock</title>
+<style>
+/* ---------- tokens (see NOTES.md) ---------- */
+:root{
+  --paper:#f4f1e8; --side:#ebe7da; --card:#fcfbf6; --well:#ece7d9;
+  --ink:#17140f; --soft:#54503f; --faint:#766e5c;
+  --rule:#d9d2bf; --hair:#e8e2d2; --sel:rgba(23,20,15,.09); --hover:rgba(23,20,15,.045);
+  --meta:#2f6f9f; --keep:#1f7a52; --gold:#8a5a24; --brass:#a8763a; --warn:#a83c26;
+  --gold-bg:#f9f3e2; --gold-line:#e4d3ae; --on-solid:#fff; --focus:#a8763a;
+  --tick:#c8bfa9; --desk:#cdc8ba; --win-shadow:0 30px 70px -30px rgba(38,29,15,.55),0 0 0 1px rgba(38,29,15,.18);
+  --serif:"New York",ui-serif,"Iowan Old Style","Palatino Linotype",Palatino,Georgia,serif;
+  --mono:ui-monospace,"SF Mono","JetBrains Mono","Roboto Mono",Menlo,monospace;
+  --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-serif;
+  --s1:4px; --s2:8px; --s3:12px; --s4:16px; --s5:24px; --s6:32px;
+  --r-ctl:6px; --r-panel:8px; --r-win:10px;
+  --side-w:208px; --pad:24px; --cell-x:12px; --bar-h:48px;
+}
+:root[data-theme=dark]{
+  --paper:#1c1a16; --side:#161411; --card:#25221d; --well:#2b2823;
+  --ink:#ece7da; --soft:#b9b29f; --faint:#958d7a;
+  --rule:#3a362d; --hair:#2d2a24; --sel:rgba(236,231,218,.11); --hover:rgba(236,231,218,.055);
+  --meta:#74acd8; --keep:#62c196; --gold:#d3a563; --brass:#c8965a; --warn:#e68068;
+  --gold-bg:#2c261b; --gold-line:#57482c; --on-solid:#1c1a16; --focus:#d3a563;
+  --tick:#4a4538; --desk:#0c0b09; --win-shadow:0 30px 70px -30px #000,0 0 0 1px rgba(255,255,255,.12);
+}
+*{box-sizing:border-box}
+html,body{height:100%;margin:0}
+body{background:var(--desk);color:var(--ink);font:13px/1.45 var(--sans);-webkit-font-smoothing:antialiased;display:flex;flex-direction:column}
+button,select,textarea{font:inherit;color:inherit}
+:focus-visible{outline:2px solid var(--focus);outline-offset:1px}
+.num,td,th{font-variant-numeric:tabular-nums}
+[hidden]{display:none!important}
+
+/* ---------- mock-only chrome (not part of the app) ---------- */
+.mockbar{display:flex;flex-wrap:wrap;gap:4px 6px;align-items:center;padding:8px 12px;font-size:12px;color:var(--soft)}
+.mockbar button{border:1px solid transparent;background:none;border-radius:5px;padding:3px 8px;cursor:pointer;color:var(--soft)}
+.mockbar button:hover{background:var(--hover)}
+.mockbar button[aria-pressed=true]{background:var(--ink);color:var(--paper)}
+.mockbar .gap{flex:1}
+.desk{flex:1;display:flex;align-items:center;justify-content:center;min-height:0;padding:0 0 20px}
+.win{container:win/inline-size;width:1200px;height:800px;flex:none;border-radius:var(--r-win);overflow:hidden;box-shadow:var(--win-shadow);position:relative;background:var(--paper)}
+.win[data-size="900"]{width:900px;height:600px}
+html.bare .mockbar{display:none}
+html.bare .desk{padding:0}
+html.bare .win{width:100vw;height:100vh;border-radius:0;box-shadow:none}
+
+/* ---------- window ---------- */
+.frame{display:grid;grid-template-columns:var(--side-w) minmax(0,1fr);height:100%}
+.lights{position:absolute;left:18px;top:18px;display:flex;gap:8px;z-index:5}
+.lights i{width:12px;height:12px;border-radius:50%;box-shadow:inset 0 0 0 .5px rgba(0,0,0,.18)}
+.lights i:nth-child(1){background:#ff5f57}.lights i:nth-child(2){background:#febc2e}.lights i:nth-child(3){background:#28c840}
+
+/* sidebar */
+.side{background:var(--side);border-right:1px solid var(--rule);display:flex;flex-direction:column;padding:var(--bar-h) var(--s2) var(--s2);min-width:0}
+.ws{display:block;width:100%;text-align:left;background:none;border:0;border-radius:var(--r-ctl);padding:6px 10px;cursor:pointer}
+.ws:hover,.navb:hover,.health:hover{background:var(--hover)}
+.ws b{display:block;font-weight:600;white-space:nowrap}
+.ws span{display:block;font-size:11px;color:var(--faint);white-space:nowrap}
+.nav{display:flex;flex-direction:column;gap:1px;margin-top:var(--s3)}
+.navb{display:flex;justify-content:space-between;align-items:center;height:28px;padding:0 10px;border:0;background:none;border-radius:var(--r-ctl);cursor:pointer;text-align:left;white-space:nowrap}
+.navb kbd{font:11px var(--sans);color:var(--faint)}
+.navb[aria-current=page]{background:var(--sel);font-weight:600}
+.side .grow{flex:1}
+.health{display:grid;grid-template-columns:14px 1fr;column-gap:6px;align-items:baseline;width:100%;text-align:left;background:none;border:0;border-top:1px solid var(--rule);padding:10px 10px 8px;cursor:pointer;border-radius:0 0 var(--r-ctl) var(--r-ctl)}
+.health[aria-current=page]{background:var(--sel)}
+.health b{font-weight:600;white-space:nowrap}
+.health span{grid-column:2;font-size:11px;color:var(--faint);white-space:nowrap}
+
+/* main pane */
+main{min-width:0;min-height:0;display:flex;flex-direction:column}
+.side[hidden]+main{grid-column:1/-1}
+.screen{flex:1;min-height:0;display:flex;flex-direction:column}
+.bar{flex:none;height:var(--bar-h);display:flex;align-items:center;gap:var(--s2);padding:0 var(--s4) 0 var(--pad);border-bottom:1px solid var(--rule);white-space:nowrap}
+.bar h1{font-size:13px;font-weight:600;margin:0}
+.bar .sub{color:var(--faint);font-size:12px}
+.bar .tools{margin-left:auto;display:flex;align-items:center;gap:var(--s2)}
+.body{flex:1;min-height:0;overflow:auto;padding:var(--s5) var(--pad) var(--s6)}
+
+/* controls */
+.btn{height:26px;padding:0 11px;border:1px solid var(--rule);background:var(--card);border-radius:var(--r-ctl);font-size:12.5px;cursor:pointer;white-space:nowrap;display:inline-flex;align-items:center;gap:6px;flex:none}
+.btn:hover{border-color:var(--faint)}
+.btn.primary{background:var(--ink);border-color:var(--ink);color:var(--paper);font-weight:500}
+.btn kbd{font:11px var(--sans);opacity:.65}
+.btn .sq{width:8px;height:8px;background:currentColor;border-radius:1.5px}
+.sel{height:26px;padding:0 26px 0 10px;border:1px solid var(--rule);border-radius:var(--r-ctl);font-size:12.5px;appearance:none;-webkit-appearance:none;cursor:pointer;
+  background:var(--card) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='8' height='12'%3E%3Cpath d='M1 4.5 4 1.5l3 3M1 7.5l3 3 3-3' fill='none' stroke='%23857c68' stroke-width='1.3'/%3E%3C/svg%3E") no-repeat right 8px center}
+.seg{display:inline-flex;border:1px solid var(--rule);border-radius:var(--r-ctl);background:var(--card);padding:1px;flex:none}
+.seg input{position:absolute;opacity:0;pointer-events:none}
+.seg label{height:22px;padding:0 9px;display:inline-flex;align-items:center;border-radius:4px;font-size:12.5px;cursor:pointer;white-space:nowrap}
+.seg input:checked+label{background:var(--ink);color:var(--paper)}
+.seg input:focus-visible+label{outline:2px solid var(--focus);outline-offset:1px}
+.lbl{font-size:12px;color:var(--faint)}
+
+/* state glyphs: shape carries the state, color only reinforces it */
+.g{display:inline-block;width:14px;text-align:center;font:700 13px var(--mono);flex:none}
+.g.ok{color:var(--keep)}.g.ok::before{content:"\2713"}
+.g.bad{color:var(--warn)}.g.bad::before{content:"\2715"}
+.g.warn{color:var(--gold)}.g.warn::before{content:"!"}
+.g.idle{color:var(--faint)}.g.idle::before{content:"\25CB"}
+.g.dot{color:var(--keep)}.g.dot::before{content:"\25CF"}
+.g.run::before{content:"";display:inline-block;width:9px;height:9px;border:1.5px solid var(--gold);border-right-color:transparent;border-radius:50%;animation:spin .9s linear infinite;vertical-align:-1px}
+@keyframes spin{to{transform:rotate(360deg)}}
+@media(prefers-reduced-motion:reduce){.g.run::before,.caret{animation:none}}
+
+/* tables: the report's open ledger, on paper */
+.t{width:100%;border-collapse:collapse;font-size:12.5px}
+.t th,.t td{padding:0 var(--cell-x);height:30px;text-align:right;white-space:nowrap;border-bottom:1px solid var(--hair)}
+.t th{height:26px;font-size:11px;font-weight:500;color:var(--faint);border-bottom:1px solid var(--ink)}
+.t td{font-family:var(--mono);font-size:12px}
+.t th:first-child,.t td:first-child{text-align:left;padding-left:0}
+.t th:last-child,.t td:last-child{padding-right:0}
+.t td.nm{font-family:var(--sans);font-size:12.5px;font-weight:500;text-align:left}
+.t td.tx,.t th.tx{text-align:left;font-family:var(--sans)}
+.t td.tx{font-size:12.5px}
+.t td.dim{color:var(--faint)}
+.t tbody tr:hover td{background:var(--hover)}
+.t tbody tr:last-child td{border-bottom-color:var(--rule)}
+.cap{font-size:12px;color:var(--soft);margin:var(--s3) 0 0}
+.cap+.cap{margin-top:var(--s1)}
+.h2{font-size:12px;font-weight:600;margin:var(--s5) 0 var(--s1)}
+
+/* verdicts: glyph + word + shape, then color */
+.v{display:inline-flex;align-items:center;gap:5px;height:20px;padding:0 8px;border-radius:10px;border:1px solid transparent;font:600 11.5px var(--mono)}
+.v::before{font-size:10px}
+.v.keep{color:var(--keep);border-color:color-mix(in srgb,var(--keep) 45%,transparent)}.v.keep::before{content:"\25CF"}
+.v.kill{background:var(--warn);color:var(--on-solid)}.v.kill::before{content:"\2715"}
+.v.wait{color:var(--faint);padding-right:0}.v.wait::before{content:"\25CB"}
+.v.nocrm{color:var(--gold);border:1px dashed var(--gold)}.v.nocrm::before{content:"?"}
+
+/* today */
+.day{display:flex;align-items:baseline;gap:var(--s3);white-space:nowrap}
+.day h2{font:600 30px/1.1 var(--serif);letter-spacing:-.015em;margin:0}
+.badge{display:inline-flex;align-items:center;gap:4px;font-size:12px;font-weight:600}
+.day .when{color:var(--faint);font-size:12px;margin-left:auto}
+.ruler{height:8px;margin:10px 0 var(--s4);border-top:1.5px solid var(--ink);
+  background-image:repeating-linear-gradient(90deg,var(--ink) 0 1.2px,transparent 1.2px 48px),repeating-linear-gradient(90deg,var(--tick) 0 1px,transparent 1px 8px);
+  background-size:100% 8px,100% 4px;background-repeat:repeat-x}
+.strip{display:flex;background:var(--card);border:1px solid var(--rule);border-radius:var(--r-panel);overflow:hidden}
+.strip>div{flex:1;padding:10px var(--s3) 9px;border-right:1px solid var(--hair);white-space:nowrap;min-width:0}
+.strip>div:last-child{border-right:0}
+.strip .val{font:700 16px/1.1 var(--mono)}
+.strip .lab{font-size:11px;color:var(--faint);margin-top:5px}
+.strip .lab i{display:inline-block;width:6px;height:6px;border-radius:50%;margin-right:5px;background:var(--meta)}
+.strip .lab i.c{background:var(--keep)}
+.strip .dl{font:11px var(--mono);color:var(--soft);margin-top:3px}
+.strip .none{flex:3;display:flex;align-items:center;color:var(--gold);font-weight:600;font-size:12.5px}
+.notice{border:1px solid var(--gold-line);border-left:3px solid var(--gold);background:var(--gold-bg);border-radius:var(--r-panel);padding:var(--s3) var(--s4);margin:0 0 var(--s4)}
+.notice p{margin:0}
+.notice ol{margin:var(--s2) 0 0;padding:0;list-style:none;display:grid;gap:6px}
+.notice li{display:flex;align-items:center;gap:var(--s2);white-space:nowrap}
+.notice li>.n{font:600 11px var(--mono);color:var(--gold);width:10px}
+.notice .why{color:var(--soft);font-size:12px}
+.term{display:inline-flex;align-items:center;height:26px;border:1px solid var(--rule);border-radius:var(--r-ctl);background:var(--card);overflow:hidden;flex:none}
+.term code{font:12px var(--mono);padding:0 10px}
+.term button{height:100%;border:0;border-left:1px solid var(--rule);background:none;padding:0 10px;font-size:12px;cursor:pointer;min-width:58px}
+.term button:hover{background:var(--hover)}
+
+/* brief */
+.feas{margin-top:var(--s5);border-top:1.5px solid var(--ink);padding-top:var(--s3)}
+.feas .line{font-size:14px;margin:2px 0 var(--s2);white-space:nowrap}
+.feas .line b{font-family:var(--mono);font-size:13px}
+.feas dl{display:grid;grid-template-columns:max-content max-content max-content;gap:3px var(--s5);margin:0;font-size:12.5px;white-space:nowrap}
+.feas dt{color:var(--soft)}
+.feas dd{margin:0;font-family:var(--mono);font-size:12px;text-align:right}
+.feas dd.x{color:var(--faint);text-align:left}
+
+/* refresh */
+.runhead{display:flex;align-items:baseline;gap:var(--s2);margin:0 0 var(--s3);white-space:nowrap}
+.runhead h2{font:600 20px/1.2 var(--serif);margin:0}
+.runhead span{color:var(--faint);font-size:12px}
+.t.steps th:first-child{width:28px}
+.t.steps td:first-child{color:var(--faint)}
+.t.steps tr.wait td{color:var(--faint)}
+.st{font-family:var(--sans);font-weight:500;font-size:12.5px}
+.st .g{margin-right:5px}
+.sum{margin-top:var(--s4);padding-top:var(--s3);border-top:1.5px solid var(--ink)}
+.sum p{margin:0 0 var(--s2);white-space:nowrap}
+.sum .acts{display:flex;align-items:center;gap:var(--s2);margin-top:var(--s3)}
+
+/* report */
+.body.flush{padding:0;display:flex;background:var(--well)}
+.body.flush iframe{flex:1;border:0;width:100%;background:#f4f1e8}
+
+/* advisor */
+.adv{flex:1;min-height:0;display:grid;grid-template-columns:var(--sess-w,224px) minmax(0,1fr)}
+.sess{border-right:1px solid var(--rule);overflow:auto;padding:var(--s2)}
+.sess button{display:block;width:100%;text-align:left;border:0;background:none;border-radius:var(--r-ctl);padding:6px 10px;cursor:pointer}
+.sess button:hover{background:var(--hover)}
+.sess button[aria-current=true]{background:var(--sel)}
+.sess b{display:block;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sess span{display:block;font-size:11px;color:var(--faint);white-space:nowrap}
+.chat{display:flex;flex-direction:column;min-width:0;min-height:0}
+.log{flex:1;min-height:0;overflow:auto;padding:var(--s4) var(--pad);display:flex;flex-direction:column;gap:var(--s3)}
+.log>*{max-width:620px}
+.me{align-self:flex-start;background:var(--card);border:1px solid var(--rule);border-radius:var(--r-panel);padding:6px 11px}
+.me time,.tool time{color:var(--faint);font-size:11px;margin-left:var(--s2)}
+.say{margin:0;font-size:13.5px;line-height:1.55}
+.say b{font-weight:600}
+.tool{display:flex;align-items:center;gap:6px;height:28px;padding:0 10px 0 7px;border:1px solid var(--hair);border-radius:var(--r-ctl);background:none;cursor:pointer;white-space:nowrap;font-size:12.5px;align-self:flex-start}
+.tool:hover{border-color:var(--rule)}
+.tool code{font:600 12px var(--mono)}
+.tool .arg{color:var(--soft)}
+.tool .res{color:var(--faint);font-size:12px}
+.caret{display:inline-block;width:7px;height:15px;background:var(--ink);vertical-align:-2px;margin-left:2px;animation:blink 1s steps(2) infinite}
+@keyframes blink{50%{opacity:0}}
+.compose{flex:none;border-top:1px solid var(--rule);padding:var(--s3) var(--pad) var(--s2)}
+.compose .row{display:flex;gap:var(--s2);align-items:flex-end}
+.compose textarea{flex:1;min-width:0;resize:none;height:32px;padding:6px 10px;border:1px solid var(--rule);border-radius:var(--r-ctl);background:var(--card);line-height:18px}
+.compose textarea::placeholder{color:var(--faint)}
+.compose .btn{height:32px}
+.compose .stat{display:flex;align-items:center;gap:5px;font-size:11px;color:var(--faint);margin-top:6px;white-space:nowrap;height:14px}
+
+/* empty */
+.empty{flex:1;display:flex;align-items:center;justify-content:center}
+.empty>div{width:440px}
+.empty h2{font:600 30px/1.1 var(--serif);letter-spacing:-.015em;margin:0}
+.empty p{color:var(--soft);margin:var(--s3) 0 var(--s4)}
+.empty .alt{margin-top:var(--s5);padding-top:var(--s4);border-top:1px solid var(--rule)}
+.empty .alt p{margin:0 0 var(--s2)}
+.inl{display:flex;align-items:center;gap:var(--s2);white-space:nowrap}
+
+/* 900-wide window: tighten, never wrap */
+@container win (max-width:1000px){
+  .frame{--side-w:172px;--pad:16px;--cell-x:8px;--sess-w:184px}
+  .navb kbd{display:none}
+}
+</style>
+</head>
+<body>
+
+<div class="mockbar" aria-label="Mock controls (not part of the app)">
+  <span>Screen</span>
+  <span id="tabs"></span>
+  <span class="gap"></span>
+  <button data-size="1200">1200 x 800</button><button data-size="900">900 x 600</button>
+  <button id="theme">Dark</button>
+</div>
+
+<div class="desk"><div class="win" id="win" data-size="1200">
+  <div class="lights" aria-hidden="true"><i></i><i></i><i></i></div>
+  <div class="frame">
+
+  <aside class="side" id="side">
+    <button class="ws" title="Open another workspace"><b>moneyball-data</b><span>~/DEV/moneyball-test</span></button>
+    <nav class="nav" aria-label="Views">
+      <button class="navb" data-go="today-fresh" data-nav="today">Today<kbd>&#8984;1</kbd></button>
+      <button class="navb" data-go="brief" data-nav="brief">Brief<kbd>&#8984;2</kbd></button>
+      <button class="navb" data-go="funnel" data-nav="funnel">Funnel<kbd>&#8984;3</kbd></button>
+      <button class="navb" data-go="report" data-nav="report">Report<kbd>&#8984;4</kbd></button>
+      <button class="navb" data-go="advisor-stream" data-nav="advisor">Advisor<kbd>&#8984;5</kbd></button>
+    </nav>
+    <div class="grow"></div>
+    <button class="health" data-go="refresh-done" data-nav="refresh" data-h="fresh"><i class="g dot"></i><b>Fresh</b><span>Data Thu 08 Oct</span><span>CRM 08 Oct</span></button>
+    <button class="health" data-go="today-degraded" data-nav="refresh" data-h="crm"><i class="g warn"></i><b>CRM missing</b><span>Data Thu 08 Oct</span><span>CRM 11 Aug, refused</span></button>
+    <button class="health" data-go="refresh-running" data-nav="refresh" data-h="run"><i class="g run"></i><b>Refreshing</b><span>Step 3 of 4, CRM</span><span>00:52 so far</span></button>
+  </aside>
+
+  <main>
+
+  <!-- 1. no workspace -->
+  <section class="screen" data-screen="empty" data-label="No workspace">
+    <div class="empty"><div>
+      <h2>Open a workspace</h2>
+      <p>Moneyball reads the workspace folder that setup created: its snapshots, CRM pulls and reports. It never changes your ads or your CRM.</p>
+      <button class="btn primary">Open Workspace... <kbd>&#8984;O</kbd></button>
+      <div class="alt">
+        <p>No workspace yet? Setup runs in the terminal for now.</p>
+        <div class="inl"><span class="lbl">In Terminal</span><span class="term"><code>moneyball</code><button data-copy="moneyball">Copy</button></span></div>
+      </div>
+    </div></div>
+  </section>
+
+  <!-- 2a. today, fresh -->
+  <section class="screen" data-screen="today-fresh" data-label="Today, fresh" data-nav="today" data-h="fresh">
+    <header class="bar"><h1>Today</h1>
+      <div class="tools"><button class="btn" data-go="refresh-running">Refresh</button><button class="btn primary" data-go="report">Open Report</button></div></header>
+    <div class="body">
+      <div class="day"><h2>Thu 08 Oct</h2><span class="badge"><i class="g dot"></i>Fresh</span><span class="when">Refreshed 07:30 this morning (scheduled, 1m 18s)</span></div>
+      <div class="ruler"></div>
+      <div class="strip">
+        <div><div class="val num">&#8377;98,412</div><div class="lab"><i></i>Spend</div><div class="dl">-&#8377;2,856</div></div>
+        <div><div class="val num">47</div><div class="lab"><i></i>Meta leads</div><div class="dl">-4</div></div>
+        <div><div class="val num">44</div><div class="lab"><i class="c"></i>CRM leads</div><div class="dl">+2</div></div>
+        <div><div class="val num">9</div><div class="lab"><i class="c"></i>Qualified</div><div class="dl">+2</div></div>
+        <div><div class="val num">&#8377;10,935</div><div class="lab"><i class="c"></i>Per qualified</div><div class="dl">-&#8377;3,532</div></div>
+      </div>
+      <p class="cap">Changes are against Wed 07 Oct, the last comparable day.</p>
+      <div class="h2">Data health</div>
+      <table class="t">
+        <thead><tr><th>Source</th><th class="tx">Day</th><th class="tx">State</th><th class="tx">What came in</th></tr></thead>
+        <tbody>
+          <tr><td class="nm">Meta ads</td><td class="tx">Thu 08 Oct</td><td class="tx"><span class="st"><i class="g ok"></i>ok</span></td><td class="tx">5 accounts, 1,104 rows</td></tr>
+          <tr><td class="nm">Creatives and leads</td><td class="tx">Thu 08 Oct</td><td class="tx"><span class="st"><i class="g ok"></i>ok</span></td><td class="tx">64 creatives, 1,812 leads</td></tr>
+          <tr><td class="nm">CRM (LeadZump)</td><td class="tx">Thu 08 Oct</td><td class="tx"><span class="st"><i class="g ok"></i>ok</span></td><td class="tx">655 ad tickets, 97% of Meta leads joined</td></tr>
+          <tr><td class="nm">Daily report</td><td class="tx">Thu 08 Oct</td><td class="tx"><span class="st"><i class="g ok"></i>written</span></td><td class="tx">Fincity-Daily-08-Oct-2026.html</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- 2b. today, degraded -->
+  <section class="screen" data-screen="today-degraded" data-label="Today, CRM missing" data-nav="today" data-h="crm">
+    <header class="bar"><h1>Today</h1>
+      <div class="tools"><button class="btn" data-go="refresh-running">Refresh</button><button class="btn primary" data-go="report">Open Report</button></div></header>
+    <div class="body">
+      <div class="day"><h2>Thu 08 Oct</h2><span class="badge"><i class="g warn"></i>CRM missing</span><span class="when">Refreshed 16:19 today (scheduled, 2.0s)</span></div>
+      <div class="ruler"></div>
+      <div class="notice" role="status">
+        <p><b>Thu 08 Oct has no CRM data.</b> CRM refused the stored token (HTTP 401); it has likely expired.</p>
+        <ol>
+          <li><span class="n">1</span><span class="lbl">In Terminal</span><span class="term"><code>moneyball crm secret leadzump_token</code><button data-copy="moneyball crm secret leadzump_token">Copy</button></span><span class="why">asks for the new token</span></li>
+          <li><span class="n">2</span><button class="btn" data-go="refresh-running">Refresh</button><span class="why">reuses today's Meta pull: only CRM and the report run again</span></li>
+        </ol>
+      </div>
+      <div class="strip">
+        <div><div class="val num">&#8377;96,869</div><div class="lab"><i></i>Spend</div></div>
+        <div><div class="val num">42</div><div class="lab"><i></i>Meta leads</div></div>
+        <div class="none">No CRM in this report</div>
+      </div>
+      <div class="h2">Data health</div>
+      <table class="t">
+        <thead><tr><th>Source</th><th class="tx">Day</th><th class="tx">State</th><th class="tx">What came in</th></tr></thead>
+        <tbody>
+          <tr><td class="nm">Meta ads</td><td class="tx">Thu 08 Oct</td><td class="tx"><span class="st"><i class="g ok"></i>ok</span></td><td class="tx">5 accounts, 1,104 rows</td></tr>
+          <tr><td class="nm">Creatives and leads</td><td class="tx">Thu 08 Oct</td><td class="tx"><span class="st"><i class="g ok"></i>ok</span></td><td class="tx">64 creatives, 1,812 leads</td></tr>
+          <tr><td class="nm">CRM (LeadZump)</td><td class="tx">11 Aug</td><td class="tx"><span class="st"><i class="g bad"></i>refused</span></td><td class="tx">HTTP 401, last good pull 11 Aug</td></tr>
+          <tr><td class="nm">Daily report</td><td class="tx">Thu 08 Oct</td><td class="tx"><span class="st"><i class="g warn"></i>no CRM</span></td><td class="tx">CRM columns and verdicts hidden, not zero</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- 3. brief -->
+  <section class="screen" data-screen="brief" data-label="Brief" data-nav="brief" data-h="fresh">
+    <header class="bar"><h1>Brief</h1><span class="sub">7 days to Thu 08 Oct</span></header>
+    <div class="body">
+      <table class="t">
+        <thead><tr><th>Product</th><th>Spend/day</th><th>Meta</th><th>CRM</th><th>Qual.</th><th>Per day</th><th>&#8377;/qual.</th><th>L to Q</th><th>Goal</th><th>Gap</th></tr></thead>
+        <tbody>
+          <tr><td class="nm">Disha Namma Mane</td><td>20,863</td><td>142</td><td>112</td><td>27</td><td>3.86</td><td>5,409</td><td>24.1%</td><td>10</td><td>6.1</td></tr>
+          <tr><td class="nm">Purva Sparkling Spring by Fincity</td><td>20,040</td><td>106</td><td>97</td><td>13</td><td>1.86</td><td>10,791</td><td>13.4%</td><td>10</td><td>8.1</td></tr>
+          <tr><td class="nm">Primus by Fincity</td><td>25,535</td><td>75</td><td>64</td><td>12</td><td>1.71</td><td>14,895</td><td>18.8%</td><td>10</td><td>8.3</td></tr>
+          <tr><td class="nm">Cityville by Fincity</td><td>34,577</td><td>32</td><td>25</td><td>4</td><td>0.57</td><td>60,509</td><td>16.0%</td><td>10</td><td>9.4</td></tr>
+          <tr><td class="nm">Purva Sparkling (Raja Group) - Prepaid</td><td>0</td><td>0</td><td>0</td><td>0</td><td>0.00</td><td></td><td></td><td>10</td><td>10.0</td></tr>
+        </tbody>
+      </table>
+      <p class="cap">Meta, CRM and Qual. are leads over the 7 days. Gap is qualified per day short of the goal.</p>
+      <div class="feas">
+        <div class="h2" style="margin:0">Feasibility</div>
+        <p class="line"><b>8.0</b> qualified a day at <b>&#8377;101,014</b> a day is <b>&#8377;12,627</b> per qualified. The goal is <b>50</b> a day.</p>
+        <dl>
+          <dt>Needed at today's cost</dt><dd>&#8377;631,350 / day</dd><dd class="x">6.3x today's spend</dd>
+          <dt>Needed at the best cost, &#8377;5,409</dt><dd>&#8377;270,450 / day</dd><dd class="x">2.7x today's spend</dd>
+          <dt>Open setup debt</dt><dd>0</dd><dd class="x"></dd>
+        </dl>
+      </div>
+    </div>
+  </section>
+
+  <!-- 4a. funnel -->
+  <section class="screen" data-screen="funnel" data-label="Funnel" data-nav="funnel" data-h="fresh">
+    <header class="bar"><h1>Funnel</h1>
+      <div class="tools">
+        <select class="sel" aria-label="Product"><option>Disha Namma Mane</option><option>Purva Sparkling Spring by Fincity</option><option>Primus by Fincity</option><option>Cityville by Fincity</option></select>
+        <div class="seg" role="radiogroup" aria-label="Days"><input type="radio" name="d1" id="d1a" checked><label for="d1a">7d</label><input type="radio" name="d1" id="d1b"><label for="d1b">14d</label><input type="radio" name="d1" id="d1c"><label for="d1c">28d</label></div>
+        <div class="seg" role="radiogroup" aria-label="Level"><input type="radio" name="l1" id="l1a"><label for="l1a">Campaign</label><input type="radio" name="l1" id="l1b" checked><label for="l1b">Ad set</label><input type="radio" name="l1" id="l1c"><label for="l1c">Ad</label></div>
+      </div></header>
+    <div class="body">
+      <table class="t">
+        <thead><tr><th>Ad set</th><th>Spend</th><th>Meta</th><th>Per lead</th><th>CRM</th><th>Qual.</th><th>&#8377;/qual.</th><th class="tx">Verdict</th></tr></thead>
+        <tbody>
+          <tr><td class="nm">Lookalike</td><td>24,471</td><td>40</td><td>612</td><td>33</td><td>13</td><td>1,882</td><td class="tx"><span class="v keep">keep</span></td></tr>
+          <tr><td class="nm">NonAdvantage+ RK</td><td>70,497</td><td>58</td><td>1,215</td><td>45</td><td>10</td><td>7,050</td><td class="tx"><span class="v wait">wait: immature</span></td></tr>
+          <tr><td class="nm">Pincode Ad</td><td>50,237</td><td>44</td><td>1,142</td><td>34</td><td>1</td><td>50,237</td><td class="tx"><span class="v kill">kill</span></td></tr>
+          <tr><td class="nm">Instagram post: Backed by proven</td><td>836</td><td>0</td><td></td><td>0</td><td>0</td><td></td><td class="tx"><span class="v wait">wait: low spend</span></td></tr>
+        </tbody>
+      </table>
+      <p class="cap">Cheapest Meta lead first: Lookalike &#8377;612, Pincode Ad &#8377;1,142, NonAdvantage+ RK &#8377;1,215.</p>
+      <p class="cap">Kill is spend at 3x, 4.7x or 6.3x the target cost per qualified with 0, 1 or 2 qualified.</p>
+      <p class="cap">Immature means the leads arrived in the last 72 hours.</p>
+    </div>
+  </section>
+
+  <!-- 4b. funnel, no CRM -->
+  <section class="screen" data-screen="funnel-nocrm" data-label="Funnel, no CRM" data-nav="funnel" data-h="crm">
+    <header class="bar"><h1>Funnel</h1>
+      <div class="tools">
+        <select class="sel" aria-label="Product"><option>Disha Namma Mane</option></select>
+        <div class="seg" role="radiogroup" aria-label="Days"><input type="radio" name="d2" id="d2a" checked><label for="d2a">7d</label><input type="radio" name="d2" id="d2b"><label for="d2b">14d</label><input type="radio" name="d2" id="d2c"><label for="d2c">28d</label></div>
+        <div class="seg" role="radiogroup" aria-label="Level"><input type="radio" name="l2" id="l2a"><label for="l2a">Campaign</label><input type="radio" name="l2" id="l2b" checked><label for="l2b">Ad set</label><input type="radio" name="l2" id="l2c"><label for="l2c">Ad</label></div>
+      </div></header>
+    <div class="body">
+      <div class="notice" role="status">
+        <p><b>Verdicts withheld.</b> This snapshot has no CRM data: qualified is unknown, not zero. Fix it on <a href="#" data-go="today-degraded" style="color:inherit">Today</a>.</p>
+      </div>
+      <table class="t">
+        <thead><tr><th>Ad set</th><th>Spend</th><th>Meta</th><th>Per lead</th><th class="tx">Verdict</th></tr></thead>
+        <tbody>
+          <tr><td class="nm">NonAdvantage+ RK</td><td>90,128</td><td>46</td><td>1,959</td><td class="tx"><span class="v nocrm">no CRM</span></td></tr>
+          <tr><td class="nm">Pincode Ad</td><td>48,719</td><td>30</td><td>1,624</td><td class="tx"><span class="v nocrm">no CRM</span></td></tr>
+          <tr><td class="nm">Lookalike</td><td>24,761</td><td>15</td><td>1,651</td><td class="tx"><span class="v nocrm">no CRM</span></td></tr>
+          <tr><td class="nm">Instagram post: Well connected.</td><td>1,637</td><td>0</td><td></td><td class="tx"><span class="v nocrm">no CRM</span></td></tr>
+          <tr><td class="nm">Instagram post: At Codename #Nam</td><td>403</td><td>0</td><td></td><td class="tx"><span class="v nocrm">no CRM</span></td></tr>
+          <tr><td class="nm">Instagram post: A promise of qua</td><td>30</td><td>0</td><td></td><td class="tx"><span class="v nocrm">no CRM</span></td></tr>
+        </tbody>
+      </table>
+      <p class="cap">Cheapest Meta lead first: Pincode Ad &#8377;1,624, Lookalike &#8377;1,651, NonAdvantage+ RK &#8377;1,959.</p>
+    </div>
+  </section>
+
+  <!-- 5a. refresh running -->
+  <section class="screen" data-screen="refresh-running" data-label="Refresh, running" data-nav="refresh" data-h="run">
+    <header class="bar"><h1>Refresh</h1>
+      <div class="tools"><span class="lbl">Stops after the current step</span><button class="btn"><i class="sq"></i>Cancel</button></div></header>
+    <div class="body">
+      <div class="runhead"><h2>Refreshing Thu 08 Oct</h2><span>00:52 so far</span></div>
+      <table class="t steps">
+        <thead><tr><th></th><th class="tx">Step</th><th class="tx">State</th><th class="tx">Progress</th><th>Time</th></tr></thead>
+        <tbody>
+          <tr><td>1</td><td class="nm">Meta insights</td><td class="tx"><span class="st"><i class="g ok"></i>done</span></td><td class="tx">5 accounts, 1,104 rows, 28 days to 08 Oct</td><td>18.2s</td></tr>
+          <tr><td>2</td><td class="nm">Creatives and leads</td><td class="tx"><span class="st"><i class="g ok"></i>done</span></td><td class="tx">64 creatives, 1,812 leads, 33 new images</td><td>21.0s</td></tr>
+          <tr><td>3</td><td class="nm">CRM (LeadZump)</td><td class="tx"><span class="st"><i class="g run"></i>running</span></td><td class="tx">page 7 of 12, 431 tickets so far</td><td>12.8s</td></tr>
+          <tr class="wait"><td>4</td><td class="nm">Daily report</td><td class="tx"><span class="st"><i class="g idle"></i>waiting</span></td><td class="tx">waits for CRM</td><td></td></tr>
+        </tbody>
+      </table>
+      <p class="cap">Brief, Funnel and the advisor keep working on the last good data while this runs.</p>
+    </div>
+  </section>
+
+  <!-- 5b. refresh finished -->
+  <section class="screen" data-screen="refresh-done" data-label="Refresh, finished" data-nav="refresh" data-h="fresh">
+    <header class="bar"><h1>Refresh</h1>
+      <div class="tools"><button class="btn" data-go="refresh-running">Refresh Again</button></div></header>
+    <div class="body">
+      <div class="runhead"><h2>Refreshed Thu 08 Oct</h2><span>finished 07:32 in 1m 21s</span></div>
+      <table class="t steps">
+        <thead><tr><th></th><th class="tx">Step</th><th class="tx">State</th><th class="tx">Result</th><th>Time</th></tr></thead>
+        <tbody>
+          <tr><td>1</td><td class="nm">Meta insights</td><td class="tx"><span class="st"><i class="g ok"></i>done</span></td><td class="tx">5 accounts, 1,104 rows, 28 days to 08 Oct</td><td>18.2s</td></tr>
+          <tr><td>2</td><td class="nm">Creatives and leads</td><td class="tx"><span class="st"><i class="g ok"></i>done</span></td><td class="tx">64 creatives, 1,812 leads, 33 new images</td><td>21.0s</td></tr>
+          <tr><td>3</td><td class="nm">CRM (LeadZump)</td><td class="tx"><span class="st"><i class="g ok"></i>done</span></td><td class="tx">12 pages, 655 ad tickets, 97% of Meta leads joined</td><td>41.6s</td></tr>
+          <tr><td>4</td><td class="nm">Daily report</td><td class="tx"><span class="st"><i class="g ok"></i>done</span></td><td class="tx">Fincity-Daily-08-Oct-2026.html</td><td>0.7s</td></tr>
+        </tbody>
+      </table>
+      <div class="sum">
+        <p><b>Thu 08 Oct:</b> spend <span class="num">&#8377;98,412</span>, Meta leads <span class="num">47</span>, CRM leads <span class="num">44</span>, qualified <span class="num">9</span>, <span class="num">&#8377;10,935</span> per qualified.</p>
+        <div class="acts"><button class="btn primary" data-go="report">Open Report</button><button class="btn" data-go="brief">Brief</button><button class="btn" data-go="funnel">Funnel</button></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 6. report -->
+  <section class="screen" data-screen="report" data-label="Report" data-nav="report" data-h="fresh">
+    <header class="bar"><h1>Report</h1>
+      <div class="tools">
+        <select class="sel" aria-label="Report day"><option>Thu 08 Oct</option><option>Wed 07 Oct</option><option>Sun 27 Sep</option><option>Tue 11 Aug</option></select>
+        <select class="sel" aria-label="Window"><option>1 day</option><option>7 days</option><option>Month to date</option></select>
+        <button class="btn">Generate</button>
+        <button class="btn primary">Open in Browser</button>
+      </div></header>
+    <div class="body flush"><iframe id="rep" sandbox title="Fincity-Daily-08-Oct-2026.html"></iframe></div>
+  </section>
+
+  <!-- 7. advisor: two moments of the same turn -->
+  <section class="screen" data-screen="advisor-tool advisor-stream" data-label="Advisor" data-nav="advisor" data-h="fresh">
+    <header class="bar"><h1>Advisor</h1><span class="sub">Reads your data. Never changes your ads or your CRM.</span>
+      <div class="tools"><button class="btn">New Session <kbd>&#8984;N</kbd></button></div></header>
+    <div class="adv">
+      <nav class="sess" aria-label="Sessions">
+        <button aria-current="true"><b>how far are we from the goal?</b><span>Today 09:14</span></button>
+        <button><b>which Cityville creatives should I pause?</b><span>Yesterday 17:53</span></button>
+        <button><b>this is very old data</b><span>28 Sep</span></button>
+        <button><b>why did Primus qualified drop?</b><span>28 Sep</span></button>
+        <button><b>is the Pincode ad set worth keeping?</b><span>8 Aug</span></button>
+        <button><b>funnel for Namma Mane by ad</b><span>8 Aug</span></button>
+        <button><b>what changed since last week</b><span>7 Aug</span></button>
+      </nav>
+      <div class="chat">
+        <div class="log">
+          <div class="me">how far are we from the goal?<time>09:14</time></div>
+          <button class="tool" aria-expanded="false"><i class="g ok"></i><code>brief</code><span class="arg">7 days to Thu 08 Oct</span><span class="res">5 products, 4ms</span></button>
+          <p class="say">Portfolio is at <b>8.0 qualified a day</b> against a 50 a day goal. At current efficiency you'd need &#8377;631k a day; at the best-observed &#8377;5,409 per qualified you still need &#8377;270k a day. The constraint is money, not channels. Want me to propose a goal ramp?</p>
+          <div class="me">yes, start with Namma Mane. which ad sets?<time>09:15</time></div>
+          <button class="tool" data-when="advisor-tool" aria-busy="true"><i class="g run"></i><code>funnel</code><span class="arg">Disha Namma Mane, by ad set, 7 days</span><span class="res">running</span></button>
+          <button class="tool" data-when="advisor-stream" aria-expanded="false"><i class="g ok"></i><code>funnel</code><span class="arg">Disha Namma Mane, by ad set, 7 days</span><span class="res">4 ad sets, 6ms</span></button>
+          <p class="say" data-when="advisor-stream">Feed <b>Lookalike</b>: 13 qualified at &#8377;1,882 each, and the cheapest Meta lead in the product at &#8377;612. <b>Pincode Ad</b> has spent &#8377;50,237 for 1 qualified, which is past the kill line. NonAdvantage+ RK looks fine at &#8377;7,050 per qualified, but its leads are still inside the 72 hour<span class="caret" aria-hidden="true"></span></p>
+        </div>
+        <div class="compose">
+          <div class="row"><textarea aria-label="Message" placeholder="Ask about your portfolio"></textarea><button class="btn"><i class="sq"></i>Stop <kbd>esc</kbd></button></div>
+          <div class="stat" data-when="advisor-tool"><i class="g run"></i>Running funnel</div>
+          <div class="stat" data-when="advisor-stream"><i class="g run"></i>Answering, 3.2s</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  </main>
+  </div>
+</div></div>
+
+<!-- The embedded client report: template.html's own CSS (subset) and markup, shown in <iframe sandbox srcdoc>. -->
+<script type="text/plain" id="rep-src"><!doctype html><html><head><meta charset="utf-8"><style>
+:root{--paper:#f4f1e8;--card:#fcfbf6;--ink:#17140f;--soft:#54503f;--faint:#8f8674;--rule:#ded8c7;--hair:#ece7d9;--meta:#2f6f9f;--crm:#1f7a52;--gold:#8a5a24;--brass:#a8763a;--warn:#a83c26;
+--serif:"New York",ui-serif,"Iowan Old Style","Palatino Linotype",Palatino,Georgia,serif;--mono:ui-monospace,"SF Mono","JetBrains Mono","Roboto Mono",Menlo,monospace;--sans:-apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-serif;--sh-sm:0 2px 10px -5px rgba(38,29,15,.22)}
+*{box-sizing:border-box}body{margin:0;color:var(--ink);font-family:var(--sans);font-size:14px;line-height:1.58;-webkit-font-smoothing:antialiased;background:var(--paper)}
+.sheet{margin:0 auto;padding:32px 40px 60px}
+.masthead{border-bottom:2px solid var(--ink);padding-bottom:16px;margin-bottom:16px;position:relative}
+.masthead::after{content:"";position:absolute;left:0;right:0;bottom:-9px;height:8px;background-image:repeating-linear-gradient(90deg,var(--ink) 0 1.2px,transparent 1.2px 48px),repeating-linear-gradient(90deg,#c8bfa9 0 1px,transparent 1px 8px);background-size:100% 8px,100% 4px;background-position:left bottom;background-repeat:repeat-x}
+.kicker{font-family:var(--mono);font-size:10.5px;letter-spacing:.34em;text-transform:uppercase;color:var(--gold);display:flex;align-items:center;gap:10px}
+.kicker::before{content:"";width:26px;height:1px;background:var(--brass)}
+.masthead h1{font-family:var(--serif);font-weight:600;font-size:clamp(38px,5.4vw,54px);line-height:.98;letter-spacing:-.022em;margin:12px 0 14px}
+.masthead .sub{display:flex;justify-content:space-between;flex-wrap:wrap;gap:10px 24px;font-family:var(--mono);font-size:11.5px;color:var(--soft);border-top:1px solid var(--rule);padding-top:11px}
+.freshness{font-family:var(--mono);font-size:10.5px;color:var(--faint);margin-top:8px}
+.jumpnav{margin:0 -40px;padding:0 40px;border-bottom:1px solid var(--rule)}.jn-in{display:flex;gap:6px;padding:8px 0;overflow:hidden}
+.jumpnav a{font-family:var(--mono);font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--soft);text-decoration:none;padding:5px 11px;white-space:nowrap}
+section{margin-top:22px}
+.seckick{font-family:var(--mono);font-size:10.5px;letter-spacing:.24em;text-transform:uppercase;color:var(--gold);display:inline-flex;align-items:center;gap:9px}
+.seckick::before{content:"\00A7";font-size:12px;color:var(--brass);opacity:.8}
+h2{font-family:var(--serif);font-weight:600;font-size:27px;margin:4px 0 13px;letter-spacing:-.014em}
+.insight{border:1px solid #d8c191;border-left:3px solid var(--brass);background:linear-gradient(135deg,#fbf7ec 0%,#f4ebd6 100%);border-radius:13px;padding:14px 18px;box-shadow:var(--sh-sm)}
+.insight ul{margin:0;padding:0;list-style:none}.insight li{font-size:13.5px;line-height:1.6;margin-bottom:7px;padding-left:20px;position:relative}
+.insight li::before{content:"";position:absolute;left:0;top:8px;width:7px;height:7px;border-radius:50%;background:var(--brass);opacity:.55}
+.insight li.win::before{background:var(--crm);opacity:.8}.insight li.con::before{background:var(--warn);opacity:.8}.insight li:last-child{margin-bottom:0}
+.tagw,.tagc,.tagi{font-family:var(--mono);font-size:9px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;margin-right:8px}.tagw{color:var(--crm)}.tagc{color:var(--warn)}.tagi{color:var(--faint)}
+.missing{border:1px solid #e6c3b4;border-left:4px solid var(--warn);background:#fbf0ea;border-radius:12px;padding:14px 18px;margin:18px 0 0;box-shadow:var(--sh-sm)}
+.missing b{color:var(--warn);font-size:15px}.missing p{margin:6px 0 0;font-size:12.5px;color:#5d3a26}.missing .mwhere{font-family:var(--mono);font-size:11px;color:var(--soft);margin-top:6px}
+.okpis{display:grid;grid-template-columns:repeat(5,1fr);background:var(--card);border:1px solid var(--rule);border-radius:12px;overflow:hidden;margin:6px 0 16px;box-shadow:var(--sh-sm)}
+.ok{padding:11px 13px 10px;border-right:1px solid var(--hair)}.okv{font-family:var(--mono);font-size:15px;font-weight:700;line-height:1;white-space:nowrap}
+.okl{font-size:8.5px;text-transform:uppercase;letter-spacing:.1em;color:var(--faint);margin-top:6px}.okd{font-family:var(--mono);font-size:9.5px;margin-top:4px;color:var(--faint)}.okd.up{color:var(--crm)}.okd.down{color:var(--warn)}
+.kdot{display:inline-block;width:7px;height:7px;border-radius:50%;margin-right:5px}.kdot.m{background:var(--meta)}.kdot.c{background:var(--crm)}
+</style></head><body><div class="sheet">
+<header class="masthead"><div class="kicker">Daily performance &middot; Thu 08 Oct 2026</div><h1>Fincity Portfolio</h1>
+<div class="sub"><span>Meta Ads &rarr; CRM &rarr; Qualified</span><span>Cityville by Fincity &middot; Disha Namma Mane &middot; Primus by Fincity &middot; Purva Sparkling Spring by Fincity</span></div>
+<div class="freshness">Data: 08 Oct 2026, full day &middot; pulled 09 Oct, 07:30 am IST &middot; sources: Meta Ads + your CRM &middot; compared with 2026-10-07</div></header>
+<nav class="jumpnav"><div class="jn-in"><a>Brief</a><a>Overview</a><a>Cityville by Fincity</a><a>Disha Namma Mane</a><a>Primus by Fincity</a><a>Purva Sparkling Spring by Fincity</a></div></nav>
+<section><div class="seckick">Yesterday in brief</div><div class="insight"><ul>
+<li class="con"><span class="tagc">Watch</span>3 leads filled your ad form but never reached the CRM - recoverable, see the red banner below.</li>
+<li class="win"><span class="tagw">Win</span>Best value: "EOI Window - Dark Hue" (Disha Namma Mane) - 1 qualified at Rs 2,130 each vs Rs 10,935 portfolio average.</li>
+<li class="con"><span class="tagc">Watch</span>Watch: "elevation sunset" (Primus by Fincity) spent Rs 13,794 for 1 CRM lead and 0 qualified.</li>
+<li><span class="tagi">Note</span>Rs 98,412 across 4 projects -&gt; 44 CRM leads, 9 qualified (Rs 10,935 per qualified).</li></ul></div></section>
+<div class="missing"><b>3 leads are missing from your CRM</b><p>They submitted your ad form on 2026-10-08 but never arrived in the CRM. They are paid for and still warm - a same-day call recovers them.</p>
+<div class="mwhere">Cityville by Fincity: 1 (Video Ad Ayushi - 17-07-2026) &middot; Disha Namma Mane: 2 (wide elevation evening)</div></div>
+<section style="margin-top:40px"><div class="seckick">Portfolio &middot; 08 Oct 2026</div><h2>Overview</h2><div class="okpis">
+<div class="ok"><div class="okv">&#8377;98,412</div><div class="okl"><span class="kdot m"></span>Spend</div><div class="okd up">-Rs 2,856 vs last</div></div>
+<div class="ok"><div class="okv">47</div><div class="okl"><span class="kdot m"></span>Meta leads</div><div class="okd down">-4 vs last</div></div>
+<div class="ok"><div class="okv">44</div><div class="okl"><span class="kdot c"></span>CRM leads</div><div class="okd up">+2 vs last</div></div>
+<div class="ok"><div class="okv">9</div><div class="okl"><span class="kdot c"></span>Qualified</div><div class="okd up">+2 vs last</div></div>
+<div class="ok"><div class="okv">&#8377;10,935</div><div class="okl"><span class="kdot c"></span>Cost / qualified</div><div class="okd up">-Rs 3,532 vs last</div></div></div></section>
+</div></body></html></script>
+
+<script>
+// Mock switching only: screen, theme, window size. State lives in the hash: #screen,theme,size[,bare]
+const $=(s,r=document)=>[...r.querySelectorAll(s)], root=document.documentElement, win=document.getElementById('win');
+const screens=$('.screen').flatMap(s=>s.dataset.screen.split(' ').map(id=>({id,el:s})));
+const names={'advisor-tool':'Advisor, tool running','advisor-stream':'Advisor, streaming'};
+const st={screen:'today-fresh',theme:matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light',size:'1200'};
+for(const p of location.hash.slice(1).split(',')){
+  if(screens.some(s=>s.id===p))st.screen=p; else if(p==='dark'||p==='light')st.theme=p; else if(p==='900'||p==='1200')st.size=p; else if(p==='bare')root.classList.add('bare');
+}
+document.getElementById('tabs').append(...screens.map(s=>{const b=document.createElement('button');b.textContent=names[s.id]||s.el.dataset.label;b.dataset.go=s.id;return b}));
+function apply(){
+  const cur=screens.find(s=>s.id===st.screen).el;
+  root.dataset.theme=st.theme; win.dataset.size=st.size;
+  screens.forEach(s=>s.el.hidden=s.el!==cur);
+  $('[data-when]').forEach(e=>e.hidden=e.dataset.when!==st.screen);
+  document.getElementById('side').hidden=st.screen==='empty';
+  $('.navb').forEach(b=>b.dataset.nav===cur.dataset.nav?b.setAttribute('aria-current','page'):b.removeAttribute('aria-current'));
+  $('.health').forEach(b=>{b.hidden=b.dataset.h!==cur.dataset.h;cur.dataset.nav==='refresh'?b.setAttribute('aria-current','page'):b.removeAttribute('aria-current')});
+  $('#tabs button').forEach(b=>b.setAttribute('aria-pressed',b.dataset.go===st.screen));
+  $('[data-size]:not(.win)').forEach(b=>b.setAttribute('aria-pressed',b.dataset.size===st.size));
+  document.getElementById('theme').textContent=st.theme==='dark'?'Light':'Dark';
+  history.replaceState(null,'','#'+[st.screen,st.theme,st.size].concat(root.classList.contains('bare')?['bare']:[]).join(','));
+}
+document.addEventListener('click',e=>{
+  const go=e.target.closest('[data-go]'), size=e.target.closest('button[data-size]'), copy=e.target.closest('[data-copy]');
+  if(go){e.preventDefault();st.screen=go.dataset.go;apply()}
+  else if(size){st.size=size.dataset.size;apply()}
+  else if(e.target.id==='theme'){st.theme=st.theme==='dark'?'light':'dark';apply()}
+  else if(copy){navigator.clipboard?.writeText(copy.dataset.copy).catch(()=>{});copy.textContent='Copied';setTimeout(()=>copy.textContent='Copy',1200)}
+});
+document.getElementById('rep').srcdoc=document.getElementById('rep-src').textContent;
+apply();
+</script>
+</body>
+</html>
