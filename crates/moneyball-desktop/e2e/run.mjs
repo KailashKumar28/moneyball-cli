@@ -1,14 +1,18 @@
 // The one command: build the app with the e2e feature, give it a home and
-// a workspace of its own, start the stand-in model, and drive the real
-// binary twice (the second launch proves a session survives a restart).
+// a workspace of its own, start the stand-in model and the stand-in Meta,
+// and drive the real binary three times: twice on the demo workspace (the
+// second launch proves a session survives a restart), then once on a new,
+// empty home, where it onboards a client.
 //
-//   node run.mjs             build, then run
-//   node run.mjs --no-build  run the binary already built
+//   node run.mjs                         build, then run every launch
+//   node run.mjs --no-build              run the binary already built
+//   node run.mjs --no-build onboarding   only the launches named
 import { spawn } from "node:child_process";
 import { chmodSync, cpSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { startMockMeta } from "./mock-meta.mjs";
 import { startMockModel } from "./mock-model.mjs";
 
 const here = fileURLToPath(new URL(".", import.meta.url));
@@ -67,7 +71,11 @@ function hermetic(mockUrl) {
   // Fake on purpose, and no Meta token: a refresh must fail honestly.
   writeFileSync(auth, JSON.stringify({ llm_keys: { mock: "fake-e2e-key" } }));
   chmodSync(auth, 0o600);
-  return { root, home, workspace };
+
+  // A Mac that has never run Moneyball: nothing remembered, no token.
+  const fresh = join(root, "fresh");
+  mkdirSync(fresh);
+  return { root, home, workspace, fresh };
 }
 
 /** The harness's environment: nothing of the person's Moneyball setup leaks in. */
@@ -84,20 +92,30 @@ async function main() {
   if (!existsSync(app)) throw new Error(`no e2e binary at ${app}: run without --no-build.`);
 
   const mock = await startMockModel();
+  // Each daily pull held 3 s: long enough to watch the first refresh run.
+  const meta = await startMockMeta({ slowMs: 3000 });
   const dirs = hermetic(mock.url);
   rmSync(join(here, "shots"), { recursive: true, force: true });
   mkdirSync(join(here, "shots"));
-  const env = cleanEnv({ MB_E2E_APP: app, MB_E2E_HOME: dirs.home, MB_E2E_WORKSPACE: dirs.workspace, MB_E2E_MOCK: mock.url });
+  const env = cleanEnv({ MB_E2E_APP: app, MB_E2E_WORKSPACE: dirs.workspace, MB_E2E_MOCK: mock.url, MB_E2E_META: meta.url });
 
+  // One launch per spec file, in this order, each on its home.
+  const launches = [
+    ["smoke", dirs.home],
+    ["relaunch", dirs.home],
+    ["onboarding", dirs.fresh],
+  ];
+  const named = process.argv.slice(2).filter((a) => !a.startsWith("--"));
   let code = 0;
   try {
-    // One launch per spec file, in this order, sharing the home.
-    for (const spec of ["specs/smoke.mjs", "specs/relaunch.mjs"]) {
-      code = await run(join(here, "node_modules/.bin/wdio"), ["run", "wdio.conf.mjs", "--spec", spec], { cwd: here, env });
+    for (const [spec, home] of launches) {
+      if (named.length > 0 && !named.includes(spec)) continue;
+      code = await run(join(here, "node_modules/.bin/wdio"), ["run", "wdio.conf.mjs", "--spec", `specs/${spec}.mjs`], { cwd: here, env: { ...env, MB_E2E_HOME: home } });
       if (code !== 0) break;
     }
   } finally {
     mock.close();
+    meta.close();
     if (code === 0) rmSync(dirs.root, { recursive: true, force: true });
     else console.error(`\nFailed. The home and workspace are kept for a look: ${dirs.root}`);
   }
