@@ -11,6 +11,9 @@ use serde::{Deserialize, Serialize};
 use crate::error::{Error, Result};
 use crate::provider::ModelProviderInfo;
 
+mod edit;
+pub use edit::update;
+
 const GLOBAL_CONFIG: &str = ".moneyball/config.json"; // relative to $HOME
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -64,7 +67,7 @@ fn default_adset_id_path() -> String {
     "adsetId.adsetId".into()
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct WorkspaceConfig {
     /// Stable workspace UUID, minted once when the config is first
     /// loaded or saved by /setup. Every pushed/synced artifact carries
@@ -118,20 +121,15 @@ impl WorkspaceConfig {
     pub fn load(data_root: &Path) -> Result<Self> {
         migrate_legacy_layout(data_root);
         let path = data_root.join(DOT_DIR).join("config.json");
-        if !path.is_file() {
-            return Err(Error::NoWorkspaceConfig {
-                path: path.display().to_string(),
-            });
-        }
-        let raw = std::fs::read_to_string(&path)?;
-        let mut cfg: WorkspaceConfig = serde_json::from_str(&raw)
-            .map_err(|e| Error::Config(format!("{}: {}", path.display(), e)))?;
-        // One-time mint, here and nowhere else at runtime: every loaded
+        let cfg = edit::read(&path)?.ok_or_else(|| Error::NoWorkspaceConfig {
+            path: path.display().to_string(),
+        })?;
+        // One-time mint, here and in `update` only: every loaded
         // workspace has its id, so report generation only reads it and
-        // an in-memory clone can never mint a second one.
+        // an in-memory clone can never mint a second one. Under the lock,
+        // two first loads at once keep one id.
         if cfg.workspace_id.is_none() {
-            cfg.workspace_id = Some(mint_workspace_id(data_root));
-            cfg.save(data_root)?;
+            return update(data_root, |_| ());
         }
         Ok(cfg)
     }
@@ -152,7 +150,8 @@ impl WorkspaceConfig {
     }
 
     /// Persist to `<data_root>/.moneyball/config.json` (creates the dir if missing).
-    pub fn save(&self, data_root: &Path) -> Result<()> {
+    /// Private: every write goes through `update`, never a stale copy.
+    fn save(&self, data_root: &Path) -> Result<()> {
         migrate_legacy_layout(data_root);
         let dir = data_root.join(DOT_DIR);
         std::fs::create_dir_all(&dir)?;
@@ -163,35 +162,6 @@ impl WorkspaceConfig {
         crate::secrets::write_private(&dir, "config.json", pretty)?;
         Ok(())
     }
-}
-
-/// UUID-shaped id from sha256(data_root, time, pid) - collision-safe
-/// across machines without a rand dependency.
-pub fn mint_workspace_id(data_root: &Path) -> String {
-    use sha2::{Digest, Sha256};
-    let now = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map(|d| d.as_nanos())
-        .unwrap_or(0);
-    let h = format!(
-        "{:x}",
-        Sha256::digest(format!(
-            "{}|{}|{}",
-            data_root.display(),
-            now,
-            std::process::id()
-        ))
-    );
-    // Hex output is pure ASCII; .get() keeps the no-string-indexing rule.
-    let seg = |a: usize, b: usize| h.get(a..b).unwrap_or_default();
-    format!(
-        "{}-{}-{}-{}-{}",
-        seg(0, 8),
-        seg(8, 12),
-        seg(12, 16),
-        seg(16, 20),
-        seg(20, 32)
-    )
 }
 
 #[derive(Debug, Clone)]

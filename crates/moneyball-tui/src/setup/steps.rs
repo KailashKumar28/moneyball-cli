@@ -124,31 +124,27 @@ pub(super) fn advance_save(app: &mut App, s: &mut SetupState) {
         })
         .collect();
     let goals_map = parse_goals(&s.products, &s.goals_input).unwrap_or_default();
+    let providers = llm_providers_map(s);
     // target_rs_per_q is intentionally NOT asked during setup - it's a
-    // derived/observed metric per product, not a hardcoded universal value.
-    // Stored as None; the advisor derives it from observed performance.
+    // derived/observed metric per product, not a hardcoded universal value;
+    // the advisor derives it from observed performance.
     // Re-running /setup must never wipe state the wizard doesn't ask
-    // about: the minted workspace_id and the CRM config survive.
-    let prev = app.cfg.workspace.as_ref();
-    let cfg = WorkspaceConfig {
-        workspace_id: prev.and_then(|w| w.workspace_id.clone()).or_else(|| {
-            Some(moneyball_core::config::mint_workspace_id(
-                &app.cfg.data_root,
-            ))
-        }),
-        brand: prev.and_then(|w| w.brand.clone()),
-        products,
-        goals: goals_map,
-        target_rs_per_q: None,
-        crm: prev.map(|w| w.crm.clone()).unwrap_or_default(),
-        model_provider: s.llm_provider_id.clone().into(),
-        model: s.llm_model.clone().into(),
-        model_providers: llm_providers_map(s),
+    // about: config::update starts from the config on disk, so the minted
+    // workspace_id, the brand and the CRM config survive.
+    let saved = moneyball_core::config::update(&app.cfg.data_root, |w| {
+        w.products = products;
+        w.goals = goals_map;
+        w.model_provider = Some(s.llm_provider_id.clone());
+        w.model = Some(s.llm_model.clone());
+        w.model_providers = providers;
+    });
+    let cfg = match saved {
+        Ok(cfg) => cfg,
+        Err(e) => {
+            s.error = Some(format!("save failed: {}", e));
+            return;
+        }
     };
-    if let Err(e) = cfg.save(&app.cfg.data_root) {
-        s.error = Some(format!("save failed: {}", e));
-        return;
-    }
     // If user skipped Meta, scrub any stale token from auth.json.
     if !s.meta_connected {
         let _ = moneyball_core::secrets::clear_meta_token();

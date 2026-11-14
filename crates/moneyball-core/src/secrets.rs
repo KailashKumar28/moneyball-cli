@@ -74,27 +74,38 @@ fn load_file() -> Result<AuthFile> {
     }
 }
 
-/// Every write goes through here: one process at a time (a lock file beside
-/// auth.json, so the TUI and the CLI never lose each other's update), a
+/// Every write goes through here: one process at a time (`with_lock`), a
 /// strict load (never save over a file we could not read), and an atomic,
 /// owner-only write.
 fn update(change: impl FnOnce(&mut AuthFile)) -> Result<()> {
     let p = auth_path()?;
     let dir = p.parent().expect("auth path has parent");
-    std::fs::create_dir_all(dir)?;
     let name = p
         .file_name()
         .and_then(|n| n.to_str())
         .unwrap_or("auth.json")
         .to_string();
+    with_lock(dir, &name, || {
+        let mut f = load_file()?;
+        change(&mut f);
+        let body = serde_json::to_string_pretty(&f)
+            .map_err(|e| Error::Secrets(format!("serialize auth: {}", e)))?;
+        write_private(dir, &name, body).map(drop)
+    })
+}
+
+/// Run `f` holding `<dir>/<name>.lock` (creating `dir`): one writer at a
+/// time across processes - the TUI, the CLI, the app - so a read, change,
+/// write never loses another's update.
+pub(crate) fn with_lock<T>(
+    dir: &std::path::Path,
+    name: &str,
+    f: impl FnOnce() -> Result<T>,
+) -> Result<T> {
+    std::fs::create_dir_all(dir)?;
     let lock = std::fs::File::create(dir.join(format!("{}.lock", name)))?;
     lock.lock()?;
-    let mut f = load_file()?;
-    change(&mut f);
-    let body = serde_json::to_string_pretty(&f)
-        .map_err(|e| Error::Secrets(format!("serialize auth: {}", e)))?;
-    write_private(dir, &name, body)?;
-    Ok(())
+    f()
 }
 
 /// Atomic owner-only (0600) write for anything holding secrets or raw
