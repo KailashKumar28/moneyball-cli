@@ -108,14 +108,14 @@ export type BriefRow = {
   q_per_day: number | null;
   rs_per_q: number | null;
   l_to_q: number | null; // percent, one decimal
-  goal: number;
+  goal: number | null; // null: no goal set (D7)
   gap: number | null;
   trend: string;
 };
 export type Feasibility = {
   tot_q_per_day: number | null;
   tot_spend_per_day: number;
-  tot_goal_per_day: number;
+  tot_goal_per_day: number | null; // null: no product has a goal
   cur_rpq: number | null;
   required_at_cur: number | null;
   required_at_best: number | null;

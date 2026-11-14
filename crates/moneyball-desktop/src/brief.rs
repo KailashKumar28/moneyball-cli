@@ -44,12 +44,19 @@ fn feasibility_line(b: &ProductRowsAndFeasibility) -> String {
     if !b.has_crm {
         return "Feasibility needs qualified leads, and this snapshot has no CRM data.".into();
     }
+    let Some(goal) = f.tot_goal_per_day else {
+        return format!("Feasibility {}.", brief::print::NEEDS_A_GOAL);
+    };
+    let left_out = brief::no_goal_note(&b.rows)
+        .map(|n| format!(" {}.", capitalized(&n)))
+        .unwrap_or_default();
     format!(
-        "{:.1} qualified a day at Rs.{} a day is Rs.{} per qualified. The goal is {:.0} a day.",
+        "{:.1} qualified a day at Rs.{} a day is Rs.{} per qualified. The goal is {:.0} a day.{}",
         f.tot_q_per_day,
         commas(f.tot_spend_per_day),
         commas(f.cur_rpq),
-        f.tot_goal_per_day
+        goal,
+        left_out
     )
 }
 
@@ -95,4 +102,34 @@ pub fn brief(state: State<'_, AppState>) -> Result<BriefView, AppError> {
     // Read again only when there is a sentence to reword.
     let note = loaded.crm_note.as_ref().and_then(|_| crm_note(&cfg));
     Ok(brief_view(loaded, note))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::fixtures::demo;
+
+    /// A product with no goal crosses as null, and the sentence under the
+    /// table says it is left out of the totals (D7).
+    #[test]
+    fn a_product_without_a_goal_is_left_out_and_said() {
+        let mut cfg = demo::workspace("brief-goal", true, true);
+        let goals = &mut cfg.workspace.as_mut().unwrap().goals;
+        goals.remove("Cityville");
+        let v = brief_view(brief::load(&cfg), None);
+        cfg.workspace.as_mut().unwrap().goals.clear();
+        let none = brief_view(brief::load(&cfg), None);
+        demo::remove(&cfg);
+        let json = serde_json::to_value(&v).unwrap();
+        assert!(json["brief"]["rows"][1]["goal"].is_null(), "{}", json);
+        assert_eq!(json["brief"]["feasibility"]["tot_goal_per_day"], 6.0);
+        let line = v.feasibility_line.unwrap();
+        let said = " The goal is 6 a day. No goal set for 1 product - left out of these totals.";
+        assert!(line.ends_with(said), "{}", line);
+        let line = none.feasibility_line.unwrap();
+        assert_eq!(
+            line,
+            "Feasibility needs a goal, and no product has one set."
+        );
+    }
 }

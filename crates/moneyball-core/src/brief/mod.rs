@@ -8,10 +8,12 @@
 pub mod history;
 mod load;
 pub mod print;
+#[cfg(test)]
+mod tests;
 mod wire;
 pub use history::load_history;
 pub use load::{load, Loaded};
-pub use print::{cpl_order, format_brief_table, print_brief};
+pub use print::{cpl_order, format_brief_table, no_goal_note, print_brief};
 
 use std::collections::HashMap;
 use std::path::Path;
@@ -40,16 +42,21 @@ pub struct ProductRow {
     pub q_per_day: f64,
     pub rs_per_q: Option<u64>,
     pub l_to_q: Option<f64>,
-    pub goal: f64,
-    pub gap: f64,
+    /// Qualified a day; None when the workspace stores no goal (D7).
+    pub goal: Option<f64>,
+    /// Goal minus qualified a day; None without a goal.
+    pub gap: Option<f64>,
     pub trend: String, // space-separated q/day from history
 }
 
 #[derive(Debug, Clone)]
+/// Totals over the products with a goal only; a product without one is
+/// not counted (`no_goal_note` says how many).
 pub struct Feasibility {
     pub tot_q_per_day: f64,
     pub tot_spend_per_day: u64,
-    pub tot_goal_per_day: f64,
+    /// None when no product has a goal: nothing to be feasible against.
+    pub tot_goal_per_day: Option<f64>,
     pub cur_rpq: u64,
     pub required_at_cur: Option<u64>,
     pub required_at_best: Option<u64>,
@@ -80,28 +87,16 @@ pub fn compute(
     };
 
     let mut rows = Vec::new();
-    let mut best_rpq: Option<u64> = None;
     let workspace = cfg
         .workspace
         .as_ref()
         .expect("brief called without workspace");
     for prod in &workspace.products {
-        let r = compute_product(
-            prod.name.as_str(),
-            snap,
-            &window,
-            workspace.goal_for(&prod.name),
-        );
-        if let Some(rpq) = r.rs_per_q {
-            best_rpq = Some(match best_rpq {
-                Some(b) if b <= rpq => b,
-                _ => rpq,
-            });
-        }
-        rows.push(r);
+        let goal = workspace.goal_for(&prod.name);
+        rows.push(compute_product(prod.name.as_str(), snap, &window, goal));
     }
 
-    let feasibility = compute_feasibility(&rows, cfg, best_rpq);
+    let feasibility = compute_feasibility(&rows, cfg);
     let trend_rows = history::trend_rows_for(history, &rows);
     history::apply_trends(&mut rows, trend_rows);
 
@@ -124,7 +119,12 @@ struct Window {
     lag_cut_ist: i64,
 }
 
-fn compute_product(product: &str, snap: &Snapshot, window: &Window, goal: f64) -> ProductRow {
+fn compute_product(
+    product: &str,
+    snap: &Snapshot,
+    window: &Window,
+    goal: Option<f64>,
+) -> ProductRow {
     let d0 = window.d0;
     let d1 = window.d1;
     let d0_ist = window.d0_ist;
@@ -209,27 +209,30 @@ fn compute_product(product: &str, snap: &Snapshot, window: &Window, goal: f64) -
         rs_per_q,
         l_to_q: l_to_q.map(round1),
         goal,
-        gap: round1(goal - qpd),
+        gap: goal.map(|g| round1(g - qpd)),
         trend: "-".into(),
     }
 }
 
-fn compute_feasibility(rows: &[ProductRow], cfg: &AppConfig, best_rpq: Option<u64>) -> Feasibility {
+fn compute_feasibility(rows: &[ProductRow], cfg: &AppConfig) -> Feasibility {
+    let rows: Vec<&ProductRow> = rows.iter().filter(|r| r.goal.is_some()).collect();
+    let best_rpq = rows.iter().filter_map(|r| r.rs_per_q).min();
     let tot_q: f64 = rows.iter().map(|r| r.q7d as f64).sum();
     let tot_q_per_day = tot_q / 7.0;
     let tot_spend_per_day: u64 = rows.iter().map(|r| r.spend_per_day).sum();
-    let tot_goal_per_day: f64 = rows.iter().map(|r| r.goal).sum();
+    let goals = rows.iter().filter_map(|r| r.goal);
+    let tot_goal_per_day = (!rows.is_empty()).then(|| goals.sum::<f64>());
     let cur_rpq = if tot_q > 0.0 {
         (tot_spend_per_day as f64 / tot_q_per_day).round() as u64
     } else {
         0
     };
-    let required_at_cur = if tot_q_per_day > 0.0 {
-        Some(((tot_goal_per_day * cur_rpq as f64).round()) as u64)
-    } else {
-        None
-    };
-    let required_at_best = best_rpq.map(|b| ((tot_goal_per_day * b as f64).round()) as u64);
+    let required_at_cur = tot_goal_per_day
+        .filter(|_| tot_q_per_day > 0.0)
+        .map(|g| (g * cur_rpq as f64).round() as u64);
+    let required_at_best = tot_goal_per_day
+        .zip(best_rpq)
+        .map(|(g, b)| (g * b as f64).round() as u64);
     let open_debt = load_open_debt(&cfg.state_dir().join("setup_debt.json"));
     Feasibility {
         tot_q_per_day,

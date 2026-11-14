@@ -24,13 +24,21 @@ pub fn print_brief(r: &ProductRowsAndFeasibility) {
         print_debt(&f.open_debt);
         return;
     }
+    let Some(goal) = f.tot_goal_per_day else {
+        println!("FEASIBILITY  {}", NEEDS_A_GOAL);
+        print_debt(&f.open_debt);
+        return;
+    };
     println!(
         "FEASIBILITY  portfolio {:.1} q/day at Rs.{}/day = Rs.{}/qualified - goal {:.0}/day",
         f.tot_q_per_day,
         commas(f.tot_spend_per_day),
         commas(f.cur_rpq),
-        f.tot_goal_per_day
+        goal
     );
+    if let Some(note) = no_goal_note(&r.rows) {
+        println!("  {}", note);
+    }
     if let Some(req) = f.required_at_cur {
         println!(
             "  required spend at CURRENT efficiency : Rs.{}/day ({:.1}x today)",
@@ -49,6 +57,21 @@ pub fn print_brief(r: &ProductRowsAndFeasibility) {
     print_debt(&f.open_debt);
 }
 
+/// Feasibility's words when no product has a goal (D7).
+pub const NEEDS_A_GOAL: &str = "needs a goal, and no product has one set";
+
+/// "no goal set for 2 products - left out of these totals", or None when
+/// every product has a goal. Feasibility counts only products with one.
+pub fn no_goal_note(rows: &[ProductRow]) -> Option<String> {
+    let n = rows.iter().filter(|r| r.goal.is_none()).count() as u64;
+    (n > 0).then(|| {
+        format!(
+            "no goal set for {} - left out of these totals",
+            crate::text::count(n, "product", "products")
+        )
+    })
+}
+
 fn print_debt(debt: &[String]) {
     let suffix = if debt.is_empty() {
         String::new()
@@ -63,7 +86,8 @@ fn print_debt(debt: &[String]) {
 type BriefCell = Box<dyn Fn(&ProductRow) -> String>;
 type BriefSpec<'a> = (&'a str, BriefCell);
 
-/// Without CRM data the CRM-derived columns print "-": unknown, not zero.
+/// Without CRM data the CRM-derived columns print "-": unknown, not zero;
+/// so do goal and gap for a product with no goal set.
 pub fn format_brief_table(rows: &[ProductRow], has_crm: bool) -> String {
     let crm = move |f: fn(&ProductRow) -> String| -> BriefCell {
         Box::new(move |r| if has_crm { f(r) } else { "-".into() })
@@ -91,8 +115,8 @@ pub fn format_brief_table(rows: &[ProductRow], has_crm: bool) -> String {
                     .unwrap_or_else(|| "-".into())
             }),
         ),
-        ("goal", Box::new(|r| fmt_f64(r.goal, 0))),
-        ("gap", crm(|r| fmt_f64(r.gap, 1))),
+        ("goal", Box::new(|r| opt(r.goal, 0))),
+        ("gap", crm(|r| opt(r.gap, 1))),
         ("q_last7_by_day", Box::new(|r| r.trend.clone())),
     ];
     let headers: Vec<&str> = cols.iter().map(|(h, _)| *h).collect();
@@ -101,6 +125,10 @@ pub fn format_brief_table(rows: &[ProductRow], has_crm: bool) -> String {
         .map(|r| cols.iter().map(|(_, f)| f(r)).collect())
         .collect();
     crate::text::table(&headers, &cells)
+}
+
+fn opt(x: Option<f64>, decimals: usize) -> String {
+    x.map_or("-".into(), |x| fmt_f64(x, decimals))
 }
 
 fn fmt_f64(x: f64, decimals: usize) -> String {

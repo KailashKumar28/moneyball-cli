@@ -111,10 +111,14 @@ fn product_lines(out: &mut Vec<String>, r: &ProductRow, has_crm: bool) {
         r.q_per_day,
         rs_per_q
     ));
+    // No goal, no gap: said in words so the model never assumes one (D7).
+    let (gap, no_goal) = match r.gap {
+        Some(g) => (format!("{:.1}", g), ""),
+        None => ("-".into(), "  no goal set"),
+    };
     out.push(format!(
-        "    L->Q {:>5}   gap {:>5}",
-        l_to_q,
-        format!("{:.1}", r.gap)
+        "    L->Q {:>5}   gap {:>5}{}",
+        l_to_q, gap, no_goal
     ));
 }
 
@@ -124,13 +128,20 @@ fn feasibility_lines(out: &mut Vec<String>, b: &ProductRowsAndFeasibility) {
         out.push("FEASIBILITY  needs qualified leads, and this snapshot has no CRM data".into());
         return;
     }
+    let Some(goal) = f.tot_goal_per_day else {
+        out.push(format!("FEASIBILITY  {}", brief::print::NEEDS_A_GOAL));
+        return;
+    };
     out.push(format!(
         "FEASIBILITY  {:.1} q/day @ Rs.{}/day = Rs.{}/q  -  goal {:.0}/day",
         f.tot_q_per_day,
         commas(f.tot_spend_per_day),
         commas(f.cur_rpq),
-        f.tot_goal_per_day
+        goal
     ));
+    if let Some(note) = brief::no_goal_note(&b.rows) {
+        out.push(format!("  {}", note));
+    }
     if let Some(req) = f.required_at_cur {
         out.push(format!(
             "  required @ current:  Rs.{}/day ({:.1}x)",
@@ -218,14 +229,14 @@ mod tests {
                 q_per_day: 1.0,
                 rs_per_q: Some(12000),
                 l_to_q: Some(17.5),
-                goal: 3.0,
-                gap: -2.0,
+                goal: Some(3.0),
+                gap: Some(-2.0),
                 trend: String::new(),
             }],
             feasibility: brief::Feasibility {
                 tot_q_per_day: 1.0,
                 tot_spend_per_day: 12000,
-                tot_goal_per_day: 3.0,
+                tot_goal_per_day: Some(3.0),
                 cur_rpq: 12000,
                 required_at_cur: Some(36000),
                 required_at_best: None,
@@ -266,7 +277,11 @@ mod tests {
         // A person keeps the CRM state, not the words meant for the model.
         let shown = for_people(&text);
         assert!(shown.ends_with("\n! CRM is 3 days behind."), "{}", shown);
-        assert!(!shown.contains("IMPORTANT") && !shown.contains("l/q/v"), "{}", shown);
+        assert!(
+            !shown.contains("IMPORTANT") && !shown.contains("l/q/v"),
+            "{}",
+            shown
+        );
         assert_eq!(for_people("plain"), "plain");
     }
 }

@@ -147,8 +147,9 @@ impl WorkspaceConfig {
             .collect()
     }
 
-    pub fn goal_for(&self, product: &str) -> f64 {
-        self.goals.get(product).copied().unwrap_or(10.0)
+    /// Qualified leads a day; None when none is stored - never a default.
+    pub fn goal_for(&self, product: &str) -> Option<f64> {
+        self.goals.get(product).copied()
     }
 
     /// Persist to `<data_root>/.moneyball/config.json` (creates the dir if missing).

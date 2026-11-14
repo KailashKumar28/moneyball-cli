@@ -31,7 +31,7 @@ struct Row<'a> {
     q_per_day: Option<f64>,
     rs_per_q: Option<u64>,
     l_to_q: Option<f64>,
-    goal: f64,
+    goal: Option<f64>,
     gap: Option<f64>,
     trend: &'a str,
 }
@@ -40,7 +40,7 @@ struct Row<'a> {
 struct Feas<'a> {
     tot_q_per_day: Option<f64>,
     tot_spend_per_day: u64,
-    tot_goal_per_day: f64,
+    tot_goal_per_day: Option<f64>,
     cur_rpq: Option<u64>,
     required_at_cur: Option<u64>,
     required_at_best: Option<u64>,
@@ -60,7 +60,7 @@ fn row(p: &ProductRow, crm: bool) -> Row<'_> {
         rs_per_q: p.rs_per_q.filter(|_| crm),
         l_to_q: p.l_to_q.filter(|_| crm),
         goal: p.goal,
-        gap: crm.then_some(p.gap),
+        gap: p.gap.filter(|_| crm),
         trend: &p.trend,
     }
 }
@@ -106,14 +106,14 @@ mod tests {
                 q_per_day: 0.0,
                 rs_per_q: None,
                 l_to_q: None,
-                goal: 3.0,
-                gap: 3.0,
+                goal: Some(3.0),
+                gap: Some(3.0),
                 trend: "-".into(),
             }],
             feasibility: Feasibility {
                 tot_q_per_day: 0.0,
                 tot_spend_per_day: 900,
-                tot_goal_per_day: 3.0,
+                tot_goal_per_day: Some(3.0),
                 cur_rpq: 0,
                 required_at_cur: None,
                 required_at_best: None,
