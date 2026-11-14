@@ -121,9 +121,25 @@ pub fn onboarding_state() -> OnboardingState {
     }
 }
 
-#[tauri::command(async)]
-pub fn meta_connect(token: String) -> Result<TokenCheck, AppError> {
-    connect(&token, meta::check_token, secrets::store_meta_token)
+/// Core's Meta calls block on a client of their own, which panics when it
+/// is dropped on one of the async runtime's threads (where an `async`
+/// command runs): a command that calls Meta runs them on a blocking one.
+async fn calling_meta<T: Send + 'static>(
+    work: impl FnOnce() -> Result<T, AppError> + Send + 'static,
+) -> Result<T, AppError> {
+    tauri::async_runtime::spawn_blocking(work)
+        .await
+        .map_err(|e| {
+            AppError::new(
+                "io",
+                format!("The call to Meta stopped unexpectedly: {}", e),
+            )
+        })?
+}
+
+#[tauri::command]
+pub async fn meta_connect(token: String) -> Result<TokenCheck, AppError> {
+    calling_meta(move || connect(&token, meta::check_token, secrets::store_meta_token)).await
 }
 
 /// Where `client_create` puts `name` unless the user picks a folder.
@@ -139,11 +155,14 @@ pub fn client_folder_pick(app: AppHandle) -> Result<Option<Folder>, AppError> {
     Ok(workspace::pick_folder(&app)?.map(|dir| folder(&dir)))
 }
 
-#[tauri::command(async)]
-pub fn client_accounts(name: String) -> Result<Vec<AccountChoice>, AppError> {
-    let token = secrets::load_meta_token().ok_or_else(not_connected)?;
-    let all = onboarding::accounts(&token, &clients::list()).map_err(in_sheet)?;
-    Ok(account_choices(&name, all))
+#[tauri::command]
+pub async fn client_accounts(name: String) -> Result<Vec<AccountChoice>, AppError> {
+    calling_meta(move || {
+        let token = secrets::load_meta_token().ok_or_else(not_connected)?;
+        let all = onboarding::accounts(&token, &clients::list()).map_err(in_sheet)?;
+        Ok(account_choices(&name, all))
+    })
+    .await
 }
 
 #[tauri::command(async)]

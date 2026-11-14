@@ -296,11 +296,12 @@ dialog.sheet{width:680px;max-width:calc(100vw - 32px);max-height:calc(100vh - va
 dialog.sheet[open]{display:flex;flex-direction:column}
 dialog.sheet::backdrop{background:rgba(23,20,15,.3)}
 @media (prefers-color-scheme:dark){dialog.sheet::backdrop{background:rgba(0,0,0,.55)}}
-.sheet form{flex:1;min-height:0;display:flex;flex-direction:column}
+/* auto, not 0%, flex bases: the system WKWebView sizes a 0% basis in an auto-height dialog to nothing */
+.sheet form{flex:1 1 auto;min-height:0;display:flex;flex-direction:column}
 .sheet header{padding:var(--s5) var(--s5) var(--s3)}
 .sheet header .lbl{margin:0 0 2px}
 .sheet h2{font:600 20px/1.2 var(--serif);margin:0}
-.sheet .sbody{flex:1;min-height:0;overflow:auto;padding:0 var(--s5) var(--s4)}
+.sheet .sbody{flex:1 1 auto;min-height:0;overflow:auto;padding:0 var(--s5) var(--s4)}
 .sheet>.sbody{padding-top:var(--s5)}
 .sheet footer{flex:none;display:flex;justify-content:flex-end;gap:var(--s2);padding:var(--s3) var(--s5);border-top:1px solid var(--rule)}
 .sheet footer .back{margin-right:auto}

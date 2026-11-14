@@ -85,6 +85,11 @@ forwarder thread that drains core's `Receiver` and returns at once.
   or refresh carries on and state and the session file stay complete.
 - Commands that touch disk are `#[tauri::command(async)]` so they run off
   the main thread. The folder dialog blocks that worker, not the UI.
+- Commands that call Meta (`meta_connect`, `client_accounts`) are `async
+  fn`s that run core on `spawn_blocking`: core's blocking HTTP client
+  panics when it is dropped on an async runtime thread, which is where an
+  `(async)` command runs. Found by the real-app run (the call never
+  answered); the mocked UI tests cannot see it.
 
 Safety.
 
