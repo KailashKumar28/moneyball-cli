@@ -54,10 +54,10 @@ fn the_advisor_is_never_told_a_slash_command() {
         assert_eq!(reads.len(), if snapshots { 10 } else { 2 });
         if !snapshots {
             // The dead end: nothing here pulls data but Refresh.
-            assert!(reads[0].1.contains("the Refresh button pulls one"));
+            assert!(reads[0].1.contains("Refresh (Cmd-R) pulls one"));
             assert_eq!(
                 reads[1].1,
-                "no snapshot on disk - tell the user to run the Refresh button before asking for numbers"
+                "no snapshot on disk - tell the user to run Refresh (Cmd-R) before asking for numbers"
             );
         }
         if snapshots && !crm {

@@ -69,7 +69,8 @@ pub fn say(step: &str) -> String {
     let step = step.trim();
     let in_terminal = |command: &str| format!("`{}` in Terminal", command);
     match translate(&Command::new(step, "")) {
-        Action::Refresh { force: false, .. } => "the Refresh button".into(),
+        // Cmd-R starts one from any screen; not every screen has the button.
+        Action::Refresh { force: false, .. } => "Refresh (Cmd-R)".into(),
         Action::Refresh { force: true, .. } => {
             "the \"Pull Meta again\" button on the Today screen".into()
         }

@@ -54,7 +54,7 @@ mod tests {
         }
         let none = system_prompt(&cfg, None, None);
         assert!(
-            none.contains("snapshot: none yet. the Refresh button pulls one when"),
+            none.contains("snapshot: none yet. Refresh (Cmd-R) pulls one when"),
             "{}",
             none
         );

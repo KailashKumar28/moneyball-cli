@@ -105,7 +105,7 @@ fn provider_of(cfg: &AppConfig) -> Result<(String, ModelProviderInfo, String)> {
     if pid.is_empty() || model.is_empty() {
         return Err(Error::Config(
             "no LLM configured - crm connect drafts the spec with your LLM; \
-             run /setup (step 4) first, or write crm.toml by hand (moneyball crm init)"
+             run /setup first to pick one, or write crm.toml by hand (moneyball crm init)"
                 .into(),
         ));
     }

@@ -11,6 +11,7 @@ use tauri::State;
 use crate::error::AppError;
 use crate::front_end::crm_note;
 use crate::state::AppState;
+use crate::today::capitalized;
 
 #[derive(Serialize)]
 pub struct BriefView {
@@ -75,8 +76,14 @@ pub fn brief_view(loaded: Loaded, crm_note: Option<String>) -> BriefView {
         crm_head: b
             .filter(|b| !b.has_crm)
             .map(|_| "CRM columns hidden.".into()),
-        crm_note,
-        fault: loaded.fault.map(AppError::from),
+        // Core's sentence starts lower case: here it follows the head.
+        crm_note: crm_note.map(|n| capitalized(&n)),
+        // No snapshot at all is said, with the button that pulls one.
+        fault: match (&loaded.brief, loaded.fault) {
+            (_, Some(e)) => Some(AppError::from(e)),
+            (None, None) => Some(AppError::no_data()),
+            (Some(_), None) => None,
+        },
         brief: loaded.brief,
     }
 }

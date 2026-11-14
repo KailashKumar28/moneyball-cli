@@ -308,7 +308,7 @@ fn run_turn_with(
                 });
                 let _ = tx.send(Ev::ToolEnd {
                     call_id: call.id,
-                    output,
+                    output: tool_text::for_people(&output),
                     ok: false,
                 });
             }
@@ -351,9 +351,10 @@ fn run_turn_with(
                     is_error: !ok,
                 },
             );
+            // The history keeps what the model read; the event, what a person sees.
             let _ = tx.send(Ev::ToolEnd {
                 call_id: call.id,
-                output,
+                output: tool_text::for_people(&output),
                 ok,
             });
         }

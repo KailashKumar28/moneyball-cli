@@ -42,6 +42,11 @@ pub enum Error {
     #[error("crm auth: {message}. Store a fresh one with: {fix}")]
     CrmAuth { message: String, fix: String },
 
+    /// The CRM refused the request itself (a 4xx that is not about the
+    /// key): a retry sends the same request, so the fix is reconnecting.
+    #[error("crm request: {message}. Reconnect with: {fix}")]
+    CrmRequest { message: String, fix: String },
+
     #[error("secrets: {0}")]
     Secrets(String),
 
@@ -59,6 +64,7 @@ impl Error {
             Error::MetaAuth(_) => "meta_auth",
             Error::Meta(_) => "meta",
             Error::CrmAuth { .. } => "crm_auth",
+            Error::CrmRequest { .. } => "crm_request",
             Error::LlmAuth(_) => "llm_auth",
             Error::Llm(_) => "llm",
             Error::Secrets(_) => "secrets",
@@ -73,6 +79,7 @@ impl Error {
     pub fn reason(&self) -> String {
         match self {
             Error::CrmAuth { message, .. }
+            | Error::CrmRequest { message, .. }
             | Error::MetaAuth(message)
             | Error::Meta(message)
             | Error::Config(message) => message.clone(),
@@ -84,7 +91,7 @@ impl Error {
     /// "/" means a command inside moneyball, anything else a shell command.
     pub fn fix(&self) -> Option<String> {
         match self {
-            Error::CrmAuth { fix, .. } => Some(fix.clone()),
+            Error::CrmAuth { fix, .. } | Error::CrmRequest { fix, .. } => Some(fix.clone()),
             Error::MetaAuth(_) => Some("/setup meta".into()),
             _ => None,
         }

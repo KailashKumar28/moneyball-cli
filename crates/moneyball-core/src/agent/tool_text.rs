@@ -10,17 +10,28 @@ use crate::funnel::{self, By};
 use crate::text::commas;
 use crate::Snapshot;
 
+/// Where a tool's output turns to the model: the CRM state it must not
+/// read past, then an instruction meant for it alone.
+const TO_MODEL: &str = "\nIMPORTANT: ";
+const MODEL_ONLY: &str = " Do not diagnose lead quality from l/q/v.";
+
 /// What the brief tool returns: the brief's lines, and the CRM state
 /// the model must not read past.
 pub fn brief_text(b: &ProductRowsAndFeasibility, crm_note: Option<&str>) -> String {
     let mut out = format_brief_as_lines(b).join("\n");
     if let Some(note) = crm_note {
-        out.push_str(&format!(
-            "\nIMPORTANT: {}. Do not diagnose lead quality from l/q/v.",
-            note
-        ));
+        out.push_str(&format!("{}{}.{}", TO_MODEL, note, MODEL_ONLY));
     }
     out
+}
+
+/// A tool's output as a person sees it: the CRM state stays, as a plain
+/// warning line; the words addressed to the model do not.
+pub fn for_people(output: &str) -> String {
+    match output.split_once(TO_MODEL) {
+        Some((body, note)) => format!("{}\n! {}", body, note.trim_end_matches(MODEL_ONLY)),
+        None => output.to_string(),
+    }
 }
 
 /// The brief tool's output for a snapshot.
@@ -252,5 +263,10 @@ mod tests {
         assert!(text.ends_with(
             "\nIMPORTANT: CRM is 3 days behind. Do not diagnose lead quality from l/q/v."
         ));
+        // A person keeps the CRM state, not the words meant for the model.
+        let shown = for_people(&text);
+        assert!(shown.ends_with("\n! CRM is 3 days behind."), "{}", shown);
+        assert!(!shown.contains("IMPORTANT") && !shown.contains("l/q/v"), "{}", shown);
+        assert_eq!(for_people("plain"), "plain");
     }
 }

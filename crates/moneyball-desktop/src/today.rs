@@ -94,7 +94,7 @@ fn footer(h: &Health) -> [String; 2] {
     [data, crm]
 }
 
-fn capitalized(s: &str) -> String {
+pub(crate) fn capitalized(s: &str) -> String {
     let mut chars = s.chars();
     match chars.next() {
         Some(first) => first.to_uppercase().chain(chars).collect(),

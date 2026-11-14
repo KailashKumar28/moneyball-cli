@@ -37,3 +37,19 @@ fn other_statuses_carry_a_truncated_snippet() {
         msg
     );
 }
+
+#[test]
+fn a_refused_request_is_fixed_by_reconnecting_and_a_busy_crm_by_retrying() {
+    // A retry sends the same request: the fix is redoing the connection.
+    let e = status_error(reqwest::StatusCode::BAD_REQUEST, "", &[]);
+    assert_eq!(e.kind(), "crm_request");
+    assert_eq!(e.fix().as_deref(), Some("/connect crm"));
+    assert_eq!(e.reason(), "CRM returned 400 Bad Request");
+    for later in [
+        reqwest::StatusCode::TOO_MANY_REQUESTS,
+        reqwest::StatusCode::REQUEST_TIMEOUT,
+        reqwest::StatusCode::BAD_GATEWAY,
+    ] {
+        assert_eq!(status_error(later, "", &[]).fix(), None, "{}", later);
+    }
+}

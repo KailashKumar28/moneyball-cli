@@ -81,8 +81,9 @@ pub fn view_items(history: &[Item]) -> Vec<ViewItem> {
     out
 }
 
-/// Fill in the pending row of `id` with its output.
+/// Fill in the pending row of `id` with its output, as a person sees it.
 fn answer(out: &mut Vec<ViewItem>, id: &str, text: &str, is_error: bool) {
+    let text = &super::tool_text::for_people(text);
     let done = if is_error {
         ToolStatus::Failed
     } else {

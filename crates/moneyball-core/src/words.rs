@@ -42,17 +42,29 @@ impl Command {
     }
 }
 
-/// What a fix command does.
+/// What a fix command does. Only a shell command is "in a shell": a
+/// slash command runs inside moneyball.
 pub fn fix_does(fix: &str) -> &'static str {
-    if fix == "/setup meta" {
-        "paste a fresh Meta token; products and settings stay"
-    } else if fix.contains("crm secret") {
-        "in a shell; it asks for the new token"
-    } else if fix == "/connect crm" {
-        "pick your CRM and give its key; a test pull checks it"
-    } else if fix.contains("crm connect") {
-        "in a shell; it walks you through connecting your CRM"
-    } else {
-        "in a shell"
+    match fix {
+        "/setup" => "sets this client up: Meta, its products, goals and the model",
+        "/setup meta" => "paste a fresh Meta token; products and settings stay",
+        "/connect crm" => "pick your CRM and give its key; a test pull checks it",
+        f if f.contains("crm secret") => "in a shell; it asks for the new token",
+        f if f.contains("crm connect") => "in a shell; it walks you through connecting your CRM",
+        f if f.starts_with('/') => "",
+        _ => "in a shell",
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::fix_does;
+
+    #[test]
+    fn only_a_shell_command_is_said_to_run_in_a_shell() {
+        for slash in ["/setup", "/setup meta", "/connect crm", "/refresh"] {
+            assert!(!fix_does(slash).contains("in a shell"), "{}", slash);
+        }
+        assert_eq!(fix_does("moneyball refresh"), "in a shell");
     }
 }

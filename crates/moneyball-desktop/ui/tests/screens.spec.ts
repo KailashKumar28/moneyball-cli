@@ -539,12 +539,19 @@ state(
   noData,
 );
 
+/** Before any pull every data screen says the same sentence from Rust, with the button that pulls one. */
+async function expectNoData(s: Locator) {
+  await expect(s.locator(".notice")).toContainText(fx.errors.no_data!.reason);
+  await expect(s.locator(".notice").getByRole("button", { name: "Refresh" })).toBeVisible();
+  await expect(s).not.toContainText("/"); // no path, no command
+}
+
 state(
   "brief-nodata",
   "",
   async (page) => {
     await nav(page, "Brief");
-    await expect(screen(page, "Brief").locator(".cap")).toContainText("No snapshot yet");
+    await expectNoData(screen(page, "Brief"));
   },
   noData,
 );
@@ -554,7 +561,7 @@ state(
   "",
   async (page) => {
     await nav(page, "Funnel");
-    await expect(screen(page, "Funnel").locator(".cap")).toContainText("Nothing ran for");
+    await expectNoData(screen(page, "Funnel"));
     await expect(screen(page, "Funnel").locator("table")).toHaveCount(0);
   },
   noData,
@@ -566,9 +573,10 @@ state(
   async (page) => {
     await nav(page, "Report");
     const s = screen(page, "Report");
-    await expect(s.locator(".blank")).toContainText("No snapshot yet");
-    await expect(s.getByLabel("Report day")).toBeDisabled();
-    await expect(s.getByRole("button", { name: "Generate" })).toBeDisabled();
+    await expectNoData(s);
+    // nothing to pick from: no day, window or Generate on show
+    await expect(s.getByLabel("Report day")).toBeHidden();
+    await expect(s.getByRole("button", { name: "Generate" })).toBeHidden();
   },
   noData,
 );

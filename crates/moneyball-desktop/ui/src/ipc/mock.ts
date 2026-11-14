@@ -60,7 +60,12 @@ export function install() {
   mockIPC((cmd, payload) => {
     const a = (payload ?? {}) as Args;
     calls.push([cmd, a]);
-    if (cmd in replies) return replies[cmd];
+    if (cmd in replies) {
+      // A test's reply of { __fail: error } is the command failing, as Rust's Err would.
+      const reply = replies[cmd] as { __fail?: AppError } | null;
+      if (reply && typeof reply === "object" && reply.__fail) fail(reply.__fail);
+      return replies[cmd];
+    }
     if (flags.has("fail") && ["today", "brief", "funnel", "report_days", "sessions_list"].includes(cmd)) fail(fx.errors.snapshot);
     switch (cmd) {
       case "workspace_current":

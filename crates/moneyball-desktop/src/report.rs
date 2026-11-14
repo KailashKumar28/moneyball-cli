@@ -168,7 +168,12 @@ pub fn refresh_busy() -> AppError {
 
 #[tauri::command(async)]
 pub fn report_days(state: State<'_, AppState>) -> Result<Vec<ReportDay>, AppError> {
-    Ok(report_days_of(&state.workspace()?))
+    let days = report_days_of(&state.workspace()?);
+    // No day at all: say so with the button that pulls the first one.
+    if days.is_empty() {
+        return Err(AppError::no_data());
+    }
+    Ok(days)
 }
 
 #[tauri::command(async)]

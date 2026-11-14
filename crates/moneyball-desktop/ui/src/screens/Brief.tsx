@@ -22,7 +22,8 @@ export function BriefScreen({ hidden, sub, version, onAction }: Props) {
 
 function Body({ v, onAction }: { v: BriefView; onAction: OnAction }) {
   if (v.fault) return <ErrorNote error={v.fault} onAction={onAction} />;
-  if (!v.brief) return <p className="cap">No snapshot yet. Today shows what to do.</p>;
+  // With no snapshot Rust sends `fault` (no data, and the button that pulls it), so this is unreachable.
+  if (!v.brief) return null;
   const { rows, feasibility: f, has_crm: crm } = v.brief;
   return (
     <>

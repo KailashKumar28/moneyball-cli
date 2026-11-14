@@ -67,9 +67,9 @@ export function ReportScreen({ hidden, handle, version, onAction, onGenerated }:
     <section className="screen" hidden={hidden} aria-label="Report">
       <header className="bar" data-tauri-drag-region>
         <h1>Report</h1>
-        <div className="tools">
-          <select className="sel" aria-label="Report day" value={shown ?? ""} onChange={(e) => pickDate(e.target.value)} disabled={options.length === 0}>
-            {options.length === 0 && <option value="">No days</option>}
+        {/* No day to pick from: the notice below says why and pulls the first. */}
+        <div className="tools" hidden={options.length === 0}>
+          <select className="sel" aria-label="Report day" value={shown ?? ""} onChange={(e) => pickDate(e.target.value)}>
             {options.map((d) => (
               <option key={d.date} value={d.date}>
                 {d.day}
@@ -106,7 +106,7 @@ export function ReportScreen({ hidden, handle, version, onAction, onGenerated }:
             {existing.loading || days.loading ? (
               <Loading />
             ) : (
-              !problem && <p className="cap">{shown ? "No report is written for this day. Generate builds one from the snapshot." : "No snapshot yet, so there is no report to show."}</p>
+              !problem && shown && <p className="cap">No report is written for this day. Generate builds one from the snapshot.</p>
             )}
           </div>
         )}

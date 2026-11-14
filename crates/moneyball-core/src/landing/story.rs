@@ -103,7 +103,14 @@ fn crm_missing(h: &Health, day: &str, fixes: &mut Vec<Command>) -> (String, Stri
     if !h.crm_connected && fixes.is_empty() {
         fixes.push(Command::fix("/connect crm"));
     }
-    (format!("{} has no CRM data.", day), rest)
+    // A CRM that stopped days ago is not one day's gap: say since when.
+    let headline = match (h.crm_day(), h.crm_snap_date) {
+        (Some(last), Some(c)) if h.crm_connected && Some(c) < h.snap_date => {
+            format!("No CRM data since {}.", last.format(DAY))
+        }
+        _ => format!("{} has no CRM data.", day),
+    };
+    (headline, rest)
 }
 
 fn pinned(h: &Health, day: &str) -> (String, String) {

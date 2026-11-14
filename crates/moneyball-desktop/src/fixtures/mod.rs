@@ -123,6 +123,8 @@ fn errors(cfg: &AppConfig) -> Value {
         "not_a_command": crate::turn::start(&state, cfg, "/refresh", |_| true).unwrap_err(),
         "no_workspace_config": AppError::from(no_config),
         "no_workspace": AppError::no_workspace(),
+        // Brief's fault, and Funnel's and Report's error, before any pull.
+        "no_data": AppError::no_data(),
         "refresh_busy": report::refresh_busy(),
         "snapshot": fault.expect("a snapshot that will not parse is a fault"),
     })

@@ -111,3 +111,15 @@ fn a_missing_crm_connection_is_fixed_by_connecting_it() {
     // Today's Meta pull is in: the refresh only redoes CRM and the report.
     assert!(l.next.unwrap().does.starts_with("reuses today's Meta pull"));
 }
+
+#[test]
+fn a_crm_that_stopped_days_ago_says_since_when() {
+    let mut h = health(State::CrmMissing, Some("2026-10-09"));
+    h.crm_snap_date = Some(d("2026-08-12"));
+    let l = landing(&cfg(), &h, true);
+    assert_eq!(l.headline.unwrap().text, "No CRM data since Tue 11 Aug.");
+    // One day's gap is that day's.
+    h.crm_snap_date = None;
+    let l = landing(&cfg(), &h, true);
+    assert_eq!(l.headline.unwrap().text, "Thu 08 Oct has no CRM data.");
+}

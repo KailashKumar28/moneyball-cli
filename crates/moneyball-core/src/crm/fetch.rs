@@ -371,7 +371,16 @@ fn status_error(status: reqwest::StatusCode, body: &str, secrets: &[String]) -> 
             ),
             fix,
         }
+    } else if status.is_client_error()
+        && status != reqwest::StatusCode::REQUEST_TIMEOUT
+        && status != reqwest::StatusCode::TOO_MANY_REQUESTS
+    {
+        Error::CrmRequest {
+            message: format!("CRM returned {}{}", status, tail),
+            fix: "/connect crm".into(),
+        }
     } else {
+        // A 5xx, a timeout or a rate limit: the same request may pass later.
         Error::Config(format!("CRM returned {}{}", status, tail))
     }
 }

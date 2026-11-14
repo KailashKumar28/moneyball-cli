@@ -75,12 +75,12 @@ type RunView = {
 | `workspace_current` | - | `Workspace \| null` | The open workspace, its config re-read from disk; before one is open, the remembered workspace, opened. `null` on a first run. `AppError` when the remembered folder is gone or is no workspace. Call whenever `today` is called. |
 | `workspace_pick` | - | `Workspace \| null` | Native folder dialog. `null` when cancelled. Opens, remembers, drops the old session. `AppError` when the folder has no `.moneyball/config.json` (v1 has no setup; `fix` is the terminal command), and kind `busy` while a refresh runs. A workspace that opened but could not be remembered is still returned; only the next launch forgets it. |
 | `today` | - | `Today` | Recomputed on every call (reads the clock). Call on mount, after a refresh or a generated report, and on window focus. |
-| `brief` | - | `BriefView` | |
-| `funnel` | `{ product, days, by }` | `FunnelView` | `days` 7/14/28; `by` "campaign"/"adset"/"ad". |
+| `brief` | - | `BriefView` | With no snapshot yet, `fault` is the no-data `AppError` (kind `snapshot`, a `refresh` fix). |
+| `funnel` | `{ product, days, by }` | `FunnelView` | `days` 7/14/28; `by` "campaign"/"adset"/"ad". With no snapshot yet: the no-data `AppError`. |
 | `refresh_start` | `{ force?: boolean, onEvent }` | `void` | `AppError` kind `busy` if one is running. `force` pulls Meta again even when today's snapshot has it. |
 | `refresh_cancel` | - | `void` | Takes effect after the step in flight. |
 | `refresh_state` | - | `RefreshState` | For mount, reload and window focus. The run in flight while one runs; otherwise the open workspace's last recorded run, whoever made it. |
-| `report_days` | - | `ReportDay[]` | The days with a snapshot, newest first. |
+| `report_days` | - | `ReportDay[]` | The days with a snapshot, newest first. With none: the no-data `AppError` (never an empty list). |
 | `report_for` | `{ date?: string }` | `ReportView \| null` | The daily report already written for that snapshot date (default: the newest). `null` when none is written. |
 | `report_generate` | `{ date?: string, days: number }` | `ReportView` | No network. `date` is a snapshot date (default: the newest, the current data day); `days` is one of that day's `windows` and is held to 1..28. `AppError` kind `busy` while a refresh runs (it writes the same file). |
 | `report_open_in_browser` | `{ path }` | `void` | Refuses any path outside the workspace's `.moneyball/reports/`. |

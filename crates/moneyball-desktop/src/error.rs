@@ -33,6 +33,15 @@ impl AppError {
         AppError::new("no_workspace", "No workspace is open.")
     }
 
+    /// Nothing has been pulled for this workspace yet: what every screen
+    /// that reads the data says then, with the button that pulls it.
+    pub fn no_data() -> Self {
+        AppError::new("snapshot", "No data yet: nothing has been pulled for this client.").with_fix(
+            "/refresh",
+            "pulls Meta, then CRM, then writes yesterday's report (about 2 minutes)",
+        )
+    }
+
     pub fn with_fix(mut self, command: &str, does: &str) -> Self {
         self.fix = Some(translate(&Command::new(command, does)));
         self
@@ -49,6 +58,10 @@ impl From<moneyball_core::Error> for AppError {
                 "This folder is not a Moneyball workspace: it has no .moneyball/config.json.",
             )
             .with_fix("/setup", "it sets the workspace up; run it in that folder");
+        }
+        // Core's sentence names a date pattern and a folder path.
+        if let moneyball_core::Error::NoSnapshot { .. } = e {
+            return AppError::no_data();
         }
         AppError {
             kind: e.kind().into(),

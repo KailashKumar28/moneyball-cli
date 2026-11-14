@@ -45,7 +45,7 @@ pub(crate) fn slash_command(text: &str) -> Option<&str> {
 
 #[test]
 fn say_is_translate_in_words_and_never_a_slash_command() {
-    assert_eq!(say("/refresh"), "the Refresh button");
+    assert_eq!(say("/refresh"), "Refresh (Cmd-R)");
     assert_eq!(say("/report"), "the Generate button on the Report screen");
     assert_eq!(say("/brief"), "the Brief screen");
     assert_eq!(say("/connect crm"), "`moneyball connect crm` in Terminal");
@@ -142,7 +142,10 @@ fn every_other_command_is_a_shell_command_to_paste() {
 fn no_slash_command_reaches_the_screen_and_json_is_tagged_by_kind() {
     assert_eq!(
         terminal_of(&act("/setup")),
-        Some(("moneyball", "then open its setup"))
+        Some((
+            "moneyball",
+            "then open its setup - sets this client up: Meta, its products, goals and the model"
+        ))
     );
     assert_eq!(
         terminal_of(&translate(&Command::new("/no-such-command now", "does it"))),

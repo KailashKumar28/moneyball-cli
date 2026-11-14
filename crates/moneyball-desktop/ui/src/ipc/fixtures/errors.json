@@ -4,6 +4,16 @@
     "kind": "busy",
     "reason": "The advisor is still answering."
   },
+  "no_data": {
+    "fix": {
+      "does": "pulls Meta, then CRM, then writes yesterday's report (about 2 minutes)",
+      "force": false,
+      "kind": "refresh",
+      "label": "Refresh"
+    },
+    "kind": "snapshot",
+    "reason": "No data yet: nothing has been pulled for this client."
+  },
   "no_model": {
     "fix": {
       "command": "moneyball",
