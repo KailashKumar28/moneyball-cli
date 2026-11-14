@@ -27,7 +27,7 @@ pub fn fetch_and_write(
     let accounts: Vec<&String> = accounts.iter().collect();
     let pulled = super::in_parallel(&accounts, |act| {
         let first = client
-            .get(format!("{}/{}/insights", super::META_GRAPH_BASE, act))
+            .get(format!("{}/{}/insights", super::graph_base(), act))
             .query(&[
                 ("access_token", token),
                 ("level", "ad"),

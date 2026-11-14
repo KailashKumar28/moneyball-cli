@@ -32,7 +32,7 @@ pub fn fetch_and_write(
     // Accounts at once: one account's log can take 15s to answer.
     let pulled = super::in_parallel(&accounts, |act| {
         let first = client
-            .get(format!("{}/{}/activities", super::META_GRAPH_BASE, act))
+            .get(format!("{}/{}/activities", super::graph_base(), act))
             .query(&[
                 ("access_token", token),
                 ("fields", FIELDS),
