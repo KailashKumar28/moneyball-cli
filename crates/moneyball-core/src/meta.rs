@@ -1,6 +1,6 @@
 //! Meta Graph API client (read-only): every Graph GET goes through
-//! get_json / get_all, and the wizard's token check and account list
-//! live here.
+//! get_json / get_all, and the token checks and account list of setup
+//! live here (their words in `token`).
 //!
 //! Per the project hard contract: moneyball-core NEVER writes to Meta.
 //! This module is read-only and only ever calls graph.facebook.com.
@@ -14,6 +14,9 @@ use serde::Deserialize;
 use serde_json::Value;
 
 use crate::error::{Error, Result};
+
+mod token;
+pub use token::TokenCheck;
 
 /// Where every Graph GET goes. Only a build with core's `e2e` feature (the
 /// Mac app's end-to-end run) reads `MB_E2E_META_BASE`, to talk to a
@@ -60,6 +63,26 @@ pub fn validate_token(token: &str) -> Result<()> {
         .query(&[("access_token", token), ("fields", "id,name")]);
     // The wizard waits on these: enter again is their retry.
     fetch_json(req, "the token check", None).map(drop)
+}
+
+/// Check a token before it is stored (onboarding Step 1): its shape with
+/// no network, then Meta's `/me` (whose it is), `debug_token` (expiry and
+/// scopes) and the ad accounts it sees. Stores nothing.
+pub fn check_token(token: &str) -> Result<TokenCheck> {
+    token::check_shape(token)?;
+    let client = http_client()?;
+    let get = |path: &str, query: &[(&str, &str)]| {
+        let req = client.get(format!("{}/{}", graph_base(), path));
+        fetch_json(req.query(query), "the token check", None)
+    };
+    let me = get("me", &[("access_token", token), ("fields", "name")])?;
+    let debug = get(
+        "debug_token",
+        &[("input_token", token), ("access_token", token)],
+    )?;
+    let accounts = list_ad_accounts(token)?.len();
+    let name = me["name"].as_str().unwrap_or_default();
+    TokenCheck::read(name, accounts, &debug["data"])
 }
 
 /// List ad accounts the token can see, every page of them.

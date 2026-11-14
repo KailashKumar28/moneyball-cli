@@ -166,3 +166,10 @@ fn only_an_e2e_build_reads_the_stand_in_base() {
     };
     assert_eq!(super::graph_base(), want);
 }
+
+#[test]
+fn a_pasted_app_id_is_refused_before_any_call() {
+    // In a test build graph_base is Meta itself: a call would leave the machine.
+    let e = super::check_token("1234567890123456").unwrap_err();
+    assert_eq!(e.kind(), "meta_token_shape", "{}", e);
+}
