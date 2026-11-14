@@ -30,8 +30,11 @@ bottom after a release-sized batch.)
         and an App Store Connect API key. Until then it builds ad-hoc.
   - [ ] Setup, connect and schedule in the app (today: terminal only; a
         Meta or CRM fix is shown as an "In Terminal" command). Planned
-        2026-11-14 in plans/desktop/onboarding-plan.md; decisions D1-D7
-        there are the owner's to confirm before wave 1.
+        2026-11-14 in plans/desktop/onboarding-plan.md (decisions D1-D7
+        taken at their defaults). Wave 1 done 2026-11-14: core
+        `onboarding` (steps, create_client, accounts, checklist, client
+        list), `config::update`, the CRM preset as steps, optional goals,
+        `meta::graph_base` behind core's `e2e` feature; TUI unchanged.
   - [ ] In-step refresh progress (core reports a step beginning and
         ending only).
   - [ ] Rupee sign in the app (core words money as "Rs."; the client
