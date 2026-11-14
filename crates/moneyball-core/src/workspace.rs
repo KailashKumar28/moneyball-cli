@@ -4,9 +4,13 @@
 //! walk-up, the well-known home paths, `<cwd>/moneyball-data`) apply to
 //! it. The memory is the `last_workspace` key of
 //! `~/.moneyball/config.json` - its own key, not the `data_root` the CLI
-//! and TUI read, so remembering never changes where a shell lands.
+//! and TUI read, so remembering never changes where a shell lands. The
+//! client list (`onboarding::clients`) keeps its own key in the same file,
+//! and every write to it goes through `edit_global`.
 
 use std::path::{Path, PathBuf};
+
+use serde_json::{Map, Value};
 
 use crate::config::{home_dir, AppConfig, WorkspaceConfig, DOT_DIR};
 use crate::error::{Error, Result};
@@ -43,38 +47,65 @@ pub fn last() -> Option<PathBuf> {
     read_last(&home_dir()?.join(DOT_DIR))
 }
 
-fn canonical(p: &Path) -> PathBuf {
+pub(crate) fn canonical(p: &Path) -> PathBuf {
     p.canonicalize().unwrap_or_else(|_| p.to_path_buf())
 }
 
-fn read_last(global_dir: &Path) -> Option<PathBuf> {
+/// `dir`, canonical, as the UTF-8 string `~/.moneyball/config.json` keeps.
+pub(crate) fn path_key(dir: &Path) -> Result<String> {
+    canonical(dir).to_str().map(String::from).ok_or_else(|| {
+        Error::Config(format!(
+            "{} is not a UTF-8 path, so moneyball cannot remember it",
+            dir.display()
+        ))
+    })
+}
+
+/// The keys of `config.json` in `global_dir` (`~/.moneyball/`), if any.
+pub(crate) fn read_global(global_dir: &Path) -> Option<Map<String, Value>> {
     let raw = std::fs::read_to_string(global_dir.join(GLOBAL_CONFIG)).ok()?;
-    let v: serde_json::Value = serde_json::from_str(&raw).ok()?;
-    Some(canonical(Path::new(v.get(KEY)?.as_str()?)))
+    match serde_json::from_str(&raw).ok()? {
+        Value::Object(keys) => Some(keys),
+        _ => None,
+    }
+}
+
+/// Change the keys of `config.json` in `global_dir` under a lock, from
+/// what is on disk now, so the app and a terminal never lose each other's
+/// change. A file that will not parse is never overwritten: it may hold
+/// keys this code does not know.
+pub(crate) fn edit_global(
+    global_dir: &Path,
+    change: impl FnOnce(&mut Map<String, Value>),
+) -> Result<()> {
+    crate::secrets::with_lock(global_dir, GLOBAL_CONFIG, || {
+        let path = global_dir.join(GLOBAL_CONFIG);
+        let mut v = match std::fs::read_to_string(&path) {
+            Ok(raw) => serde_json::from_str::<Value>(&raw)
+                .map_err(|e| Error::Config(format!("{}: {}", path.display(), e)))?,
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => Value::Object(Map::new()),
+            Err(e) => return Err(e.into()),
+        };
+        let keys = v
+            .as_object_mut()
+            .ok_or_else(|| Error::Config(format!("{} is not a JSON object", path.display())))?;
+        change(keys);
+        let body = serde_json::to_string_pretty(&v)?;
+        crate::secrets::write_private(global_dir, GLOBAL_CONFIG, body).map(drop)
+    })
+}
+
+fn read_last(global_dir: &Path) -> Option<PathBuf> {
+    Some(canonical(Path::new(
+        read_global(global_dir)?.get(KEY)?.as_str()?,
+    )))
 }
 
 fn write_last(global_dir: &Path, dir: &Path) -> Result<()> {
-    let path = global_dir.join(GLOBAL_CONFIG);
-    // A file that will not parse is never overwritten: it may hold keys
-    // this code does not know.
-    let mut v = match std::fs::read_to_string(&path) {
-        Ok(raw) => serde_json::from_str::<serde_json::Value>(&raw)
-            .map_err(|e| Error::Config(format!("{}: {}", path.display(), e)))?,
-        Err(e) if e.kind() == std::io::ErrorKind::NotFound => serde_json::json!({}),
-        Err(e) => return Err(e.into()),
-    };
-    let root = canonical(dir);
-    let (Some(keys), Some(root)) = (v.as_object_mut(), root.to_str()) else {
-        return Err(Error::Config(format!(
-            "cannot remember {} in {}: the path must be UTF-8 and the file a JSON object",
-            dir.display(),
-            path.display()
-        )));
-    };
-    keys.insert(KEY.into(), root.into());
-    crate::secrets::create_private_dir(global_dir)?;
-    crate::secrets::write_private(global_dir, GLOBAL_CONFIG, serde_json::to_string_pretty(&v)?)?;
-    Ok(())
+    let root = path_key(dir)?;
+    edit_global(global_dir, |keys| {
+        keys.insert(KEY.into(), root.into());
+    })
 }
 
 #[cfg(test)]
