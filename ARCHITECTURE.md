@@ -51,10 +51,15 @@ and HOME/cwd reads live only in config.rs (also arch-enforced).
   codex-style dotfile, not the OS keychain (keychain ACLs break for
   locally built binaries). Secrets never appear in config.json,
   crm.toml, or logs - crm.toml references them as `secret:<name>` /
-  `env:<VAR>`.
-- `~/.moneyball/config.json` holds `last_workspace`, written only by
-  `workspace::remember` for the desktop (a Finder launch has no cwd). The
-  CLI and TUI never read it; their resolution order is unchanged.
+  `env:<VAR>`. A workspace's config.json is written only by
+  `config::update` (lock, re-read from disk, change, atomic write), so
+  no front-end saves a stale copy over another's change.
+- `~/.moneyball/config.json` holds `last_workspace` (written only by
+  `workspace::remember`) and `clients`, the clients the app has opened
+  or created (`onboarding::clients`), both for the desktop (a Finder
+  launch has no cwd); every write goes through `workspace::edit_global`
+  under a lock. The CLI and TUI never read them; their resolution order
+  is unchanged.
 - Outside both, only `schedule.rs`: `~/Library/LaunchAgents/ai.moneyball.refresh.<id>.plist`
   after the user confirms /schedule (or runs `moneyball schedule --at`),
   loaded with `launchctl bootstrap`, removed by `--off`.
