@@ -93,11 +93,13 @@ Radii: 6 controls, 8 panels, 10 window, 10 verdict pill.
    Today, so the footer is the one place that says how fresh the data is and
    the place you go to change that. While a refresh runs the footer shows the
    step on every screen.
-2. Today is two layers: the day's numbers, then a data-health table with one
-   row per source (the same four things Refresh pulls). The fix lives on Today
-   only; other screens point to it.
-3. No CRM is never zero. Today's strip replaces the three CRM cells with "No
-   CRM in this report". Funnel drops the CRM, qualified and cost columns
+2. Today is the day's report: the notice and its fix when something is wrong,
+   one line for what the last run missed (its steps are on Refresh), then the
+   daily report page itself, the one a client gets, even when the data is
+   stale. The fix lives on Today only; other screens point to it. (Changed
+   2026-11-14 by the user's call: it was the day's number strip and a
+   data-health table; the strip and the "Day strip" component are gone.)
+3. No CRM is never zero. The report says so in its own scorecard. Funnel drops the CRM, qualified and cost columns
    entirely (as the report does) and every verdict is the dashed "no CRM"
    pill. I added a Funnel no-CRM state because one snapshot cannot show keep,
    kill, wait and no CRM together.

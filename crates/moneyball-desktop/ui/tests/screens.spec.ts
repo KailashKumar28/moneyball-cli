@@ -5,7 +5,7 @@
 // generated fixtures (tests/fixtures.ts), never typed in here.
 import { expect, test, type Locator, type Page } from "@playwright/test";
 import type { Action, RefreshEvent, StepView } from "../src/ipc/types";
-import { event, funnelAllVerdicts, fx, noData, refreshCrmFailed, refreshNeverFinished, refreshReused, REUSED, todayReused } from "./fixtures";
+import { event, funnelAllVerdicts, fx, noData, refreshCrmFailed, refreshNeverFinished, refreshReused, REUSED } from "./fixtures";
 import { emitRefresh, emitTurn, open } from "./mock";
 
 const SIZES = [
@@ -28,7 +28,7 @@ async function layoutIssues(page: Page): Promise<string[]> {
     const W = innerWidth;
     const H = innerHeight;
     const one =
-      "th,td,button,label,select,h1,h2,.sub,.cap,.lbl,.why,.line,.day>*,.runhead>*,.strip>div>*,.sum p,.feas dt,.feas dd,.notice li,.stat,.sess span,.ws *,.health *,.inl,.mark";
+      "th,td,button,label,select,h1,h2,.sub,.cap,.lbl,.why,.line,.day>*,.runhead>*,.sum p,.feas dt,.feas dd,.notice li,.stat,.sess span,.ws *,.health *,.inl,.mark";
     for (const e of document.querySelectorAll<HTMLElement>(one)) {
       if (!vis(e) || e.closest(".say,.out")) continue;
       const r = e.getBoundingClientRect();
@@ -120,13 +120,14 @@ async function expectToday(page: Page, t: typeof fx.today) {
   const s = screen(page, "Today");
   const day = t.day!;
   await expect(s.getByRole("heading", { name: day.day })).toBeVisible();
-  await expect(s.locator(".strip .val")).toHaveText(day.numbers!.map((n) => n.value));
-  // a change sits under the number it is about
-  const changes = day.numbers!.flatMap((n) => day.versus!.changes.filter((c) => c.label === n.label).map((c) => c.text));
-  expect(changes.length).toBe(day.versus!.changes.length);
-  await expect(s.locator(".strip .dl")).toHaveText(changes);
-  await expect(s.locator(".body")).toContainText(day.versus!.caption); // the shell's sentence, not one composed here
-  await expectStepRows(s.locator("tbody tr"), t.last_run!.steps);
+  // the day's report is the page a client gets, whole, not numbers picked from it
+  const doc = s.locator("iframe.doc");
+  await expect(doc).toHaveAttribute("title", `Report for ${day.report!.day}`);
+  await expect(doc).toHaveAttribute("srcdoc", day.report!.html);
+  await expect(doc).toHaveAttribute("sandbox", "");
+  const title = /<h1[^>]*>([^<]+)</.exec(day.report!.html)![1]!;
+  await expect(doc.contentFrame().getByRole("heading", { name: title })).toBeVisible();
+  await expect(s.getByRole("button", { name: "Open in Browser" })).toBeEnabled();
   await expect(page.locator(".health")).toContainText(t.health_label);
   for (const line of t.footer) await expect(page.locator(".health")).toContainText(line);
   return s;
@@ -135,7 +136,7 @@ async function expectToday(page: Page, t: typeof fx.today) {
 state("today-fresh", "", async (page) => {
   const s = await expectToday(page, fx.today);
   await expect(s.locator(".notice")).toHaveCount(0); // a fresh day has no headline
-  await expect(s.locator(".strip .none")).toHaveCount(0);
+  await expect(s.locator(".gaps")).toHaveCount(0); // and a clean run nothing missed
 });
 
 state("today-degraded", "degraded", async (page) => {
@@ -145,9 +146,9 @@ state("today-degraded", "degraded", async (page) => {
   await expect(s.locator(".notice")).toContainText(t.headline!.rest);
   // fixes are numbered steps, then what to do next
   await expectSteps(s.locator(".notice li"), [...t.fixes, t.next!]);
-  // no CRM is said, never shown as zero
-  await expect(s.locator(".strip .none")).toHaveText(t.day!.numbers_note!);
-  await expect(s.locator(".strip .val")).toHaveCount(t.day!.numbers!.length);
+  // what the run missed, in core's words, with the way to its steps
+  await expect(s.locator(".gaps")).toContainText(t.last_run!.gaps);
+  await expect(s.locator(".gaps").getByRole("button", { name: "Details" })).toBeVisible();
 });
 
 state("brief", "", async (page) => {
@@ -249,7 +250,7 @@ state("report", "", async (page) => {
   expect(values).toEqual(fx.reportDays.map((d) => d.date));
   await expect(s.getByRole("button", { name: "Open in Browser" })).toBeEnabled();
   const title = /<h1[^>]*>([^<]+)</.exec(fx.report.html)![1]!;
-  await expect(page.frameLocator("iframe").getByRole("heading", { name: title })).toBeVisible();
+  await expect(frame.contentFrame().getByRole("heading", { name: title })).toBeVisible();
 });
 
 const asked = event(fx.turnEvents, "item_done").item as { type: "user"; text: string }; // the recorded turn's question
@@ -610,14 +611,12 @@ state(
   "refresh-reused",
   "",
   async (page) => {
-    // a step carried over from today's earlier pull says so, on Refresh and in Today's table
+    // a step carried over from today's earlier pull says so
     const reused = refreshReused.run.steps.filter((x) => x.note).length;
-    await expect(screen(page, "Today").locator("tbody .tag")).toHaveCount(reused);
     await startRefresh(page, ends("assets"));
     await emitRefresh(page, refreshReused);
     const s = screen(page, "Refresh");
     await expectStepRows(s.locator("tbody tr"), refreshReused.run.steps);
     await expect(s.locator("tbody .tag")).toHaveText(Array<string>(reused).fill(REUSED));
   },
-  { today: todayReused },
 );

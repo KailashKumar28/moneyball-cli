@@ -13,7 +13,9 @@ use crate::schema::{CreativeReport, RunRecord};
 use crate::text::commas;
 use crate::words::{Command, Tint};
 
-pub(super) fn day_block(cfg: &AppConfig, h: &Health, day: String) -> DayBlock {
+/// When and how the data on screen was refreshed: "07:30 this morning
+/// (scheduled, 1m 21s)"; None when unknown.
+pub fn refreshed(h: &Health) -> Option<String> {
     let mut when = h
         .refreshed_at
         .map(|t| crate::status::when(t, h.today))
@@ -27,6 +29,10 @@ pub(super) fn day_block(cfg: &AppConfig, h: &Health, day: String) -> DayBlock {
         };
         when.push_str(&format!(" ({}{})", how(run), took));
     }
+    Some(when).filter(|w| !w.is_empty())
+}
+
+pub(super) fn day_block(cfg: &AppConfig, h: &Health, day: String) -> DayBlock {
     let found = h
         .snap_date
         .and_then(|s| daily(cfg, &s.format("%Y-%m-%d").to_string()));
@@ -43,7 +49,7 @@ pub(super) fn day_block(cfg: &AppConfig, h: &Health, day: String) -> DayBlock {
     };
     DayBlock {
         day,
-        refreshed: Some(when).filter(|w| !w.is_empty()),
+        refreshed: refreshed(h),
         report,
     }
 }

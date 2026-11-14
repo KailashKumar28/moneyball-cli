@@ -20,7 +20,7 @@ test("Cmd-1 to 5 switch screens", async ({ page }) => {
 
 test("Cmd-R starts a refresh and opens it; the finish re-reads today", async ({ page }) => {
   await open(page);
-  await expect(region(page, "Today").locator(".strip")).toBeVisible();
+  await expect(region(page, "Today").locator("iframe.doc")).toBeVisible();
   const before = (await calls(page, "today")).length;
   await page.keyboard.press("Meta+r");
   await expect(region(page, "Refresh")).toBeVisible();
@@ -33,7 +33,7 @@ test("Cmd-R starts a refresh and opens it; the finish re-reads today", async ({ 
 
 test("today is re-read when the window regains focus", async ({ page }) => {
   await open(page);
-  await expect(region(page, "Today").locator(".strip")).toBeVisible();
+  await expect(region(page, "Today").locator("iframe.doc")).toBeVisible();
   const before = (await calls(page, "today")).length;
   await page.evaluate(() => window.dispatchEvent(new Event("focus")));
   await expect.poll(async () => (await calls(page, "today")).length).toBe(before + 1);
@@ -154,6 +154,23 @@ test("report: day and window drive generate; open in browser passes the path", a
   expect((await calls(page, "report_generate")).at(-1)).toEqual({ date: older, days: 7 });
   await r.getByRole("button", { name: "Open in Browser" }).click();
   expect((await calls(page, "report_open_in_browser"))[0]).toEqual({ path: fx.report.path });
+});
+
+test("Today opens its day's report in the browser, and Details opens the run on Refresh", async ({ page }) => {
+  await open(page, "degraded");
+  const t = region(page, "Today");
+  await t.getByRole("button", { name: "Open in Browser" }).click();
+  expect((await calls(page, "report_open_in_browser"))[0]).toEqual({ path: fx.todayDegraded.day!.report!.path });
+  await t.locator(".gaps").getByRole("button", { name: "Details" }).click();
+  await expect(region(page, "Refresh")).toBeVisible();
+});
+
+test("without a report Today offers to generate one and has nothing to open", async ({ page }) => {
+  await open(page, "", { today: todayReportMissing });
+  const t = region(page, "Today");
+  await expect(t.locator("iframe")).toHaveCount(0);
+  await expect(t.locator(".missing")).toContainText(todayReportMissing.day!.report_missing!.note);
+  await expect(t.getByRole("button", { name: "Open in Browser" })).toBeDisabled();
 });
 
 test("Generate builds a report where none is written", async ({ page }) => {

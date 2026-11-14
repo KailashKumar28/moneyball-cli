@@ -15,6 +15,10 @@ describe("Moneyball for Mac, first launch", () => {
     await expect($(".ws span")).toHaveText("~/acme-homes");
     await expect($(".health b")).toHaveText("Stale");
     await expect(nav("Today")).toHaveAttribute("aria-current", "page");
+    // No report is written in this workspace yet: Today says so and offers to build one.
+    await expect(today.$(".missing")).toHaveText(expect.stringContaining("No daily report is written for this day yet."));
+    await expect(today.$("button=Generate report")).toBeDisplayed();
+    await expect(today.$("button=Open in Browser")).toBeDisabled();
     await shot("01-today");
   });
 
@@ -69,6 +73,20 @@ describe("Moneyball for Mac, first launch", () => {
       timeoutMsg: "the report rendered without its styles: no card-colored area in the frame",
     });
     await shot("08-report");
+
+    // The report is on disk now: Today shows the same page, whole and styled.
+    const today = await open("Today", "1");
+    const doc = today.$("iframe.doc");
+    await doc.waitForDisplayed();
+    await expect(doc).toHaveAttribute("title", "Report for Thu 08 Oct");
+    // Its cards sit below the fold of this smaller frame; the masthead does
+    // not, and its ink (#17140f) is a stylesheet color - unstyled text is black.
+    await browser.waitUntil(async () => (await pixels(doc, "#17140f")) > 500, {
+      timeoutMsg: "Today's report rendered without its styles: none of its ink in the frame",
+    });
+    await expect(today.$("button=Open in Browser")).toBeEnabled();
+    await expect(today.$(".missing")).not.toBeExisting();
+    await shot("08-today-report");
   });
 
   it("Refresh from the footer shows the steps and fails honestly without a Meta token", async () => {

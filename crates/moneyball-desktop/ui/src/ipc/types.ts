@@ -91,9 +91,7 @@ export type Today = {
   day: {
     day: string;
     refreshed: string | null;
-    numbers: DayNumber[] | null;
-    numbers_note: string | null;
-    versus: { day: string; caption: string; changes: { label: string; text: string; tint: Tint }[] } | null;
+    report: ReportView | null;
     report_missing: { note: string; next: Action } | null;
   } | null;
   last_run: RunView | null;

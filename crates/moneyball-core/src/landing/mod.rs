@@ -15,7 +15,7 @@ use crate::config::AppConfig;
 use crate::health::{Health, State};
 use crate::words::{Command, Tint};
 
-pub use day::day_numbers;
+pub use day::{day_numbers, refreshed};
 
 /// How the landing names a day: "Thu 08 Oct".
 const DAY: &str = "%a %d %b";

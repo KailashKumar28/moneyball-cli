@@ -120,15 +120,10 @@ main{min-width:0;min-height:0;display:flex;flex-direction:column}
 .ruler{height:8px;margin:10px 0 var(--s4);border-top:1.5px solid var(--ink);
   background-image:repeating-linear-gradient(90deg,var(--ink) 0 1.2px,transparent 1.2px 48px),repeating-linear-gradient(90deg,var(--tick) 0 1px,transparent 1px 8px);
   background-size:100% 8px,100% 4px;background-repeat:repeat-x}
-.strip{display:flex;background:var(--card);border:1px solid var(--rule);border-radius:var(--r-panel);overflow:hidden}
-.strip>div{flex:1;padding:10px var(--s3) 9px;border-right:1px solid var(--hair);white-space:nowrap;min-width:0}
-.strip>div:last-child{border-right:0}
-.strip .val{font:700 16px/1.1 var(--mono)}
-.strip .lab{font-size:11px;color:var(--faint);margin-top:5px}
-.strip .lab i{display:inline-block;width:6px;height:6px;border-radius:50%;margin-right:5px;background:var(--meta)}
-.strip .lab i.c{background:var(--keep)}
-.strip .dl{font:11px var(--mono);color:var(--soft);margin-top:3px}
-.strip .none{flex:3;display:flex;align-items:center;color:var(--gold);font-weight:600;font-size:12.5px}
+/* Today: the day's report fills what the notice leaves; margins add up here, so each block owns the gap below it */
+.body.today{display:flex;flex-direction:column}
+.body.today .gaps{margin:0 0 var(--s4)}
+.doc{flex:1 0 360px;width:100%;border:1px solid var(--rule);border-radius:var(--r-panel);background:#f4f1e8}
 .notice{border:1px solid var(--gold-line);border-left:3px solid var(--gold);background:var(--gold-bg);border-radius:var(--r-panel);padding:var(--s3) var(--s4);margin:0 0 var(--s4)}
 .notice p{margin:0}
 .notice ol{margin:var(--s2) 0 0;padding:0;list-style:none;display:grid;gap:6px}
@@ -234,7 +229,7 @@ td.cap1{display:table-cell}
 .notice p+p{margin-top:var(--s1)}
 .notice .why{display:block}
 .notice li .why{display:inline}
-.missing{margin-top:var(--s3);color:var(--soft)}
+.missing{color:var(--soft)}
 .feas .h2{margin:0}
 .sum .notice{margin-bottom:var(--s3)}
 /* report */

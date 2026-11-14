@@ -4,7 +4,7 @@
 //! alone, so the live event and a later reading of the record agree.
 
 use chrono::DateTime;
-use moneyball_core::landing::day_numbers;
+use moneyball_core::landing::{self, day_numbers};
 use moneyball_core::refresh;
 use moneyball_core::schema::{CreativeReport, RunRecord};
 use moneyball_core::words::Tint;
@@ -12,7 +12,41 @@ use serde::Serialize;
 
 use crate::action::{translate, Action};
 use crate::run_view::{run_view, RunView};
-use crate::today::{numbers, NumberView};
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct NumberView {
+    pub label: String,
+    pub value: String,
+    /// Where the number comes from; None for one this app does not know.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub source: Option<Source>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Source {
+    Meta,
+    Crm,
+}
+
+/// Which system a day number (landing/day.rs `day_numbers`) is read from.
+fn source(label: &str) -> Option<Source> {
+    match label {
+        "spend" | "Meta leads" => Some(Source::Meta),
+        "CRM leads" | "qualified" | "cost per qualified" => Some(Source::Crm),
+        _ => None,
+    }
+}
+
+/// The day's numbers, and the note said in place of the CRM ones.
+fn numbers(n: &landing::DayNumbers) -> (Vec<NumberView>, Option<String>) {
+    let tile = |n: &landing::Number| NumberView {
+        source: source(&n.label),
+        label: n.label.clone(),
+        value: n.value.clone(),
+    };
+    (n.numbers.iter().map(tile).collect(), n.note.clone())
+}
 
 #[derive(Debug, Clone, Serialize)]
 pub struct VerdictView {

@@ -101,16 +101,13 @@ type Today = {
   details: string[];
   fixes: Action[];
   next: Action | null;
-  day: {                     // core DayBlock, with paths and commands translated
-    day: string;
-    refreshed: string | null;
-    numbers: DayNumber[] | null;                           // null = no report for the day
-    numbers_note: string | null;                           // "no CRM in this report"
-    versus: { day: string; caption: string;                // caption: "Changes are against Wed 07 Oct."
-              changes: { label: string; text: string; tint: Tint }[] } | null;
-    report_missing: { note: string; next: Action } | null;
+  day: {                     // the data day on screen, whatever the health (a stale day still has its report); null with no data
+    day: string;                                           // "Thu 08 Oct"
+    refreshed: string | null;                              // core landing::refreshed
+    report: ReportView | null;                             // the day's daily report, as report_for returns it; null = none written
+    report_missing: { note: string; next: Action } | null; // with no report: the sentence, and a `report` Action
   } | null;
-  last_run: RunView | null;  // the "Data health" table
+  last_run: RunView | null;  // the run behind the data; Today shows its `gaps`, Refresh its steps
 };
 
 /** A day number; `source` (absent for a label the shell does not know) colours its dot. */
@@ -121,7 +118,7 @@ type BriefView = {
   crm_head: string | null;                   // "CRM columns hidden.", said in front of crm_note when the table has none
   crm_note: string | null;
   fault: AppError | null;                    // a snapshot exists but would not load
-  staleness: string | null;                  // brief::staleness_warning, without its terminal mark
+  staleness: string | null;                  // worded here from brief::stale_days: when it was pulled, and to refresh
   cpl_order: string | null;                  // brief::cpl_order, the whole line: "cheapest Meta lead first: ..."
   caption: string | null;                    // what the table's columns count
   feasibility_line: string | null;           // the one sentence under the table, worded in Rust

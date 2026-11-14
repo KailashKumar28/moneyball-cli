@@ -121,9 +121,6 @@ export const refreshReused: T.RefreshFinished = {
     steps: finished.run.steps.map((s) => (s.name === "meta" || s.name === "assets" ? { ...s, note: REUSED, time: null } : s)),
   },
 };
-/** HAND-WRITTEN. Today after that run: the same reused steps in the Data health table. */
-export const todayReused: T.Today = { ...fx.today, last_run: refreshReused.run };
-
 /** HAND-WRITTEN. The last recorded run died or is running elsewhere: its record is still marked running, so there are steps and no verdict. */
 export const refreshNeverFinished: T.RefreshState = {
   ...fx.refreshState,
@@ -131,14 +128,16 @@ export const refreshNeverFinished: T.RefreshState = {
   finished: null,
 };
 
-/** HAND-WRITTEN. The day's report is missing and Today offers to generate it (core's landing, DayReport::Missing). */
+/** HAND-WRITTEN. The day's report is missing and Today offers to generate it (today.rs `day_view`). */
 export const todayReportMissing: T.Today = {
   ...fx.today,
   day: {
     ...fx.today.day!,
-    numbers: null,
-    versus: null,
-    report_missing: { note: "no daily report for this day yet", next: { kind: "report", label: "Generate report", does: "builds it from the snapshot" } },
+    report: null,
+    report_missing: {
+      note: "No daily report is written for this day yet.",
+      next: { kind: "report", label: "Generate report", does: "builds it from this day's snapshot, no network" },
+    },
   },
 };
 

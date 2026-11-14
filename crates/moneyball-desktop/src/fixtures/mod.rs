@@ -56,9 +56,14 @@ fn fixtures_dir() -> PathBuf {
 }
 
 /// What Today reads from the real clock: when the data was refreshed
-/// (a local time, so its offset is the machine's).
-fn today_clock() -> [(&'static str, Value); 1] {
-    [("/health/refreshed_at", json!("2026-10-09T07:31:21+05:30"))]
+/// (a local time, so its offset is the machine's), and its report's
+/// page, which says when it was generated and pulled.
+fn today_clock(cfg: &AppConfig) -> Vec<(&'static str, Value)> {
+    let [(_, page)] = demo::report_clock(cfg);
+    vec![
+        ("/health/refreshed_at", json!("2026-10-09T07:31:21+05:30")),
+        ("/day/report/html", page),
+    ]
 }
 
 /// Workspace, Today, Brief, Funnel and Report for the demo with CRM
@@ -69,9 +74,9 @@ fn screens(pins: &mut Pins) {
     pins.add("workspace", &cfg, workspace::view(&cfg));
 
     let today = today_view(&cfg, &demo::loaded(&cfg, true), false);
-    pins.add("today", &cfg, pinned(today, &today_clock()));
+    pins.add("today", &cfg, pinned(today, &today_clock(&cfg)));
     let degraded = today_view(&nocrm, &demo::loaded(&nocrm, false), false);
-    pins.add("today_degraded", &nocrm, pinned(degraded, &today_clock()));
+    pins.add("today_degraded", &nocrm, pinned(degraded, &today_clock(&nocrm)));
 
     // The demo is always "old" by the real clock; on its own day it is not.
     let fresh = [("/staleness", Value::Null)];

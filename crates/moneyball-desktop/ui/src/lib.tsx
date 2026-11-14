@@ -1,6 +1,6 @@
 // Shared hooks, formatters and the small components every screen uses.
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
-import { copyText, toAppError, type Action, type AppError, type DayNumber, type StepView, type Tint } from "./ipc";
+import { copyText, toAppError, type Action, type AppError, type StepView, type Tint } from "./ipc";
 
 // ---------- async ----------
 
@@ -186,30 +186,6 @@ export function Pending<T>({ state, onAction, children }: { state: Async<T>; onA
   if (state.error) return <ErrorNote error={state.error} onAction={onAction} />;
   if (state.data === undefined) return <Loading />;
   return <>{children(state.data)}</>;
-}
-
-/** The day's numbers: value, source dot, label, change. */
-export function Strip(props: { numbers: DayNumber[]; note: string | null; changes?: { label: string; text: string }[] }) {
-  const change = (label: string) => props.changes?.find((c) => c.label.toLowerCase() === label.toLowerCase())?.text;
-  return (
-    <div className="strip">
-      {props.numbers.map((n) => (
-        <div key={n.label}>
-          <div className="val num">{n.value}</div>
-          <div className="lab">
-            {n.source && <i className={n.source === "crm" ? "c" : undefined} />}
-            <span className="cap1">{n.label}</span>
-          </div>
-          {change(n.label) && <div className="dl">{change(n.label)}</div>}
-        </div>
-      ))}
-      {props.note && (
-        <div className="none">
-          <span className="cap1">{props.note}</span>
-        </div>
-      )}
-    </div>
-  );
 }
 
 /**

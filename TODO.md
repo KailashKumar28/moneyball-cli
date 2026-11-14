@@ -21,6 +21,10 @@ bottom after a release-sized batch.)
         workspace and remembers it. UI tested in WebKit against fixtures
         pinned from the Rust side; the real binary driven end to end
         (e2e/) on a hermetic home with a mock model.
+  - [x] Today is the day's report (2026-11-14): the daily report page
+        itself, the one a client gets, under the notice, even when the
+        data is stale. The number strip and the data-health table are
+        gone; what a run missed is one line that opens Refresh.
   - [ ] Signed + notarized DMG: scripts/release-desktop.sh is written;
         blocked on a Developer ID Application certificate, the Team ID
         and an App Store Connect API key. Until then it builds ad-hoc.
