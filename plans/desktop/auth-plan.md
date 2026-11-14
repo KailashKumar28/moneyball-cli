@@ -55,6 +55,13 @@ Onboarding needs only Meta now. The others land with their data sources.
 6. Cancel closes the listener; it also closes itself after 5 minutes. An
    `error` (the user declined) is said in words and nothing is stored.
 
+Pinned between the app and the broker (2026-11-14): `state` is 43
+characters of base64url (32 random bytes) and Meta carries it as
+`<port>.<state>`; the broker posts back only the part after the port;
+`redirect_uri` is `<BROKER>/meta/callback`, identical in the dialog and the
+code swap; the swap may POST to `/<version>/oauth/access_token`; `error` is
+already words, shown as is; Graph API version `v26.0` on both sides.
+
 `APP_ID`, `CONFIG_ID` and `BROKER` are public constants in core; under
 core's `e2e` feature each can be overridden (like `meta::graph_base`) so the
 e2e drives a stand-in Meta dialog and a stand-in broker. In the e2e build
