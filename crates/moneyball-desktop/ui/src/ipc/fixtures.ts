@@ -9,9 +9,14 @@
 import type * as T from "./types";
 
 import briefJson from "./fixtures/brief.json";
+import clientAccountsJson from "./fixtures/client_accounts.json";
+import clientFolderJson from "./fixtures/client_folder.json";
 import errorsJson from "./fixtures/errors.json";
 import funnelJson from "./fixtures/funnel.json";
 import funnelNocrmJson from "./fixtures/funnel_nocrm.json";
+import metaConnectedJson from "./fixtures/meta_connected.json";
+import metaConnectedWarningsJson from "./fixtures/meta_connected_warnings.json";
+import onboardingStateJson from "./fixtures/onboarding_state.json";
 import refreshEventsJson from "./fixtures/refresh_events.json";
 import refreshEventsOtherJson from "./fixtures/refresh_events_other.json";
 import refreshFinishedDegradedJson from "./fixtures/refresh_finished_degraded.json";
@@ -94,3 +99,8 @@ export const sessionMarkers = fixture<T.SessionSnapshot>()(sessionMarkersJson);
 export const turnEvents = fixture<T.TurnEvent[]>()(turnEventsJson);
 export const turnEventsOther = fixture<T.TurnEvent[]>()(turnEventsOtherJson);
 export const errors = fixture<Record<keyof typeof errorsJson, T.AppError>>()(errorsJson);
+export const onboardingState = fixture<T.OnboardingState>()(onboardingStateJson);
+export const metaConnected = fixture<T.MetaConnected>()(metaConnectedJson);
+export const metaConnectedWarnings = fixture<T.MetaConnected>()(metaConnectedWarningsJson);
+export const clientFolder = fixture<T.Folder>()(clientFolderJson);
+export const clientAccounts = fixture<T.AccountChoice[]>()(clientAccountsJson);

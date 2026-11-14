@@ -2,7 +2,7 @@
 //! the client list - all of it, or nothing.
 
 use std::collections::HashSet;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use super::clients;
 use crate::config::{self, home_dir, AppConfig, Product, WorkspaceConfig, DOT_DIR};
@@ -30,6 +30,16 @@ pub fn create_client(
     create_in(&home, folder, name, products)
 }
 
+/// Where `create_client` puts the client `name` when no folder is given:
+/// `~/Moneyball/<name>` (D3). None without a home directory.
+pub fn default_folder(name: &str) -> Option<PathBuf> {
+    home_dir().map(|home| under(&home, name.trim()))
+}
+
+fn under(home: &Path, name: &str) -> PathBuf {
+    home.join(PARENT).join(name)
+}
+
 fn create_in(
     home: &Path,
     folder: Option<&Path>,
@@ -40,7 +50,7 @@ fn create_in(
     check_name(name)?;
     let products = check_products(name, products)?;
     let global = home.join(DOT_DIR);
-    let dir = folder.map_or_else(|| home.join(PARENT).join(name), Path::to_path_buf);
+    let dir = folder.map_or_else(|| under(home, name), Path::to_path_buf);
     let here = workspace::canonical(&dir);
     let lower = name.to_lowercase();
     let known = clients::list_in(&global);

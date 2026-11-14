@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { today, toAppError, workspaceCurrent, workspacePick, type Action, type AppError, type HealthState, type Workspace } from "./ipc";
-import { clock, Glyph, useAsync, useNow, type Async, type GlyphKind } from "./lib";
+import { clock, Glyph, sheetOpen, useAsync, useNow, type Async, type GlyphKind } from "./lib";
+import { AddClient } from "./screens/AddClient";
 import { Advisor } from "./screens/Advisor";
 import { BriefScreen } from "./screens/Brief";
 import { Empty } from "./screens/Empty";
@@ -24,13 +25,19 @@ export function App() {
   const current = useAsync(workspaceCurrent, []);
   const [picked, setPicked] = useState<Workspace | null>(null);
   const [pickError, setPickError] = useState<AppError | null>(null);
+  const [adding, setAdding] = useState(false);
+  // The client just made: it opens on its first refresh.
+  const [created, setCreated] = useState<string | null>(null);
   const workspace = picked ?? current.data ?? null;
 
   const pick = useCallback(() => {
     workspacePick().then(
       (w) => {
         setPickError(null);
-        if (w) setPicked(w);
+        if (w) {
+          setPicked(w);
+          setCreated(null);
+        }
       },
       (e: unknown) => setPickError(toAppError(e)),
     );
@@ -38,7 +45,7 @@ export function App() {
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.metaKey && !e.shiftKey && !e.altKey && e.key.toLowerCase() === "o") {
+      if (e.metaKey && !e.shiftKey && !e.altKey && e.key.toLowerCase() === "o" && !sheetOpen()) {
         e.preventDefault();
         pick();
       }
@@ -47,21 +54,44 @@ export function App() {
     return () => window.removeEventListener("keydown", onKey);
   }, [pick]);
 
+  const add = useCallback(() => setAdding(true), []);
+  const sheet = adding && (
+    <AddClient
+      onClose={() => setAdding(false)}
+      onCreated={(w) => {
+        setAdding(false);
+        setPickError(null);
+        setPicked(w);
+        setCreated(w.path);
+      }}
+    />
+  );
   if (!workspace || pickError)
     return (
-      <Empty
-        loading={current.loading}
-        error={pickError ?? current.error}
-        onPick={pick}
-        back={workspace && pickError ? { name: workspace.name, go: () => setPickError(null) } : null}
-      />
+      <>
+        <Empty
+          loading={current.loading}
+          error={pickError ?? current.error}
+          onAdd={add}
+          onPick={pick}
+          back={workspace && pickError ? { name: workspace.name, go: () => setPickError(null) } : null}
+        />
+        {sheet}
+      </>
     );
   // A new workspace is a new app: every screen remounts and re-reads.
-  return <Shell key={workspace.path} workspace={workspace} onPick={pick} />;
+  return (
+    <>
+      <Shell key={workspace.path} workspace={workspace} onPick={pick} onAdd={add} created={created === workspace.path} />
+      {sheet}
+    </>
+  );
 }
 
-function Shell({ workspace, onPick }: { workspace: Workspace; onPick: () => void }) {
-  const [screen, setScreen] = useState<Screen>("today");
+type ShellProps = { workspace: Workspace; onPick: () => void; onAdd: () => void; created: boolean };
+
+function Shell({ workspace, onPick, onAdd, created }: ShellProps) {
+  const [screen, setScreen] = useState<Screen>(created ? "refresh" : "today");
   const [version, setVersion] = useState(0); // bumps when the data on disk changed
   const [newSession, setNewSession] = useState(0);
   const report = useRef<ReportHandle>(null);
@@ -95,6 +125,13 @@ function Shell({ workspace, onPick }: { workspace: Workspace; onPick: () => void
     },
     [start],
   );
+  // A client just made has no data: its first refresh starts at once, on screen.
+  const kicked = useRef(false);
+  useEffect(() => {
+    if (!created || kicked.current) return;
+    kicked.current = true;
+    startRefresh();
+  }, [created, startRefresh]);
   const onAction = useCallback(
     (a: Action) => {
       if (a.kind === "refresh") startRefresh(a.force);
@@ -108,7 +145,7 @@ function Shell({ workspace, onPick }: { workspace: Workspace; onPick: () => void
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (!e.metaKey || e.shiftKey || e.altKey || e.ctrlKey) return;
+      if (!e.metaKey || e.shiftKey || e.altKey || e.ctrlKey || sheetOpen()) return;
       const key = e.key.toLowerCase();
       const nav = NAV[Number(key) - 1];
       if (nav) setScreen(nav[0]);
@@ -131,6 +168,9 @@ function Shell({ workspace, onPick }: { workspace: Workspace; onPick: () => void
         <button className="ws" title="Open another workspace" onClick={onPick}>
           <b>{shown.name}</b>
           <span title={shown.display_path}>{shown.display_path}</span>
+        </button>
+        <button className="add" onClick={onAdd}>
+          Add a Client...
         </button>
         <nav className="nav" aria-label="Views">
           {NAV.map(([id, label], i) => (

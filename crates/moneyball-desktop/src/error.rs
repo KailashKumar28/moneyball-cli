@@ -55,13 +55,13 @@ impl AppError {
 impl From<moneyball_core::Error> for AppError {
     fn from(e: moneyball_core::Error) -> Self {
         // Core's sentence for this one tells a developer to copy an
-        // example file; the app has no setup, so it names the terminal.
+        // example file. The screen that shows it has Add a Client.
         if let moneyball_core::Error::NoWorkspaceConfig { .. } = e {
             return AppError::new(
                 "no_workspace_config",
-                "This folder is not a Moneyball workspace: it has no .moneyball/config.json.",
-            )
-            .with_fix("/setup", "it sets the workspace up; run it in that folder");
+                "This folder is not a Moneyball client: it has no .moneyball/config.json. \
+                 Add a Client sets one up.",
+            );
         }
         // Core's sentence names a date pattern and a folder path.
         if let moneyball_core::Error::NoSnapshot { .. } = e {

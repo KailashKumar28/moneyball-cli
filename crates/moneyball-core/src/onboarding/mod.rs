@@ -9,9 +9,9 @@ mod checklist;
 pub mod clients;
 mod create;
 
-pub use accounts::{accounts, AccountChoice};
+pub use accounts::{accounts, choices, AccountChoice};
 pub use checklist::{checklist, Check, Item};
-pub use create::create_client;
+pub use create::{create_client, default_folder};
 
 use std::path::Path;
 

@@ -1,7 +1,7 @@
 // Keys, re-reads and the trust boundary. No screenshots here.
 import { expect, test, type Page } from "@playwright/test";
 import type { Action } from "../src/ipc/types";
-import { event, fx, reportDaysLateMonth, sessionFailed, todayReportMissing, workspaceChanged } from "./fixtures";
+import { event, fx, onboardingDone, reportDaysLateMonth, sessionFailed, todayReportMissing, workspaceChanged } from "./fixtures";
 import { calls, emitTurn, open } from "./mock";
 
 test.use({ timezoneId: "Asia/Kolkata", viewport: { width: 1200, height: 800 } });
@@ -270,4 +270,77 @@ test("the title bar is a drag region and its text is not selectable", async ({ p
   await expect(bar).toHaveAttribute("data-tauri-drag-region");
   expect(await bar.evaluate((e) => getComputedStyle(e).webkitUserSelect)).toBe("none");
   expect(await page.locator("td").first().evaluate((e) => getComputedStyle(e).fontVariantNumeric)).toContain("tabular-nums");
+});
+
+// ---------- onboarding ----------
+
+test("Create Client sends the ticked accounts with their edited names, then the first refresh runs on screen", async ({ page }) => {
+  await open(page, "noworkspace", { onboarding_state: onboardingDone });
+  await page.getByRole("button", { name: "Add a Client" }).click();
+  const sheet = page.getByRole("dialog");
+  await sheet.getByLabel("Client name").fill("Acme Homes");
+  const [first, ...rest] = fx.clientAccounts.filter((a) => a.suggested);
+  await expect(sheet.getByRole("checkbox", { name: first!.name })).toBeChecked();
+  await sheet.getByLabel(`Product name for ${first!.name}`).fill("Namma Mane");
+  const [dropped, ...kept] = rest;
+  await sheet.getByRole("checkbox", { name: dropped!.name }).uncheck();
+  await sheet.getByRole("button", { name: "Create Client" }).click();
+  await expect(sheet).toHaveCount(0);
+  expect(await calls(page, "client_create")).toEqual([
+    {
+      name: "Acme Homes",
+      folder: null,
+      products: [{ account_id: first!.id, name: "Namma Mane" }, ...kept.map((a) => ({ account_id: a.id, name: a.name }))],
+    },
+  ]);
+  // the client opens on its first refresh, unforced, shown live
+  await expect(region(page, "Refresh")).toBeVisible();
+  await expect.poll(() => calls(page, "refresh_start")).toHaveLength(1);
+  expect((await calls(page, "refresh_start"))[0]).toMatchObject({ force: false });
+  await expect(page.locator(".ws")).toContainText(fx.workspace.name);
+});
+
+test("a folder picked with Change... is where the client goes", async ({ page }) => {
+  await open(page, "noworkspace", { onboarding_state: onboardingDone });
+  await page.getByRole("button", { name: "Add a Client" }).click();
+  const sheet = page.getByRole("dialog");
+  await sheet.getByLabel("Client name").fill("Acme Homes");
+  await sheet.getByRole("button", { name: "Change..." }).click();
+  await expect(sheet.locator(".where")).toContainText(fx.clientFolder.display);
+  await expect(sheet.getByRole("checkbox", { name: fx.clientAccounts.find((a) => a.suggested)!.name })).toBeChecked();
+  await sheet.getByRole("button", { name: "Create Client" }).click();
+  expect((await calls(page, "client_create"))[0]).toMatchObject({ folder: fx.clientFolder.path });
+});
+
+test("Cancel and Escape close the sheet and write nothing", async ({ page }) => {
+  await open(page, "noworkspace");
+  for (const close of ["Cancel", "Escape"]) {
+    await page.getByRole("button", { name: "Add a Client" }).click();
+    const sheet = page.getByRole("dialog");
+    await sheet.getByLabel("System user token").fill("EAAdemo");
+    if (close === "Cancel") await sheet.getByRole("button", { name: "Cancel" }).click();
+    else await page.keyboard.press("Escape");
+    await expect(sheet).toHaveCount(0);
+  }
+  for (const cmd of ["meta_connect", "client_create"]) expect(await calls(page, cmd)).toHaveLength(0);
+  await expect(page.getByRole("heading", { name: "Add your first client" })).toBeVisible();
+});
+
+test("a token Meta stopped accepting sends the sheet back to Connect Meta, with its reason", async ({ page }) => {
+  await open(page, "", { onboarding_state: onboardingDone, client_accounts: { __fail: fx.errors.meta_auth } });
+  await page.getByRole("button", { name: "Add a Client..." }).click();
+  const sheet = page.getByRole("dialog");
+  await expect(sheet.getByRole("heading", { name: "Connect Meta" })).toBeVisible();
+  await expect(sheet).toContainText("Step 1 of 2");
+  await expect(sheet.locator(".err")).toHaveText(fx.errors.meta_auth!.reason);
+  await expect(sheet.getByLabel("System user token")).toBeFocused();
+});
+
+test("while the sheet is up the window's shortcuts wait", async ({ page }) => {
+  await open(page, "", { onboarding_state: onboardingDone });
+  await page.getByRole("button", { name: "Add a Client..." }).click();
+  await page.keyboard.press("Meta+r");
+  await page.keyboard.press("Meta+2");
+  expect(await calls(page, "refresh_start")).toHaveLength(0);
+  await expect(page.locator(".navb[aria-current=page]")).toContainText("Today");
 });

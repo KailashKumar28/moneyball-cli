@@ -5,7 +5,7 @@
 // generated fixtures (tests/fixtures.ts), never typed in here.
 import { expect, test, type Locator, type Page } from "@playwright/test";
 import type { Action, RefreshEvent, StepView } from "../src/ipc/types";
-import { event, funnelAllVerdicts, fx, noData, refreshCrmFailed, refreshNeverFinished, refreshReused, REUSED } from "./fixtures";
+import { event, funnelAllVerdicts, fx, noData, onboardingDone, refreshCrmFailed, refreshNeverFinished, refreshReused, REUSED } from "./fixtures";
 import { emitRefresh, emitTurn, open } from "./mock";
 
 const SIZES = [
@@ -111,9 +111,10 @@ async function expectStepRows(rows: Locator, steps: StepView[]) {
 // ---------- the design's eleven states ----------
 
 state("empty", "noworkspace", async (page) => {
-  await expect(page.getByRole("heading", { name: "Open a workspace" })).toBeVisible();
-  await expect(page.getByRole("button", { name: /Open Workspace/ })).toBeVisible();
-  await expect(page.locator(".term code")).toHaveText("moneyball");
+  await expect(page.getByRole("heading", { name: "Add your first client" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Add a Client" })).toBeVisible();
+  await expect(page.getByRole("button", { name: /Open a Folder/ })).toBeVisible();
+  await expect(page.getByText("In Terminal")).toHaveCount(0); // setup is in the app now
 });
 
 async function expectToday(page: Page, t: typeof fx.today) {
@@ -496,7 +497,9 @@ state("refresh-died", "", async (page) => {
 state("workspace-gone", "wsgone", async (page) => {
   const error = fx.errors.no_workspace_config!;
   await expect(page.locator(".notice")).toContainText(error.reason);
-  await expectSteps(page.locator(".notice li"), [error.fix!]);
+  // the fix is the button under it, not the terminal
+  await expect(page.locator(".notice li")).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Add a Client" })).toBeVisible();
 });
 
 state("report-none", "noreport", async (page) => {
@@ -627,4 +630,123 @@ state(
     await expectStepRows(s.locator("tbody tr"), refreshReused.run.steps);
     await expect(s.locator("tbody .tag")).toHaveText(Array<string>(reused).fill(REUSED));
   },
+);
+
+// ---------- onboarding: the Add a Client sheet ----------
+
+const sheet = (page: Page) => page.getByRole("dialog");
+/** The first launch, then the sheet opened from it. */
+async function openSheet(page: Page) {
+  await page.getByRole("button", { name: "Add a Client" }).click();
+  await expect(sheet(page)).toBeVisible();
+}
+async function connect(page: Page) {
+  await openSheet(page);
+  await sheet(page).getByLabel("System user token").fill("EAAdemo");
+  await sheet(page).getByRole("button", { name: "Connect" }).click();
+}
+/** The Connect Meta lines: who, how many accounts, the expiry, and core's warnings. */
+async function expectConnected(page: Page, m: typeof fx.metaConnected) {
+  const got = sheet(page).locator(".got");
+  for (const line of [m.name, String(m.accounts), m.expiry, ...m.warnings]) await expect(got).toContainText(line);
+  await expect(got.getByText("Read-only")).toHaveCount(m.read_only ? 1 : 0);
+  await expect(sheet(page).getByRole("button", { name: "Next" })).toBeEnabled();
+}
+
+state("connect-meta", "noworkspace", async (page) => {
+  await openSheet(page);
+  await expect(sheet(page).getByRole("heading", { name: "Connect Meta" })).toBeVisible();
+  await expect(sheet(page)).toContainText("Step 1 of 2");
+  await expect(sheet(page).getByLabel("System user token")).toHaveAttribute("type", "password");
+  await expect(sheet(page).getByLabel("System user token")).toBeFocused();
+  await expect(sheet(page).getByRole("button", { name: "Next" })).toHaveCount(0); // only once Meta accepts a token
+});
+
+state(
+  "connect-meta-error",
+  "noworkspace",
+  async (page) => {
+    await connect(page);
+    const field = sheet(page).getByLabel("System user token");
+    const err = sheet(page).locator(".err");
+    await expect(err).toHaveText(fx.errors.meta_token_shape!.reason);
+    await expect(field).toHaveValue("EAAdemo"); // what was typed stays
+    await expect(field).toHaveAttribute("aria-invalid", "true");
+    await field.pressSequentially("x");
+    await expect(err).toHaveCount(0); // the next edit clears the error
+    await sheet(page).getByRole("button", { name: "Connect" }).click();
+    await expect(err).toBeVisible();
+  },
+  { meta_connect: { __fail: fx.errors.meta_token_shape } },
+);
+
+state("connect-meta-done", "noworkspace", async (page) => {
+  await connect(page);
+  await expectConnected(page, fx.metaConnected);
+});
+
+state(
+  "connect-meta-warnings",
+  "noworkspace",
+  async (page) => {
+    await connect(page);
+    await expectConnected(page, fx.metaConnectedWarnings);
+  },
+  { meta_connect: fx.metaConnectedWarnings },
+);
+
+/** The accounts once the name has settled: the suggested ones ticked, each with its status and who uses it. */
+async function expectAccounts(page: Page) {
+  const rows = sheet(page).locator("tbody tr");
+  await expect(rows).toHaveCount(fx.clientAccounts.length);
+  for (const [i, a] of fx.clientAccounts.entries()) {
+    const box = sheet(page).getByRole("checkbox", { name: a.name });
+    if (a.suggested) await expect(box).toBeChecked();
+    else await expect(box).not.toBeChecked();
+    await expect(sheet(page).getByLabel(`Product name for ${a.name}`)).toHaveValue(a.name);
+    await expect(rows.nth(i)).toContainText(a.status);
+    if (a.used_by) await expect(rows.nth(i)).toContainText(a.used_by);
+  }
+}
+
+state("add-client-step", "noworkspace", async (page) => {
+  await connect(page);
+  await sheet(page).getByRole("button", { name: "Next" }).click();
+  await expect(sheet(page).getByRole("heading", { name: "Add a Client" })).toBeVisible();
+  await expect(sheet(page)).toContainText("Step 2 of 2");
+  await sheet(page).getByLabel("Client name").fill("Acme Homes");
+  await expect(sheet(page).locator(".where")).toContainText("~/Moneyball/Acme Homes");
+  await expectAccounts(page);
+  for (const name of ["Back", "Cancel", "Create Client", "Change..."]) await expect(sheet(page).getByRole("button", { name })).toBeVisible();
+});
+
+state(
+  "add-client",
+  "",
+  async (page) => {
+    // Meta is connected: from the sidebar, straight to the client, with no step line and no Back
+    await page.getByRole("button", { name: "Add a Client..." }).click();
+    await expect(sheet(page).getByRole("heading", { name: "Add a Client" })).toBeVisible();
+    await expect(sheet(page)).not.toContainText("Step");
+    await expect(sheet(page).getByRole("button", { name: "Back" })).toHaveCount(0);
+    await sheet(page).getByLabel("Client name").fill("Acme Homes");
+    await sheet(page).getByRole("button", { name: "Change..." }).click();
+    await expect(sheet(page).locator(".where")).toContainText(fx.clientFolder.display);
+    await expectAccounts(page);
+  },
+  { onboarding_state: onboardingDone },
+);
+
+state(
+  "add-client-error",
+  "noworkspace",
+  async (page) => {
+    await openSheet(page);
+    await sheet(page).getByLabel("Client name").fill("Acme Homes");
+    await expectAccounts(page);
+    await sheet(page).getByRole("button", { name: "Create Client" }).click();
+    await expect(sheet(page).locator(".err")).toHaveText(fx.errors.client_create!.reason);
+    await expect(sheet(page).getByLabel("Client name")).toHaveValue("Acme Homes");
+  },
+  { onboarding_state: onboardingDone, client_create: { __fail: fx.errors.client_create } },
 );

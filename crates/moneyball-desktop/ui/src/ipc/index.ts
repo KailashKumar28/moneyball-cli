@@ -2,10 +2,15 @@
 // plans/desktop/IPC.md. Every rejection is normalised to AppError.
 import { Channel, invoke } from "@tauri-apps/api/core";
 import type {
+  AccountChoice,
   AppError,
   BriefView,
   By,
+  Folder,
   FunnelView,
+  MetaConnected,
+  NewProduct,
+  OnboardingState,
   RefreshEvent,
   RefreshState,
   ReportDay,
@@ -61,3 +66,10 @@ export const turnStart = (text: string, onEvent: (ev: TurnEvent) => void) =>
   call<void>("turn_start", { text, onEvent: channel(onEvent) });
 export const turnCancel = () => call<void>("turn_cancel");
 export const copyText = (text: string) => call<void>("copy_text", { text });
+export const onboardingState = () => call<OnboardingState>("onboarding_state");
+export const metaConnect = (token: string) => call<MetaConnected>("meta_connect", { token });
+export const clientFolder = (name: string) => call<Folder>("client_folder", { name });
+export const clientFolderPick = () => call<Folder | null>("client_folder_pick");
+export const clientAccounts = (name: string) => call<AccountChoice[]>("client_accounts", { name });
+export const clientCreate = (args: { name: string; folder: string | null; products: NewProduct[] }) =>
+  call<Workspace>("client_create", args);

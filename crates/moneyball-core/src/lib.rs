@@ -39,7 +39,7 @@ pub mod words;
 pub mod workspace;
 
 pub use logo::LOGO;
-pub use meta::{list_ad_accounts, validate_token, AdAccount};
+pub use meta::{check_token, list_ad_accounts, validate_token, AdAccount, TokenCheck};
 pub use session::{SessionLog, SessionMeta};
 
 pub use config::{AppConfig, WorkspaceConfig};

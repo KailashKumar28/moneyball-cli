@@ -26,7 +26,8 @@ pub fn accounts(token: &str, known: &[AppConfig]) -> Result<Vec<AccountChoice>> 
     Ok(choices(meta::list_ad_accounts(token)?, known))
 }
 
-fn choices(accounts: Vec<AdAccount>, known: &[AppConfig]) -> Vec<AccountChoice> {
+/// `accounts` as Meta listed them, worded for the picker.
+pub fn choices(accounts: Vec<AdAccount>, known: &[AppConfig]) -> Vec<AccountChoice> {
     accounts
         .into_iter()
         .map(|a| {

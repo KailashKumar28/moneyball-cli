@@ -73,7 +73,7 @@ type RunView = {
 | Command | Args | Returns | Notes |
 |---|---|---|---|
 | `workspace_current` | - | `Workspace \| null` | The open workspace, its config re-read from disk; before one is open, the remembered workspace, opened. `null` on a first run. `AppError` when the remembered folder is gone or is no workspace. Call whenever `today` is called. |
-| `workspace_pick` | - | `Workspace \| null` | Native folder dialog. `null` when cancelled. Opens, remembers, drops the old session. `AppError` when the folder has no `.moneyball/config.json` (v1 has no setup; `fix` is the terminal command), and kind `busy` while a refresh runs. A workspace that opened but could not be remembered is still returned; only the next launch forgets it. |
+| `workspace_pick` | - | `Workspace \| null` | Native folder dialog. `null` when cancelled. Opens, remembers, adds it to the client list, drops the old session. `AppError` kind `no_workspace_config` (no `fix`: the screen showing it has Add a Client) when the folder has no `.moneyball/config.json`, and kind `busy` while a refresh runs. A workspace that opened but could not be remembered is still returned; only the next launch forgets it. |
 | `today` | - | `Today` | Recomputed on every call (reads the clock). Call on mount, after a refresh or a generated report, and on window focus. |
 | `brief` | - | `BriefView` | With no snapshot yet, `fault` is the no-data `AppError` (kind `snapshot`, a `refresh` fix). |
 | `funnel` | `{ product, days, by }` | `FunnelView` | `days` 7/14/28; `by` "campaign"/"adset"/"ad". With no snapshot yet: the no-data `AppError`. |
@@ -199,15 +199,18 @@ first refresh. Core functions behind them: `moneyball_core::onboarding`
 
 | Command | Args | Returns | Notes |
 |---|---|---|---|
-| `onboarding_state` | - | `OnboardingState` | From disk only, no network (codex derives its steps the same way). Call on mount and after each step. |
+| `onboarding_state` | - | `OnboardingState` | From disk only, no network (codex derives its steps the same way). Read by the first-launch screen and each time the sheet opens. |
 | `meta_connect` | `{ token }` | `MetaConnected` | Checks the shape first (no network): an app id or app secret pasted by mistake is refused, kind `meta_token_shape`, with a sentence saying what it looks like. Then Meta: `/me`, `debug_token`, the account count. Stores the token only when Meta accepts it. A refused token is kind `meta_auth` with core's sentence; nothing is stored. Never returns the token. |
-| `client_folder` | `{ name }` | `{ path: string; display: string }` | Where `client_create` would put it: `~/Moneyball/<name>` (D3). |
-| `client_folder_pick` | - | `{ path: string; display: string } \| null` | Native folder dialog for Change... `null` when cancelled. |
-| `client_accounts` | `{ name }` | `AccountChoice[]` | The stored token's ad accounts, every page. `suggested` is true when the account name contains the client name (case-insensitive). Kind `meta_auth` when the token stopped working (the sheet goes back to Connect Meta). |
+| `client_folder` | `{ name }` | `Folder` | Where `client_create` would put it: `~/Moneyball/<name>` (D3), from `onboarding::default_folder`. |
+| `client_folder_pick` | - | `Folder \| null` | Native folder dialog for Change... `null` when cancelled. The folder is the client's own (an existing workspace there keeps its id, brand and CRM; its products are replaced). |
+| `client_accounts` | `{ name }` | `AccountChoice[]` | The stored token's ad accounts, every page. `suggested` is true when the account name contains the client name (case-insensitive). Kind `meta_auth` when the token stopped working or none is stored (the sheet goes back to Connect Meta). |
 | `client_create` | `{ name, folder: string \| null, products: { account_id: string; name: string }[] }` | `Workspace` | `onboarding::create_client`, then opens it like `workspace_pick` (remembers it, adds it to the client list, drops the session). Refused with a sentence when the name is taken, no product is chosen, or a product name is empty or repeated; nothing is written then. Kind `busy` while a refresh runs. |
 
 After `client_create` the UI starts the first refresh at once
-(`refresh_start`, unforced) and shows it live.
+(`refresh_start`, unforced) and shows it live on Refresh.
+
+No onboarding error carries a `fix`: the sheet is where each is fixed.
+The one kind the UI branches on is `meta_auth` from `client_accounts`.
 
 ```ts
 type OnboardingState = {
@@ -215,7 +218,7 @@ type OnboardingState = {
   clients: number;                               // known clients that still exist
 };
 
-type MetaConnected = {
+type MetaConnected = {                          // core meta::TokenCheck
   name: string;          // the Meta user or system user the token belongs to
   accounts: number;      // ad accounts it can see
   expiry: string;        // "Never expires" | "Expires Mon 12 Jan"
@@ -227,9 +230,11 @@ type AccountChoice = {
   id: string;            // "act_123", as Meta names it
   name: string;
   status: string;        // core's word: "active", "disabled", "unsettled", ...
-  used_by: string | null;   // the known client whose products already use it
+  used_by: string | null;   // core's words, "used by Fincity", when a known client's products use it
   suggested: boolean;    // pre-ticked
 };
+
+type Folder = { path: string; display: string };   // display: "~/Moneyball/Fincity"
 ```
 
 Words the UI shows (the e2e drives them):
@@ -242,7 +247,9 @@ Words the UI shows (the e2e drives them):
   was already connected); field "Client name" with the folder under it and
   **Change...**; the accounts as a table with a checkbox labelled by the
   account name, an editable product name, the status and "used by";
-  button **Create Client**; **Back** and **Cancel**.
+  button **Create Client**; **Back** and **Cancel**. Escape cancels.
+- With a client open: **Add a Client...** under the workspace in the
+  sidebar opens the same sheet.
 
 ## What the UI re-reads, and when
 

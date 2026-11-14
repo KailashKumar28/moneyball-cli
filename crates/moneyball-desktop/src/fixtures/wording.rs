@@ -81,15 +81,18 @@ fn the_advisor_is_never_told_a_slash_command() {
     }
 }
 
-/// Every string of `v` the interface could show. Left out: a path, the
-/// report's own page (a document of its own, with links), and Today's
-/// `health`, which is core's record as data (the interface reads its
-/// state only; the run it holds is shown through `last_run`).
+/// Every string of `v` the interface could show. Left out: a path (the
+/// interface shows its "~" form), the report's own page (a document of
+/// its own, with links), and Today's `health`, which is core's record as
+/// data (the interface reads its state only; the run it holds is shown
+/// through `last_run`).
 fn shown<'a>(key: &str, v: &'a serde_json::Value, out: &mut Vec<&'a str>) {
     use serde_json::Value;
     match v {
-        _ if key == "html" || key == "health" => {}
-        Value::String(s) if !s.starts_with(super::SHOWN_ROOT) => out.push(s),
+        _ if key == "html" || key == "health" || key == "path" => {}
+        Value::String(s) if !s.starts_with(super::SHOWN_ROOT) && !s.starts_with("~/") => {
+            out.push(s)
+        }
         Value::Array(all) => all.iter().for_each(|x| shown(key, x, out)),
         Value::Object(map) => map.iter().for_each(|(k, x)| shown(k, x, out)),
         _ => {}

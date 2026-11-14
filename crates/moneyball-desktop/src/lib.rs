@@ -9,6 +9,7 @@ pub mod clipboard;
 pub mod error;
 pub mod front_end;
 pub mod funnel;
+pub mod onboarding;
 pub mod refresh;
 pub mod refresh_end;
 pub mod report;
@@ -65,6 +66,12 @@ pub fn run() {
             turn::turn_start,
             turn::turn_cancel,
             clipboard::copy_text,
+            onboarding::onboarding_state,
+            onboarding::meta_connect,
+            onboarding::client_folder,
+            onboarding::client_folder_pick,
+            onboarding::client_accounts,
+            onboarding::client_create,
         ])
         .run(tauri::generate_context!());
     if let Err(e) = app {

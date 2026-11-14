@@ -1,0 +1,7 @@
+{
+  "name": "Acme Homes System User",
+  "accounts": 5,
+  "expiry": "Never expires",
+  "read_only": true,
+  "warnings": []
+}
