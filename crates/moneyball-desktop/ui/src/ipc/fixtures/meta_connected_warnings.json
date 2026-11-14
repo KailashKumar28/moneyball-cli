@@ -4,7 +4,6 @@
   "expiry": "Expires Mon 11 Jan",
   "read_only": false,
   "warnings": [
-    "Meta ends this connection on Mon 11 Jan, and refreshes stop then. Connect Meta again before that day.",
-    "This connection can also change ads or settings (ads_management), which Moneyball never asks for or does."
+    "Meta ends this connection on Mon 11 Jan, and refreshes stop then. Connect Meta again before that day."
   ]
 }

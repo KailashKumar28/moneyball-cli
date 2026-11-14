@@ -131,8 +131,13 @@ mod tests {
         assert!(!got.read_only);
         assert_eq!(got.warnings.len(), 2, "{:?}", got.warnings);
         assert!(got.warnings[0].contains("on Mon 11 Jan"));
-        // pages_manage_ads is Moneyball's own: lead forms need it.
-        assert!(got.warnings[1].contains("(ads_management, pages_manage_posts)"));
+        // ads_management and pages_manage_ads are Moneyball's own: full
+        // lead data needs them. Only the one it never asked for is warned.
+        assert!(
+            got.warnings[1].contains("(pages_manage_posts)"),
+            "{:?}",
+            got.warnings
+        );
     }
 
     #[test]
