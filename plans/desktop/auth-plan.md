@@ -14,7 +14,7 @@ callback, auth.json).
 |---|---|---|
 | A1 | Meta connects through "Continue with Facebook" (Facebook Login for Business), giving a business-integration system-user token that does not expire | Owner, 2026-11-14 |
 | A2 | Meta's app secret lives in a stateless auth broker on a Cloudflare Worker; it swaps the authorization code for the token and hands it to the app; it stores and logs nothing | Owner, 2026-11-14 |
-| A3 | Moneyball's Meta app also asks for lead permissions (`leads_retrieval`, `pages_manage_ads`, `pages_show_list`, `pages_read_engagement`, `business_management`, with `ads_read`), because Moneyball will collect leads and send them to a CRM or hold them itself (see "Lead capture" below) | Owner, 2026-11-14 |
+| A3 | Moneyball's Meta app also asks for lead permissions (`leads_retrieval`, `ads_management`, `pages_manage_ads`, `pages_show_list`, `pages_read_engagement`, `business_management`, with `ads_read`; Meta's lead docs require `ads_management` for full lead data), because Moneyball will collect leads and send them to a CRM or hold them itself (see "Lead capture" below) | Owner, 2026-11-14 |
 | A4 | A CRM connects by authorization when it offers one (default); a CRM with API keys only (LeadSquared, Freshsales) gets a guided key form with a live test | Owner, 2026-11-14 |
 | A5 | Tokens stay in `~/.moneyball/auth.json`, 0600, in a 0700 folder: the CLI and the morning schedule must read them too, and the macOS data-protection keychain needs an app bundle a CLI is not (Apple TN3137); codex defaults to a file for the same reason | Research |
 | A6 | Wave 2 stays off master until "Continue with Facebook" replaces the token placeholder | Owner, 2026-11-14 |

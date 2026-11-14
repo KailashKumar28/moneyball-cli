@@ -26,8 +26,10 @@ pub const CONFIG_ID: &str = "SET-ME";
 pub const BROKER: &str = "https://moneyball-broker.SET-ME.workers.dev";
 /// What CONFIG_ID grants (auth-plan.md A3): the ads, and the leads of the
 /// Pages' lead forms. A write scope beyond these is warned about.
-pub const SCOPES: [&str; 6] = [
+pub const SCOPES: [&str; 7] = [
     "ads_read",
+    // Meta's lead docs list it beside leads_retrieval for full lead data.
+    "ads_management",
     "leads_retrieval",
     "pages_manage_ads",
     "pages_show_list",
