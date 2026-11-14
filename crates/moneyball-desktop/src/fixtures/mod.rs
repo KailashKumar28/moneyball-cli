@@ -76,7 +76,11 @@ fn screens(pins: &mut Pins) {
     let today = today_view(&cfg, &demo::loaded(&cfg, true), false);
     pins.add("today", &cfg, pinned(today, &today_clock(&cfg)));
     let degraded = today_view(&nocrm, &demo::loaded(&nocrm, false), false);
-    pins.add("today_degraded", &nocrm, pinned(degraded, &today_clock(&nocrm)));
+    pins.add(
+        "today_degraded",
+        &nocrm,
+        pinned(degraded, &today_clock(&nocrm)),
+    );
 
     // The demo is always "old" by the real clock; on its own day it is not.
     let fresh = [("/staleness", Value::Null)];

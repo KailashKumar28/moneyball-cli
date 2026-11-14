@@ -135,13 +135,22 @@ fn crm_row(cfg: &AppConfig, run: Option<&RunRecord>) -> Source {
     let Some(spec) = spec else {
         // A CRM's keys belong to a client: with none set up yet,
         // `/connect crm` would refuse, so setup comes first.
-        let set_up = cfg.workspace.as_ref().is_some_and(|w| !w.products.is_empty());
+        let set_up = cfg
+            .workspace
+            .as_ref()
+            .is_some_and(|w| !w.products.is_empty());
         let (detail, fix) = if set_up {
             ("no CRM connected", "/connect crm")
         } else {
             ("no CRM connected; set the client up first", "/setup")
         };
-        return source(Group::Leads, "CRM".into(), Link::Missing, detail.into(), fix);
+        return source(
+            Group::Leads,
+            "CRM".into(),
+            Link::Missing,
+            detail.into(),
+            fix,
+        );
     };
     let unstored = crate::crm::status::unstored_secrets(cfg, spec.request.as_ref());
     let (link, detail, fix) = match last_step(cfg, run, "crm") {

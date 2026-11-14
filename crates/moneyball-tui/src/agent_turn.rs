@@ -70,8 +70,7 @@ pub(crate) fn call_agent(app: &mut App, system: &str, turn: Vec<Item>) {
                     "configured provider '{}' is not in the model_providers map - re-run /setup.",
                     provider
                 ),
-                _ => "no LLM configured - run /setup to pick a provider + paste a key."
-                    .into(),
+                _ => "no LLM configured - run /setup to pick a provider + paste a key.".into(),
             };
             app.chat.push(Cell::AssistantText(cells::AssistantText {
                 text,

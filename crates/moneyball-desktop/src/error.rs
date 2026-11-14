@@ -36,7 +36,11 @@ impl AppError {
     /// Nothing has been pulled for this workspace yet: what every screen
     /// that reads the data says then, with the button that pulls it.
     pub fn no_data() -> Self {
-        AppError::new("snapshot", "No data yet: nothing has been pulled for this client.").with_fix(
+        AppError::new(
+            "snapshot",
+            "No data yet: nothing has been pulled for this client.",
+        )
+        .with_fix(
             "/refresh",
             "pulls Meta, then CRM, then writes yesterday's report (about 2 minutes)",
         )

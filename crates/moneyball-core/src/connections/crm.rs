@@ -14,11 +14,11 @@ use crate::error::{Error, Result};
 use super::Prompter;
 
 mod steps;
+use steps::save_spec;
 pub use steps::{
     preset_forms, save_preset, save_stage_map, test_pull, FormField, PresetForm, SpecSaved,
     TestPull, TEST_DAYS,
 };
-use steps::save_spec;
 
 /// How a connect ended. Errors (a bad curl, a network failure) are `Err`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

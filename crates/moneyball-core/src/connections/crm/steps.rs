@@ -85,7 +85,10 @@ pub(super) fn workspace(cfg: &AppConfig) -> Result<&str> {
 /// Every preset as a form for this workspace.
 pub fn preset_forms(cfg: &AppConfig) -> Result<Vec<PresetForm>> {
     let ws = workspace(cfg)?;
-    Ok(presets::catalog().iter().map(|c| form(cfg, ws, c)).collect())
+    Ok(presets::catalog()
+        .iter()
+        .map(|c| form(cfg, ws, c))
+        .collect())
 }
 
 pub(super) fn form(cfg: &AppConfig, ws: &str, c: &presets::Preset) -> PresetForm {

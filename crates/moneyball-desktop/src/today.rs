@@ -67,7 +67,12 @@ fn day_view(cfg: &AppConfig, h: &Health) -> Option<DayView> {
     };
     let (report, report_missing) = match report_for_date(cfg, Some(date)) {
         Ok(Some(r)) => (Some(r), None),
-        Ok(None) => (None, Some(missing("No daily report is written for this day yet.".into()))),
+        Ok(None) => (
+            None,
+            Some(missing(
+                "No daily report is written for this day yet.".into(),
+            )),
+        ),
         Err(e) => (None, Some(missing(e.reason))),
     };
     Some(DayView {

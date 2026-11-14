@@ -135,7 +135,10 @@ fn a_preset_connects_through_its_steps_with_no_prompter() {
     std::fs::write(mb.join("crm.toml"), &standin).unwrap();
     let saved = save_preset(&cfg, "leadzump", &values(&[("token", "")])).unwrap();
     assert_eq!(saved, SpecSaved::Kept);
-    assert_eq!(std::fs::read_to_string(mb.join("crm.toml")).unwrap(), standin);
+    assert_eq!(
+        std::fs::read_to_string(mb.join("crm.toml")).unwrap(),
+        standin
+    );
 
     // The test pull, in figures; the day's crm.json is written on a pass.
     let snap = mb.join("history").join("snap").join("2026-11-10");
@@ -166,7 +169,10 @@ fn a_preset_connects_through_its_steps_with_no_prompter() {
     // A refused key stays a typed error with its fix, never the key.
     let e = test_pull(&cfg).unwrap_err();
     assert_eq!(e.kind(), "crm_auth");
-    assert_eq!(e.fix().as_deref(), Some("moneyball crm secret leadzump_token"));
+    assert_eq!(
+        e.fix().as_deref(),
+        Some("moneyball crm secret leadzump_token")
+    );
     let shown = [
         e.to_string(),
         serde_json::to_string(&preset_forms(&cfg).unwrap()).unwrap(),
