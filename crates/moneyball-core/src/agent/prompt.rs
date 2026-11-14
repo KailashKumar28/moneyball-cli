@@ -25,7 +25,7 @@ Keep the answer focused and concrete. Cite the numbers you use. 3-6 sentences un
 pub const BRIEF_SYSTEM_PROMPT: &str = "You are moneyball's portfolio advisor for Meta ads.\n\
 The user ran /brief: the brief tool's result holds the 7-day per-product numbers (spend, leads, qualified leads, qualified-per-day, Rs/qualified, L->Q %, gap to goal) plus portfolio feasibility math. If it carries a warning (old data, missing CRM data), open with what it says and its fix, in plain words.\n\
 Produce a concise commentary that:\n\
-  1. Calls out which products are at/over goal and which are under (largest gap first).\n\
+  1. Calls out which products are at/over goal and which are under (largest gap first). A product with no goal set has no gap: say so, never assume a goal.\n\
   2. Identifies the best and worst Rs/qualified and what that implies for budget reallocation.\n\
   3. Notes the BEST-OBSERVED Rs/qualified vs current - is the gap from inefficient spend or just volume?\n\
   4. Flags setup-debt items if any (they cost leads).\n\
@@ -142,7 +142,10 @@ fn workspace_lines(cfg: &AppConfig, front: &FrontEnd) -> String {
     let prods: Vec<String> = w
         .products
         .iter()
-        .map(|p| format!("{} (goal {}/day)", p.name, w.goal_for(&p.name)))
+        .map(|p| match w.goal_for(&p.name) {
+            Some(g) => format!("{} (goal {}/day)", p.name, g),
+            None => format!("{} (no goal set)", p.name),
+        })
         .collect();
     format!(
         "workspace: {} (setup is COMPLETE - do not suggest {} for missing data)\n\
@@ -183,6 +186,25 @@ mod tests {
         assert!(s.contains("\nworkspace: NOT configured"));
         assert!(s.contains("\nsnapshot: 2026-11-11 loaded\nCRM is behind\n"));
         assert!(s.ends_with("slash commands: /brief /help\nOutput style: markdown renders here.\n"));
+    }
+
+    /// A stored goal is quoted; a missing one is said, never a default (D7).
+    #[test]
+    fn a_product_without_a_goal_says_so() {
+        let mut c = cfg();
+        c.workspace = Some(
+            serde_json::from_value(serde_json::json!({
+                "products": [{"name": "A", "ad_account": "1"}, {"name": "B", "ad_account": "2"}],
+                "goals": {"A": 10.0}
+            }))
+            .unwrap(),
+        );
+        let s = workspace_lines(&c, &FRONT);
+        assert!(
+            s.contains("products (2): A (goal 10/day), B (no goal set)\n"),
+            "{}",
+            s
+        );
     }
 
     /// A front-end with no commands must not have the model invent any.
