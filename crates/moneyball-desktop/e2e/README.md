@@ -12,6 +12,8 @@ pnpm install --dir ../ui      # once: the Tauri CLI and the interface's deps
 pnpm install                  # once, in this folder
 node run.mjs                  # build, then run (about 20 s after the first build)
 node run.mjs --no-build       # run the binary already built
+node run.mjs --no-build onboarding   # only the launches named (relaunch needs smoke)
+node check-mock-meta.mjs      # the stand-in Meta on its own, against the terminal binary
 ```
 
 Needs a logged-in macOS desktop session (the app opens its window; it
@@ -25,12 +27,15 @@ WebdriverIO's and the app's logs in `logs/`. A failed step also saves
 
 | Piece | What it does |
 |---|---|
-| `run.mjs` | The one command. Builds, makes the home and workspace, starts the mock model, then runs WebdriverIO once per launch. |
+| `run.mjs` | The one command. Builds, makes the homes and workspace, starts the mock model and the stand-in Meta, then runs WebdriverIO once per launch. |
 | `tauri.e2e.conf.json` | Merged over `../tauri.conf.json` for this build only: `withGlobalTauri`, the `e2e` capability (`wdio:default`, `wdio-webdriver:default`), its own identifier and its own `frontendDist`. |
 | `vite.config.mjs` | Builds `ui/` into `e2e/dist` with `@wdio/tauri-plugin` imported ahead of the entry file. |
 | `mock-model.mjs` | OpenAI Chat Completions over SSE on loopback: a `brief` tool call, then streamed text; a slow stream for Stop. |
+| `mock-meta.mjs` | The Graph API on loopback: `/me`, `/debug_token`, `/me/adaccounts` (two pages), and every call a refresh makes (insights, `?ids=` ads and ad sets, adimages, leads, activities, the images). Any token but its `TOKEN` gets Meta's code 190. The app reaches it through `MB_E2E_META_BASE`, which only the `e2e` build reads (`meta::graph_base`). |
+| `check-mock-meta.mjs` | Proves the stand-in with no app: `moneyball refresh` (built with `moneyball-core/e2e`) lands Meta through it and writes the report; a revoked token fails with code 190. |
 | `wdio.conf.mjs` | `@wdio/tauri-service`, embedded provider: the service starts the app and talks to the WebDriver server inside it. |
 | `specs/smoke.mjs`, `specs/relaunch.mjs` | First launch, then a second launch on the same home. |
+| `specs/onboarding.mjs` | A third launch on a new, empty home: onboarding a client against the stand-in Meta. |
 
 Test-only code stays out of a normal build:
 
@@ -61,6 +66,9 @@ Hermetic:
 - `auth.json` holds one fake model key and no Meta token.
 - The workspace's model provider is the mock on `127.0.0.1`. Model calls
   are made by Rust, so the app's CSP is as shipped.
+- Meta is the stand-in on `127.0.0.1` for every launch; the first two have
+  no token, so they never reach it. The onboarding launch gets a second
+  home, empty: no `last_workspace`, no `auth.json`.
 
 ## What it covers
 
@@ -83,6 +91,12 @@ Hermetic:
    the terminal app wrote in the same workspace is never listed); the
    failed refresh shows in full from its run record; a product added to
    the workspace's config shows when the window regains focus.
+9. Onboarding from an empty home: "Add your first client", Connect Meta
+   (a revoked token is refused with code 190, the pasted one shows who it
+   is and "Never expires"), the client named and the one account whose
+   name holds it arrives ticked, Create Client, the first refresh live
+   (Meta landed, CRM not connected), then Today shows the day's report.
+   The client's config holds that account; the stand-in saw GETs only.
 
 ## What it cannot do
 
@@ -99,8 +113,8 @@ Hermetic:
   driver clicks is focused programmatically, so screenshots show a
   focus ring a mouse click would not.
 - Pick the theme: the app follows the system appearance.
-- Test a successful refresh (needs Meta), the signed release bundle, or
-  `tauri dev`. The binary is a debug build of the same code and the
+- Test the signed release bundle or `tauri dev`. A successful refresh
+  runs against the stand-in Meta, not graph.facebook.com. The binary is a debug build of the same code and the
   shipped CSP (`tauri build --debug`).
 
 ## Versions
