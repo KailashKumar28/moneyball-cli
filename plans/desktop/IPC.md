@@ -191,6 +191,59 @@ On `failed`, the desktop crate appends its own hint to `error` when
 `looks_like_context_overflow` is true ("Start a new session to continue.").
 A `failed` or `died` sentence is also kept on `SessionSnapshot.failed`.
 
+## Onboarding (wave 2 of plans/desktop/onboarding-plan.md)
+
+Steps 0 to 3 of the plan: first launch, Connect Meta, Add a client, the
+first refresh. Core functions behind them: `moneyball_core::onboarding`
+(wave 1) plus `meta::check_token` (new, below).
+
+| Command | Args | Returns | Notes |
+|---|---|---|---|
+| `onboarding_state` | - | `OnboardingState` | From disk only, no network (codex derives its steps the same way). Call on mount and after each step. |
+| `meta_connect` | `{ token }` | `MetaConnected` | Checks the shape first (no network): an app id or app secret pasted by mistake is refused, kind `meta_token_shape`, with a sentence saying what it looks like. Then Meta: `/me`, `debug_token`, the account count. Stores the token only when Meta accepts it. A refused token is kind `meta_auth` with core's sentence; nothing is stored. Never returns the token. |
+| `client_folder` | `{ name }` | `{ path: string; display: string }` | Where `client_create` would put it: `~/Moneyball/<name>` (D3). |
+| `client_folder_pick` | - | `{ path: string; display: string } \| null` | Native folder dialog for Change... `null` when cancelled. |
+| `client_accounts` | `{ name }` | `AccountChoice[]` | The stored token's ad accounts, every page. `suggested` is true when the account name contains the client name (case-insensitive). Kind `meta_auth` when the token stopped working (the sheet goes back to Connect Meta). |
+| `client_create` | `{ name, folder: string \| null, products: { account_id: string; name: string }[] }` | `Workspace` | `onboarding::create_client`, then opens it like `workspace_pick` (remembers it, adds it to the client list, drops the session). Refused with a sentence when the name is taken, no product is chosen, or a product name is empty or repeated; nothing is written then. Kind `busy` while a refresh runs. |
+
+After `client_create` the UI starts the first refresh at once
+(`refresh_start`, unforced) and shows it live.
+
+```ts
+type OnboardingState = {
+  meta: "hidden" | "in_progress" | "complete";   // onboarding::steps
+  clients: number;                               // known clients that still exist
+};
+
+type MetaConnected = {
+  name: string;          // the Meta user or system user the token belongs to
+  accounts: number;      // ad accounts it can see
+  expiry: string;        // "Never expires" | "Expires Mon 12 Jan"
+  read_only: boolean;    // ads_read and no write scope
+  warnings: string[];    // core's sentences: an expiry date, write scopes; shown, never blocking
+};
+
+type AccountChoice = {
+  id: string;            // "act_123", as Meta names it
+  name: string;
+  status: string;        // core's word: "active", "disabled", "unsettled", ...
+  used_by: string | null;   // the known client whose products already use it
+  suggested: boolean;    // pre-ticked
+};
+```
+
+Words the UI shows (the e2e drives them):
+- First launch, no client: heading "Add your first client"; buttons
+  **Add a Client** (primary) and **Open a Folder...** (Cmd-O).
+- The sheet, page "Connect Meta" (only when `meta` is not complete):
+  "Step 1 of 2"; a masked field labelled "System user token"; button
+  **Connect**; on success the `MetaConnected` lines and **Next**.
+- The sheet, page "Add a Client": "Step 2 of 2" (or no step line when Meta
+  was already connected); field "Client name" with the folder under it and
+  **Change...**; the accounts as a table with a checkbox labelled by the
+  account name, an editable product name, the status and "used by";
+  button **Create Client**; **Back** and **Cancel**.
+
 ## What the UI re-reads, and when
 
 | When | Commands |
