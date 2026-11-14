@@ -1,0 +1,14 @@
+name = "moneyball-broker"
+main = "src/index.js"
+compatibility_date = "2026-10-15"
+
+# Logs would carry the callback URL, and with it the authorization code.
+[observability]
+enabled = false
+
+[vars]
+META_APP_ID = "SET-ME"
+META_GRAPH_VERSION = "v26.0"
+# Exactly as registered in the Meta app's Valid OAuth Redirect URIs.
+META_REDIRECT_URI = "https://moneyball-broker.SET-ME.workers.dev/meta/callback"
+# META_APP_SECRET is a Worker secret: wrangler secret put META_APP_SECRET
