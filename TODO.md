@@ -29,7 +29,9 @@ bottom after a release-sized batch.)
         blocked on a Developer ID Application certificate, the Team ID
         and an App Store Connect API key. Until then it builds ad-hoc.
   - [ ] Setup, connect and schedule in the app (today: terminal only; a
-        Meta or CRM fix is shown as an "In Terminal" command).
+        Meta or CRM fix is shown as an "In Terminal" command). Planned
+        2026-11-14 in plans/desktop/onboarding-plan.md; decisions D1-D7
+        there are the owner's to confirm before wave 1.
   - [ ] In-step refresh progress (core reports a step beginning and
         ending only).
   - [ ] Rupee sign in the app (core words money as "Rs."; the client
