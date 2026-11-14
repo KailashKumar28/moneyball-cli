@@ -2,6 +2,7 @@
 //! hand out. Split from connect.rs (size cap).
 
 use crate::error::{Error, Result};
+use crate::text;
 
 use super::connect::ConnectInput;
 
@@ -59,7 +60,7 @@ impl ConnectInput {
             url.pop(); // the '?'
             for pair in qs.split('&').filter(|p| !p.is_empty()) {
                 let (k, v) = pair.split_once('=').unwrap_or((pair, ""));
-                query.push((percent_decode(k), percent_decode(v)));
+                query.push((text::percent_decode(k), text::percent_decode(v)));
             }
         }
         Ok(Self {
@@ -71,43 +72,6 @@ impl ConnectInput {
             body,
         })
     }
-}
-
-/// Undo URL encoding on a query key/value (`%2B`, `+`). The executor
-/// re-encodes at request time, so keeping pairs decoded avoids double
-/// encoding.
-fn percent_decode(s: &str) -> String {
-    let bytes = s.as_bytes();
-    let mut out = Vec::with_capacity(bytes.len());
-    let mut i = 0;
-    while i < bytes.len() {
-        match bytes[i] {
-            b'%' if i + 2 < bytes.len() => {
-                // Decode from the byte pair, not a string slice: `%` followed
-                // by multibyte text would split a char boundary and panic.
-                let hex = std::str::from_utf8(&bytes[i + 1..i + 3]).ok();
-                match hex.and_then(|h| u8::from_str_radix(h, 16).ok()) {
-                    Some(b) => {
-                        out.push(b);
-                        i += 3;
-                    }
-                    None => {
-                        out.push(b'%');
-                        i += 1;
-                    }
-                }
-            }
-            b'+' => {
-                out.push(b' ');
-                i += 1;
-            }
-            b => {
-                out.push(b);
-                i += 1;
-            }
-        }
-    }
-    String::from_utf8_lossy(&out).into_owned()
 }
 
 /// Minimal shell-style tokenizer: whitespace-separated, single/double

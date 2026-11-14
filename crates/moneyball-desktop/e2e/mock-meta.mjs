@@ -2,21 +2,40 @@
 // MB_E2E_META_BASE (meta::graph_base), so onboarding and the refresh run
 // core's real HTTP client, paging and error mapping with no network.
 //
+// Continue with Facebook (plans/desktop/auth-plan.md, "The Meta
+// protocol"): the dialog, /<version>/dialog/oauth (MB_E2E_META_DIALOG),
+// which checks Moneyball's app and configuration and redirects to the
+// broker with a code and the same state; and the token endpoint,
+// /<version>/oauth/access_token, where the stand-in broker swaps that code
+// with the app secret for TOKEN. GET /__next_dialog?error=access_denied
+// makes the next dialog answer as a person who declines; ?hold_ms=N makes
+// it wait N ms first, as a person still choosing.
+//
 // Onboarding: /me, /debug_token, /me/adaccounts (two pages).
 // The refresh: <act>/insights (daily rows, and the 7-day reach),
 // ?ids= (ads with their creatives, ad sets), <act>/adimages, <ad>/leads,
 // <act>/activities, and the creative images themselves (/img/...).
 //
-// Every call must carry TOKEN, as the spec pastes it; any other token is
-// refused the way Meta does (code 190), so a reconnect can be tested.
-// Dates follow the app's own: the windows it asks for, and "yesterday"
-// for leads and the change log. GET /__log lists every request seen.
-// Run on its own by check-mock-meta.mjs, against the terminal binary.
+// Every Graph call must carry TOKEN, as the token endpoint hands it out;
+// any other token is refused the way Meta does (code 190), so a reconnect
+// can be tested. Dates follow the app's own: the windows it asks for, and
+// "yesterday" for leads and the change log. GET /__log lists every
+// request seen. Run on its own by check-mock-meta.mjs, against the
+// terminal binary.
 import { createServer } from "node:http";
 import { PNG } from "pngjs";
 
 export const TOKEN = "EAAMoneyballE2EStandInSystemUserToken0123456789";
 export const USER = { id: "100090000000001", name: "Moneyball Test System User" };
+
+// Moneyball's Meta app as the stand-in knows it (the app reads the first
+// two through MB_E2E_META_APP_ID and MB_E2E_META_CONFIG_ID); the secret is
+// the stand-in broker's alone.
+export const APP_ID = "1000000000001";
+export const CONFIG_ID = "2000000000002";
+export const APP_SECRET = "e2e-stand-in-app-secret";
+// What the Login for Business configuration grants (auth-plan.md A3).
+export const SCOPES = ["ads_read", "leads_retrieval", "pages_manage_ads", "pages_show_list", "pages_read_engagement", "business_management"];
 
 // The spec types CLIENT as the client's name; only the first account's
 // name contains it, so only that one arrives ticked.
@@ -200,7 +219,7 @@ function answer(path, q, base) {
   if (path === "/debug_token") {
     if (q.get("input_token") && q.get("input_token") !== TOKEN)
       return [200, { data: { is_valid: false, scopes: [], error: { code: 190, message: "Invalid OAuth access token." } } }];
-    const data = { app_id: "1000000000001", type: "SYSTEM_USER", application: "Moneyball", data_access_expires_at: 0, expires_at: 0, is_valid: true, issued_at: 1767225600, scopes: ["ads_read"], user_id: USER.id };
+    const data = { app_id: APP_ID, type: "SYSTEM_USER", application: "Moneyball", data_access_expires_at: 0, expires_at: 0, is_valid: true, issued_at: 1767225600, scopes: SCOPES, user_id: USER.id };
     return [200, { data }];
   }
   if (path === "/me/adaccounts") {
@@ -235,17 +254,66 @@ function answer(path, q, base) {
   return [400, UNSUPPORTED(id ?? path)];
 }
 
+/** A request's body, read to its end. */
+async function bodyOf(req) {
+  let text = "";
+  for await (const chunk of req) text += chunk;
+  return text;
+}
+
 /**
  * Start the stand-in on a free loopback port. `slowMs` holds each daily
  * insights pull that long, so the app's live refresh can be seen running.
  */
 export function startMockMeta({ slowMs = 0 } = {}) {
   const log = [];
+  // Codes the dialog handed out, each with its redirect_uri: good once.
+  const codes = new Map();
+  let next = {};
+
+  /** Login for Business: Moneyball's app and configuration, then back to the broker. */
+  async function dialog(q, res) {
+    const redirect = q.get("redirect_uri");
+    if (q.get("client_id") !== APP_ID || q.get("config_id") !== CONFIG_ID || q.get("response_type") !== "code" || !redirect)
+      return res.writeHead(400, { "content-type": "text/plain" }).end("The stand-in Meta does not know this app or configuration.");
+    const { error, hold_ms: hold } = next;
+    next = {};
+    if (hold) await new Promise((r) => setTimeout(r, Number(hold)));
+    const back = new URL(redirect);
+    if (error) {
+      back.searchParams.set("error", error);
+      back.searchParams.set("error_reason", "user_denied");
+      back.searchParams.set("error_description", "Permissions error");
+    } else {
+      const code = `AQDe2eStandInCode${codes.size + 1}`;
+      codes.set(code, redirect);
+      back.searchParams.set("code", code);
+    }
+    back.searchParams.set("state", q.get("state") ?? "");
+    res.writeHead(302, { location: back.href }).end();
+  }
+
+  /** The broker's code swap: the app secret and the dialog's redirect_uri, or Meta's refusal. */
+  function swap(form) {
+    const code = form.get("code");
+    const ok = form.get("client_id") === APP_ID && form.get("client_secret") === APP_SECRET && codes.has(code) && codes.get(code) === form.get("redirect_uri");
+    codes.delete(code);
+    if (!ok) return [400, graphError(100, "Invalid verification code format.")];
+    return [200, { access_token: TOKEN, token_type: "bearer" }];
+  }
+
   const server = createServer(async (req, res) => {
     const url = new URL(req.url, `http://${req.headers.host}`);
     const json = (status, body) => res.writeHead(status, { "content-type": "application/json" }).end(JSON.stringify(body));
     if (url.pathname === "/__log") return json(200, log);
+    if (url.pathname === "/__next_dialog") return json(200, (next = Object.fromEntries(url.searchParams)));
     log.push(`${req.method} ${url.pathname}`);
+    const [, oauth] = url.pathname.match(/^\/v\d+\.\d+\/(dialog\/oauth|oauth\/access_token)$/) ?? [];
+    if (oauth === "dialog/oauth" && req.method === "GET") return dialog(url.searchParams, res);
+    if (oauth === "oauth/access_token") {
+      const form = req.method === "POST" ? new URLSearchParams(await bodyOf(req)) : url.searchParams;
+      return json(...swap(form));
+    }
     // Read only, as the app promises: anything but a GET is refused.
     if (req.method !== "GET") return json(400, graphError(100, "The stand-in Meta answers GET only.", "GraphMethodException"));
     // A creative image on Meta's CDN: no token.

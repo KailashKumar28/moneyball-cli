@@ -1,7 +1,8 @@
-// The Add a Client sheet (plans/desktop/onboarding-plan.md Steps 1 and 2):
-// one modal, two pages. Connect Meta comes first only while no token is
-// stored; a token Meta stops accepting sends the sheet back to it. Every
-// sentence here about Meta, the folder or the accounts is the shell's.
+// The Add a Client sheet (plans/desktop/onboarding-plan.md Steps 1 and 2,
+// plans/desktop/auth-plan.md): one modal, two pages. Connect Meta comes
+// first only while no token is stored; a token Meta stops accepting sends
+// the sheet back to it. Every sentence here about Meta, the folder or the
+// accounts is the shell's.
 import { useEffect, useId, useRef, useState, type FormEvent } from "react";
 import {
   clientAccounts,
@@ -9,6 +10,7 @@ import {
   clientFolder,
   clientFolderPick,
   metaConnect,
+  metaConnectCancel,
   onboardingState,
   toAppError,
   type AccountChoice,
@@ -67,65 +69,70 @@ export function AddClient({ onClose, onCreated }: Props) {
   );
 }
 
-/** Page one: the token, checked by Meta before it is stored. */
+/** Page one: Continue with Facebook, finished in the system browser; the shell waits for it. */
 function ConnectMeta(props: { head: string; refused: AppError | null; onNext: () => void; onCancel: () => void }) {
-  const [token, setToken] = useState("");
-  const [busy, setBusy] = useState(false);
+  const [waiting, setWaiting] = useState(false);
   const [error, setError] = useState<AppError | null>(props.refused);
   const [ok, setOk] = useState<MetaConnected | null>(null);
-  const field = useId();
-  const connect = (e: FormEvent) => {
-    e.preventDefault();
-    setBusy(true);
+  // Bumped by every start and stop: the answer to an earlier one is dropped.
+  const turn = useRef(0);
+  const pending = useRef(false);
+  const settle = (mine: number, then: () => void) => {
+    if (turn.current !== mine) return;
+    pending.current = false;
+    setWaiting(false);
+    then();
+  };
+  const start = () => {
+    const mine = ++turn.current;
+    pending.current = true;
+    setWaiting(true);
     setError(null);
-    metaConnect(token).then(
-      (m) => {
-        setOk(m);
-        setBusy(false);
-      },
-      (err: unknown) => {
-        setError(toAppError(err));
-        setBusy(false);
-      },
+    metaConnect().then(
+      (m) => settle(mine, () => setOk(m)),
+      (err: unknown) => settle(mine, () => setError(toAppError(err))),
     );
   };
+  const stop = () => {
+    turn.current++;
+    pending.current = false;
+    setWaiting(false);
+    metaConnectCancel().catch(() => {});
+  };
+  // The sheet closed mid-wait (Escape): the shell stops waiting too.
+  useEffect(
+    () => () => {
+      if (pending.current) metaConnectCancel().catch(() => {});
+    },
+    [],
+  );
+  const submit = (e: FormEvent) => {
+    e.preventDefault();
+    if (ok) props.onNext();
+    else if (!waiting) start();
+  };
   return (
-    <form onSubmit={connect}>
+    <form onSubmit={submit}>
       <header>
         <p className="lbl">Step 1 of 2</p>
         <h2 id={props.head}>Connect Meta</h2>
       </header>
       <div className="sbody">
-        <p className="lead">Moneyball reads every client's ads through one token from a Meta system user. It is kept on this Mac and only ever reads.</p>
-        <ol className="guide">
-          <li>In Meta Business Settings, open Users, then System users, and add one.</li>
-          <li>Assign it your clients' ad accounts.</li>
-          <li>Generate a token for it with ads_read ticked and the expiry set to Never.</li>
-        </ol>
-        <label className="field" htmlFor={field}>
-          System user token
-        </label>
-        <div className="inl">
-          <input
-            id={field}
-            className="input grow"
-            type="password"
-            value={token}
-            autoFocus
-            autoComplete="off"
-            spellCheck={false}
-            aria-invalid={error ? true : undefined}
-            onChange={(e) => {
-              setToken(e.target.value);
-              setError(null);
-              setOk(null);
-            }}
-          />
-          <button className="btn" type="submit" disabled={busy}>
-            {busy && <Glyph kind="run" />}
-            Connect
+        <p className="lead">Moneyball will be able to read the ads, and the leads, of the ad accounts and Pages you choose on Facebook.</p>
+        {!waiting && !ok && (
+          <button className="btn primary connect" type="submit" autoFocus>
+            Continue with Facebook
           </button>
-        </div>
+        )}
+        {waiting && (
+          <div className="waiting" role="status">
+            <p className="inl">
+              <Glyph kind="run" />
+              <b>Finish in your browser</b>
+            </p>
+            <p className="lead">Facebook is open in your browser: choose the business, its ad accounts and Pages, then come back here.</p>
+          </div>
+        )}
         {error && (
           <p className="err" role="alert">
             {error.reason}
@@ -134,11 +141,12 @@ function ConnectMeta(props: { head: string; refused: AppError | null; onNext: ()
         {ok && <Connected m={ok} />}
       </div>
       <footer>
-        <button className="btn" type="button" onClick={props.onCancel}>
+        {/* While the browser is out, Cancel stops waiting for it; otherwise it closes the sheet. */}
+        <button className="btn" type="button" onClick={waiting ? stop : props.onCancel}>
           Cancel
         </button>
         {ok && (
-          <button className="btn primary" type="button" onClick={props.onNext}>
+          <button className="btn primary" type="submit" autoFocus>
             Next
           </button>
         )}

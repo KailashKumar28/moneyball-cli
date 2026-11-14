@@ -1,4 +1,5 @@
-//! Char-boundary-safe string helpers, plain-text tables, and base64.
+//! Char-boundary-safe string helpers, plain-text tables, base64 and URL
+//! encoding.
 //!
 //! `&s[..n]` panics on multibyte text - lead names, error bodies, and
 //! currency signs routinely contain it - so `clippy::string_slice` is
@@ -104,6 +105,53 @@ pub fn base64(data: &[u8]) -> String {
     out
 }
 
+/// `s` for a URL's query: every byte but RFC 3986's unreserved ones as `%XX`.
+pub fn percent_encode(s: &str) -> String {
+    s.bytes()
+        .map(|b| match b {
+            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'.' | b'_' | b'~' => {
+                (b as char).to_string()
+            }
+            b => format!("%{:02X}", b),
+        })
+        .collect()
+}
+
+/// Undo URL encoding on a query or form key/value (`%2B`, `+`).
+pub fn percent_decode(s: &str) -> String {
+    let bytes = s.as_bytes();
+    let mut out = Vec::with_capacity(bytes.len());
+    let mut i = 0;
+    while i < bytes.len() {
+        match bytes[i] {
+            b'%' if i + 2 < bytes.len() => {
+                // Decode from the byte pair, not a string slice: `%` followed
+                // by multibyte text would split a char boundary and panic.
+                let hex = std::str::from_utf8(&bytes[i + 1..i + 3]).ok();
+                match hex.and_then(|h| u8::from_str_radix(h, 16).ok()) {
+                    Some(b) => {
+                        out.push(b);
+                        i += 3;
+                    }
+                    None => {
+                        out.push(b'%');
+                        i += 1;
+                    }
+                }
+            }
+            b'+' => {
+                out.push(b' ');
+                i += 1;
+            }
+            b => {
+                out.push(b);
+                i += 1;
+            }
+        }
+    }
+    String::from_utf8_lossy(&out).into_owned()
+}
+
 /// A plain-text table: header, dashed rule, rows, each line ending "\n".
 /// Widths count chars, as `{:<w$}` pads (names carry dashes like U+2013),
 /// and a column whose every cell is a number ("1,234", "-12%") right-aligns.
@@ -178,6 +226,19 @@ mod tests {
         assert_eq!(base64(b"f"), "Zg==");
         assert_eq!(base64(b"foobar"), "Zm9vYmFy");
         assert_eq!(base64(b"user:pa ss"), "dXNlcjpwYSBzcw==");
+    }
+
+    #[test]
+    fn percent_encoding_round_trips() {
+        let s = "https://x.dev/meta/callback?a=1&b=two words+\u{20B9}";
+        let enc = percent_encode(s);
+        assert!(
+            enc.is_ascii() && !enc.contains(['/', ':', '&', '=', ' ', '+']),
+            "{}",
+            enc
+        );
+        assert_eq!(percent_decode(&enc), s);
+        assert_eq!(percent_decode("a+b%2Bc%zz%"), "a b+c%zz%");
     }
 
     #[test]

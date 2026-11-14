@@ -4,51 +4,26 @@
 use std::cell::Cell;
 
 use moneyball_core::{workspace as core_workspace, Error};
-use serde_json::json;
 
 use super::*;
-use crate::state::lock;
-
-fn checked() -> moneyball_core::Result<TokenCheck> {
-    TokenCheck::read(
-        "Acme System User",
-        2,
-        &json!({"expires_at": 0, "scopes": ["ads_read"]}),
-    )
-}
 
 #[test]
-fn a_token_is_stored_trimmed_and_only_once_meta_accepts_it() {
-    let stored = std::cell::RefCell::new(None);
-    let store = |t: &str| {
-        *stored.borrow_mut() = Some(t.to_string());
-        Ok(())
-    };
-    // Shape first: refused with no call to Meta and nothing stored.
-    let e = connect(" 1234567890 ", meta::check_token, store).unwrap_err();
-    assert_eq!((e.kind.as_str(), e.fix), ("meta_token_shape", None));
-    assert_eq!(*stored.borrow(), None);
-    // Meta refuses: core's sentence, no terminal fix, nothing stored.
-    let refused = |_: &str| {
-        Err(Error::MetaAuth(
-            "Meta refused the access token (code 190)".into(),
-        ))
-    };
-    let e = connect("EAAbad", refused, store).unwrap_err();
-    assert_eq!(e.kind, "meta_auth");
-    assert_eq!(e.reason, "Meta refused the access token (code 190)");
-    assert_eq!(e.fix, None);
-    assert_eq!(*stored.borrow(), None);
-    // Accepted: stored as Meta saw it, and the token never comes back.
-    let seen = Cell::new(false);
-    let check = |t: &str| {
-        seen.set(t == "EAAgood");
-        checked()
-    };
-    let ok = connect("  EAAgood\n", check, store).unwrap();
-    assert!(seen.get());
-    assert_eq!(stored.borrow().as_deref(), Some("EAAgood"));
-    assert!(!serde_json::to_string(&ok).unwrap().contains("EAAgood"));
+fn cancel_stops_the_connect_on_screen_and_a_new_one_stops_the_last() {
+    let state = AppState::default();
+    let first = begin_connect(&state);
+    assert!(!first.load(Ordering::SeqCst));
+    // Continue with Facebook again while the first still waits.
+    let second = begin_connect(&state);
+    assert!(first.load(Ordering::SeqCst) && !second.load(Ordering::SeqCst));
+    cancel_connect(&state);
+    assert!(second.load(Ordering::SeqCst));
+    // A declined connect is core's sentence in the sheet, with no terminal fix.
+    let declined = Error::Authorization("Facebook sign-in was cancelled.".into());
+    let e = in_sheet(declined);
+    assert_eq!(
+        (e.kind.as_str(), e.reason.as_str(), e.fix),
+        ("authorization", "Facebook sign-in was cancelled.", None)
+    );
 }
 
 #[test]

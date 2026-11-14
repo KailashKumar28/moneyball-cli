@@ -52,6 +52,10 @@ fn network_boundary() {
         "crates/moneyball-core/src/meta.rs",
         // meta's own tests, against a loopback server.
         "crates/moneyball-core/src/meta_tests.rs",
+        // The e2e build's person at the browser: follows the stand-in
+        // Meta's dialog to the stand-in broker. Compiled only with core's
+        // `e2e` feature. (oauth.rs only listens on 127.0.0.1, no client.)
+        "crates/moneyball-core/src/meta/follow.rs",
         "crates/moneyball-core/src/fetch/mod.rs",
         "crates/moneyball-core/src/fetch/adsets.rs",
         "crates/moneyball-core/src/fetch/changes.rs",

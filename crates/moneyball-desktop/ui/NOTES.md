@@ -108,8 +108,13 @@ fixtures on 2026-11-12 (plans/desktop/review-2026-11-12.md, finding 9); the thre
 - Cmd-O opens the picker. A failed pick shows the empty state with the error and a way back.
 - Onboarding (`screens/AddClient.tsx`): the Add a Client sheet is a native `<dialog>` opened modal, so
   Escape, the focus trap and the backdrop are the platform's; the window's shortcuts wait while it is
-  up (`sheetOpen`). Connect Meta's guide lines, the field labels and the "Connected as" row heads are
-  UI copy; every sentence about the token, the folder and the accounts is the shell's. Accounts are
+  up (`sheetOpen`). Connect Meta is one button, **Continue with Facebook**; the shell answers once
+  the person has finished in the browser, so the page shows "Finish in your browser" meanwhile, and
+  Cancel there stops the wait (`meta_connect_cancel`) without closing the sheet; Escape closes it
+  and stops the wait too. An answer to a stopped attempt is dropped. The line on what Moneyball may
+  read, the waiting lines, the field labels and the "Connected as" row heads are UI copy; every
+  sentence about the connection, the folder and the accounts is the shell's. In the mock,
+  `meta_connect` answers after 1.5 s, or never with `manual` (a test gives a reply instead). Accounts are
   re-read 400 ms after the name stops changing (each read pages Meta); a row the user touched keeps
   its tick and product name, the others follow `suggested`. No search box over the accounts yet (the
   plan asks for one past 10 accounts; the contract does not). After Create Client the app opens the

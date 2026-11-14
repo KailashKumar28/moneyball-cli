@@ -12,7 +12,7 @@ import { chmodSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSyn
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { CLIENT, startMockMeta, TOKEN } from "./mock-meta.mjs";
+import { CLIENT, SCOPES, startMockMeta, TOKEN } from "./mock-meta.mjs";
 
 const here = fileURLToPath(new URL(".", import.meta.url));
 const repo = join(here, "../../..");
@@ -64,7 +64,7 @@ try {
   // Onboarding's calls, followed as core follows them (every page).
   const get = async (path) => (await fetch(`${meta.url}${path}${path.includes("?") ? "&" : "?"}access_token=${TOKEN}`)).json();
   assert.ok((await get("/me")).name);
-  assert.deepEqual((await get(`/debug_token?input_token=${TOKEN}`)).data.scopes, ["ads_read"]);
+  assert.deepEqual((await get(`/debug_token?input_token=${TOKEN}`)).data.scopes, SCOPES);
   const accounts = [];
   for (let page = await get("/me/adaccounts?fields=id,name,account_status&limit=200"); ; page = await (await fetch(page.paging.next)).json()) {
     accounts.push(...page.data);

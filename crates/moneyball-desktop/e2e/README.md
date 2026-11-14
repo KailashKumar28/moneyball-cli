@@ -27,15 +27,16 @@ WebdriverIO's and the app's logs in `logs/`. A failed step also saves
 
 | Piece | What it does |
 |---|---|
-| `run.mjs` | The one command. Builds, makes the homes and workspace, starts the mock model and the stand-in Meta, then runs WebdriverIO once per launch. |
+| `run.mjs` | The one command. Builds, makes the homes and workspace, starts the mock model, the stand-in Meta and the stand-in broker, then runs WebdriverIO once per launch. |
 | `tauri.e2e.conf.json` | Merged over `../tauri.conf.json` for this build only: `withGlobalTauri`, the `e2e` capability (`wdio:default`, `wdio-webdriver:default`), its own identifier and its own `frontendDist`. |
 | `vite.config.mjs` | Builds `ui/` into `e2e/dist` with `@wdio/tauri-plugin` imported ahead of the entry file. |
 | `mock-model.mjs` | OpenAI Chat Completions over SSE on loopback: a `brief` tool call, then streamed text; a slow stream for Stop. |
-| `mock-meta.mjs` | The Graph API on loopback: `/me`, `/debug_token`, `/me/adaccounts` (two pages), and every call a refresh makes (insights, `?ids=` ads and ad sets, adimages, leads, activities, the images). Any token but its `TOKEN` gets Meta's code 190. The app reaches it through `MB_E2E_META_BASE`, which only the `e2e` build reads (`meta::graph_base`). |
+| `mock-meta.mjs` | The Graph API on loopback: `/me`, `/debug_token`, `/me/adaccounts` (two pages), and every call a refresh makes (insights, `?ids=` ads and ad sets, adimages, leads, activities, the images). Any token but its `TOKEN` gets Meta's code 190. Also Login for Business: the dialog (`/<version>/dialog/oauth`: checks the app and configuration ids, redirects to the broker with a code and the same state; `/__next_dialog?error=access_denied` or `?hold_ms=N` sets how the next one answers) and the token endpoint where the broker swaps the code for `TOKEN`. The app reaches it through `MB_E2E_META_BASE` and `MB_E2E_META_DIALOG`, which only the `e2e` build reads (`meta::graph_base`, `meta::connect`). |
+| `mock-broker.mjs` | The broker's side of the protocol in `plans/desktop/auth-plan.md`: `/meta/callback` checks the port in the state, swaps the code at the stand-in Meta with the app secret, and answers with the page that POSTs the token (or the decline, in words) and the state to the app's loopback listener. The app reaches it through `MB_E2E_BROKER`. In the `e2e` build the app follows the dialog itself instead of opening the browser (`meta::follow_dialog`), standing in for the person. |
 | `check-mock-meta.mjs` | Proves the stand-in with no app: `moneyball refresh` (built with `moneyball-core/e2e`) lands Meta through it and writes the report; a revoked token fails with code 190. |
 | `wdio.conf.mjs` | `@wdio/tauri-service`, embedded provider: the service starts the app and talks to the WebDriver server inside it. |
 | `specs/smoke.mjs`, `specs/relaunch.mjs` | First launch, then a second launch on the same home. |
-| `specs/onboarding.mjs` | A third launch on a new, empty home: onboarding a client against the stand-in Meta. |
+| `specs/onboarding.mjs` | A third launch on a new, empty home: onboarding a client against the stand-in Meta and the stand-in broker. |
 
 Test-only code stays out of a normal build:
 
@@ -66,9 +67,9 @@ Hermetic:
 - `auth.json` holds one fake model key and no Meta token.
 - The workspace's model provider is the mock on `127.0.0.1`. Model calls
   are made by Rust, so the app's CSP is as shipped.
-- Meta is the stand-in on `127.0.0.1` for every launch; the first two have
-  no token, so they never reach it. The onboarding launch gets a second
-  home, empty: no `last_workspace`, no `auth.json`.
+- Meta and the broker are stand-ins on `127.0.0.1` for every launch; the
+  first two have no token, so they never reach them. The onboarding launch
+  gets a second home, empty: no `last_workspace`, no `auth.json`.
 
 ## What it covers
 
@@ -92,11 +93,16 @@ Hermetic:
    failed refresh shows in full from its run record; a product added to
    the workspace's config shows when the window regains focus.
 9. Onboarding from an empty home: "Add your first client", Connect Meta
-   (a revoked token is refused with code 190, the pasted one shows who it
-   is and "Never expires"), the client named and the one account whose
-   name holds it arrives ticked, Create Client, the first refresh live
-   (Meta landed, CRM not connected), then Today shows the day's report.
-   The client's config holds that account; the stand-in saw GETs only.
+   with Continue with Facebook (no field to paste into): "Finish in your
+   browser" while the dialog is held, and Cancel stores nothing even when
+   the dialog answers later; a declined dialog is said in the broker's
+   words with nothing stored; then the token comes back through the
+   broker, lands in `auth.json` and shows who it is and "Never expires".
+   The client named and the one account whose name holds it arrives
+   ticked, Create Client, the first refresh live (Meta landed, CRM not
+   connected), then Today shows the day's report. The client's config
+   holds that account; the stand-in saw GETs only, but for the broker's
+   code swaps.
 
 ## What it cannot do
 
@@ -116,6 +122,11 @@ Hermetic:
 - Test the signed release bundle or `tauri dev`. A successful refresh
   runs against the stand-in Meta, not graph.facebook.com. The binary is a debug build of the same code and the
   shipped CSP (`tauri build --debug`).
+- Open the system browser or reach Facebook and the real broker (broker/):
+  the e2e build follows the stand-in dialog itself and submits the
+  stand-in broker's form as the page's script would, so the browser's
+  part (Meta's picker, the auto-POST running, the success page) is not
+  exercised.
 
 ## Versions
 

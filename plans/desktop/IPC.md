@@ -195,12 +195,14 @@ A `failed` or `died` sentence is also kept on `SessionSnapshot.failed`.
 
 Steps 0 to 3 of the plan: first launch, Connect Meta, Add a client, the
 first refresh. Core functions behind them: `moneyball_core::onboarding`
-(wave 1) plus `meta::check_token` (new, below).
+(wave 1) plus `meta::connect` (Continue with Facebook, the protocol of
+[auth-plan.md](auth-plan.md)) and `meta::check_token`.
 
 | Command | Args | Returns | Notes |
 |---|---|---|---|
 | `onboarding_state` | - | `OnboardingState` | From disk only, no network (codex derives its steps the same way). Read by the first-launch screen and each time the sheet opens. |
-| `meta_connect` | `{ token }` | `MetaConnected` | Checks the shape first (no network): an app id or app secret pasted by mistake is refused, kind `meta_token_shape`, with a sentence saying what it looks like. Then Meta: `/me`, `debug_token`, the account count. Stores the token only when Meta accepts it. A refused token is kind `meta_auth` with core's sentence; nothing is stored. Never returns the token. |
+| `meta_connect` | - | `MetaConnected` | Continue with Facebook: opens Meta's dialog in the system browser and answers once the person has finished there (up to five minutes, on a blocking thread). The broker's page brings the token back to core's loopback listener; core stores it, then reads it back from Meta (`/me`, `debug_token`, the account count). Declined on Facebook, cancelled or timed out: kind `authorization`, the sentence (a decline in the broker's words), nothing stored. A token Meta then refuses is kind `meta_auth`. A second `meta_connect` cancels the first. Never returns the token. |
+| `meta_connect_cancel` | - | `void` | Stops the `meta_connect` in flight; it then fails with kind `authorization`, which the UI drops (the person asked for it). |
 | `client_folder` | `{ name }` | `Folder` | Where `client_create` would put it: `~/Moneyball/<name>` (D3), from `onboarding::default_folder`. |
 | `client_folder_pick` | - | `Folder \| null` | Native folder dialog for Change... `null` when cancelled. The folder is the client's own (an existing workspace there keeps its id, brand and CRM; its products are replaced). |
 | `client_accounts` | `{ name }` | `AccountChoice[]` | The stored token's ad accounts, every page. `suggested` is true when the account name contains the client name (case-insensitive). Kind `meta_auth` when the token stopped working or none is stored (the sheet goes back to Connect Meta). |
@@ -222,8 +224,10 @@ type MetaConnected = {                          // core meta::TokenCheck
   name: string;          // the Meta user or system user the token belongs to
   accounts: number;      // ad accounts it can see
   expiry: string;        // "Never expires" | "Expires Mon 12 Jan"
-  read_only: boolean;    // ads_read and no write scope
-  warnings: string[];    // core's sentences: an expiry date, write scopes; shown, never blocking
+  read_only: boolean;    // ads_read and no write scope (false with Moneyball's own scopes:
+                         // pages_manage_ads and business_management can write)
+  warnings: string[];    // core's sentences: an expiry date, a write scope beyond what
+                         // Moneyball asks for (meta::SCOPES); shown, never blocking
 };
 
 type AccountChoice = {
@@ -241,8 +245,11 @@ Words the UI shows (the e2e drives them):
 - First launch, no client: heading "Add your first client"; buttons
   **Add a Client** (primary) and **Open a Folder...** (Cmd-O).
 - The sheet, page "Connect Meta" (only when `meta` is not complete):
-  "Step 1 of 2"; a masked field labelled "System user token"; button
-  **Connect**; on success the `MetaConnected` lines and **Next**.
+  "Step 1 of 2"; one sentence on what Moneyball will be able to read (the
+  ads, and the leads); button **Continue with Facebook**; while the
+  browser is out, "Finish in your browser" and **Cancel** (stops the
+  wait, keeps the sheet); on success the `MetaConnected` lines and
+  **Next**; a decline or a timeout in words under the button.
 - The sheet, page "Add a Client": "Step 2 of 2" (or no step line when Meta
   was already connected); field "Client name" with the folder under it and
   **Change...**; the accounts as a table with a checkbox labelled by the

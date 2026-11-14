@@ -37,10 +37,10 @@ pub enum Error {
     #[error("meta auth: {0}")]
     MetaAuth(String),
 
-    /// What was pasted as a Meta token is plainly something else (an app
-    /// id, an app secret); refused before Meta is asked.
-    #[error("meta token: {0}")]
-    MetaTokenShape(String),
+    /// An authorization that did not finish (oauth.rs): declined in the
+    /// browser, cancelled, or timed out. Nothing was stored.
+    #[error("authorization: {0}")]
+    Authorization(String),
 
     /// The CRM refused its credentials; `fix` is the one command that
     /// stores fresh ones (it names the spec's real secret).
@@ -67,7 +67,7 @@ impl Error {
     pub fn kind(&self) -> &'static str {
         match self {
             Error::MetaAuth(_) => "meta_auth",
-            Error::MetaTokenShape(_) => "meta_token_shape",
+            Error::Authorization(_) => "authorization",
             Error::Meta(_) => "meta",
             Error::CrmAuth { .. } => "crm_auth",
             Error::CrmRequest { .. } => "crm_request",
@@ -87,7 +87,7 @@ impl Error {
             Error::CrmAuth { message, .. }
             | Error::CrmRequest { message, .. }
             | Error::MetaAuth(message)
-            | Error::MetaTokenShape(message)
+            | Error::Authorization(message)
             | Error::Meta(message)
             | Error::Config(message) => message.clone(),
             e => e.to_string(),
