@@ -2,13 +2,23 @@
 //! any CRM's curl and let the model draft the spec; then a live test pull
 //! gates the save and unknown stage names are mapped once. One flow behind
 //! the Prompter seam - `moneyball connect crm` in the shell, /connect crm
-//! in the TUI. Keys are stored for this workspace (per client).
+//! in the TUI - looping over the plain steps the Mac app calls (steps.rs).
+//! Keys are stored for this workspace (per client).
+
+use std::collections::HashMap;
 
 use crate::config::AppConfig;
-use crate::crm::{connect, fetch as crm_fetch, presets, source, CANONICAL_STAGES};
+use crate::crm::{connect, fetch as crm_fetch, presets, CANONICAL_STAGES};
 use crate::error::{Error, Result};
 
 use super::Prompter;
+
+mod steps;
+pub use steps::{
+    preset_forms, save_preset, save_stage_map, test_pull, FormField, PresetForm, SpecSaved,
+    TestPull, TEST_DAYS,
+};
+use steps::save_spec;
 
 /// How a connect ended. Errors (a bad curl, a network failure) are `Err`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -36,9 +46,7 @@ macro_rules! answer {
 mod request;
 
 pub fn connect(cfg: &AppConfig, p: &mut dyn Prompter) -> Result<Done> {
-    let ws = cfg.workspace_id().ok_or_else(|| {
-        Error::Config("no workspace here - CRM keys belong to a client's workspace".into())
-    })?;
+    let ws = steps::workspace(cfg)?;
     let catalog = presets::catalog();
     p.show("connect which CRM?");
     for (i, c) in catalog.iter().enumerate() {
@@ -59,48 +67,33 @@ pub fn connect(cfg: &AppConfig, p: &mut dyn Prompter) -> Result<Done> {
     }
 }
 
-/// Catalog path: credentials only, then test, then stage mapping.
+/// Catalog path: the preset's fields one by one, then save, test and
+/// map stages.
 fn preset(cfg: &AppConfig, ws: &str, c: &presets::Preset, p: &mut dyn Prompter) -> Result<Done> {
-    for s in c.secrets {
+    let form = steps::form(cfg, ws, c);
+    let mut values = HashMap::new();
+    for f in &form.fields {
+        p.show(&format!("{}: {}", f.label, f.help));
         // Re-runs (e.g. after fixing a stage map) keep the stored
         // credential on an empty answer instead of re-demanding it.
-        let stored = crate::secrets::load_crm_key(Some(ws), &c.secret_name(s)).is_some();
-        // A key the CRM refused on the last pull: keeping it changes nothing.
-        let refused = crate::crm::status::refused_on_last_pull(cfg)
-            .and_then(|step| step.fix)
-            .is_some_and(|fix| fix.contains(&c.secret_name(s)));
-        p.show(&format!("{}: {}", s.label, s.help));
-        let prompt = match (stored, refused) {
+        let prompt = match (f.stored, f.refused) {
             (true, true) => format!(
                 "{} [the stored one was refused on the last pull - paste a fresh one]: ",
-                s.label
+                f.label
             ),
-            (true, false) => format!("{} [enter keeps the stored one]: ", s.label),
-            (false, _) => format!("{}: ", s.label),
+            (true, false) => format!("{} [enter keeps the stored one]: ", f.label),
+            (false, _) => format!("{}: ", f.label),
         };
-        let v = answer!(p, prompt, true);
-        if v.is_empty() {
-            if stored {
-                continue;
-            }
-            return Err(Error::Config(format!("{} is required", s.label)));
-        }
-        crate::secrets::store_crm_key(ws, &c.secret_name(s), &v)?;
+        let v = answer!(p, prompt, f.secret);
+        f.require(&v)?;
+        values.insert(f.key.to_string(), v);
     }
     let path = crm_fetch::spec_path(cfg);
-    // Reconnecting the same CRM keeps its spec, and the stage map mapped
-    // last time with it; only a first connect (or a different CRM) writes.
-    let same = std::fs::read_to_string(&path)
-        .ok()
-        .and_then(|raw| source::parse(&raw).ok())
-        .is_some_and(|spec| spec.name == c.id);
-    if same {
-        p.show(&format!("kept {} (its stage map stays)", path.display()));
-    } else {
-        save_spec(&path, c.render())?;
-        p.show(&format!("saved {}", path.display()));
+    match save_preset(cfg, c.id, &values)? {
+        SpecSaved::Kept => p.show(&format!("kept {} (its stage map stays)", path.display())),
+        SpecSaved::Written => p.show(&format!("saved {}", path.display())),
     }
-    test_and_map_stages(cfg, &path, p)
+    test_and_map_stages(cfg, p)
 }
 
 /// Unknown CRM: paste the curl from its API docs; header values are
@@ -163,20 +156,14 @@ fn custom(cfg: &AppConfig, ws: &str, p: &mut dyn Prompter) -> Result<Done> {
         return Ok(Done::NotSaved);
     }
     save_spec(&path, draft)?;
-    test_and_map_stages(cfg, &path, p)
+    test_and_map_stages(cfg, p)
 }
 
 /// The shared tail: live test pull, then a stage map for whatever stage
 /// names the real data contained, then a confirming pull.
-fn test_and_map_stages(
-    cfg: &AppConfig,
-    spec: &std::path::Path,
-    p: &mut dyn Prompter,
-) -> Result<Done> {
-    // The refresh's window: this pull's crm.json replaces the day's, so a
-    // shorter test window would shrink what /brief and the report read.
-    p.show("running a live test pull (28 days)...");
-    let r = crm_fetch::fetch_crm(cfg, 28)?;
+fn test_and_map_stages(cfg: &AppConfig, p: &mut dyn Prompter) -> Result<Done> {
+    p.show(&format!("running a live test pull ({} days)...", TEST_DAYS));
+    let r = test_pull(cfg)?;
     p.show(&format!(
         "test pull ({}): {} ad-attributed ticket(s) over {} page(s){}",
         r.name,
@@ -191,58 +178,49 @@ fn test_and_map_stages(
             String::new()
         }
     ));
-    for l in r.check.lines() {
-        p.show(&l);
+    for l in &r.lines {
+        p.show(l);
     }
-    if r.path.is_none() {
+    if !r.passed {
         p.show(&format!(
             "FAIL - fix the errors above (edit {}) and connect again",
-            spec.display()
+            crm_fetch::spec_path(cfg).display()
         ));
         return Ok(Done::TestFailed);
     }
-    if !r.check.unknown_stages.is_empty() {
+    if !r.unknown_stages.is_empty() {
         p.show("your CRM uses stage names moneyball doesn't know. map each one:");
         for (i, c) in CANONICAL_STAGES.iter().enumerate() {
             p.show(&format!("  {}) {}", i + 1, c));
         }
         p.show("  0) keep as-is (counts as a lead, never as qualified)");
-        let mut pairs = Vec::new();
-        for stage in &r.check.unknown_stages {
+        let mut choices = Vec::new();
+        for stage in &r.unknown_stages {
             let a = answer!(
                 p,
                 format!("\"{}\" -> [0-{}]: ", stage, CANONICAL_STAGES.len()),
                 false
             );
-            match a.parse::<usize>() {
+            let to = match a.parse::<usize>() {
                 Ok(n) if (1..=CANONICAL_STAGES.len()).contains(&n) => {
-                    pairs.push((stage.clone(), CANONICAL_STAGES[n - 1].to_string()));
+                    Some(CANONICAL_STAGES[n - 1].to_string())
                 }
-                _ => p.show(&format!("  keeping \"{}\" as-is", stage)),
-            }
+                _ => {
+                    p.show(&format!("  keeping \"{}\" as-is", stage));
+                    None
+                }
+            };
+            choices.push((stage.clone(), to));
         }
-        if !pairs.is_empty() {
-            let text = std::fs::read_to_string(spec)?;
-            save_spec(spec, source::add_stage_mappings(&text, &pairs)?)?;
+        if save_stage_map(cfg, &choices)? {
             p.show("stage map saved - confirming with another pull...");
-            let r2 = crm_fetch::fetch_crm(cfg, 28)?;
-            for l in r2.check.lines() {
+            for l in test_pull(cfg)?.lines {
                 p.show(&l);
             }
         }
     }
     p.show("connected. each refresh pulls it with Meta (moneyball refresh, or /refresh).");
     Ok(Done::Connected)
-}
-
-/// crm.toml, atomically: a half-written spec fails every pull after it.
-fn save_spec(path: &std::path::Path, body: String) -> Result<()> {
-    let dir = path.parent().expect("crm.toml sits in .moneyball");
-    let name = path
-        .file_name()
-        .and_then(|n| n.to_str())
-        .unwrap_or("crm.toml");
-    crate::secrets::write_private(dir, name, body).map(drop)
 }
 
 fn names(pairs: &[(String, String)]) -> String {
