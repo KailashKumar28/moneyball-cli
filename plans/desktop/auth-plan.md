@@ -123,6 +123,11 @@ CRM.
 3. Whether Meta's PKCE flow (documented "still in testing") or device login
    could later remove the broker for Meta.
 4. Sell.do and LeadZump: ask the vendors what they offer.
+5. Browsers' local-network protections (Chrome's Local Network Access):
+   does the broker page's form POST to `127.0.0.1` go through, or prompt?
+   Test in Chrome and Safari with the real broker. If it is blocked, the
+   fallback is a redirect to the loopback with the token in the fragment
+   (never sent to a server), at the cost of browser history.
 
 ## Relation to docs/CLOUD_PLAN.md
 
