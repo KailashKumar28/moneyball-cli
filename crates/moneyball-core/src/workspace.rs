@@ -72,7 +72,7 @@ fn write_last(global_dir: &Path, dir: &Path) -> Result<()> {
         )));
     };
     keys.insert(KEY.into(), root.into());
-    std::fs::create_dir_all(global_dir)?;
+    crate::secrets::create_private_dir(global_dir)?;
     crate::secrets::write_private(global_dir, GLOBAL_CONFIG, serde_json::to_string_pretty(&v)?)?;
     Ok(())
 }

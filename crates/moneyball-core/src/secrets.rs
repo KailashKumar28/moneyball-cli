@@ -81,7 +81,7 @@ fn load_file() -> Result<AuthFile> {
 fn update(change: impl FnOnce(&mut AuthFile)) -> Result<()> {
     let p = auth_path()?;
     let dir = p.parent().expect("auth path has parent");
-    std::fs::create_dir_all(dir)?;
+    create_private_dir(dir)?;
     let name = p
         .file_name()
         .and_then(|n| n.to_str())
@@ -124,6 +124,17 @@ pub(crate) fn write_private(dir: &std::path::Path, name: &str, body: String) -> 
     }
     std::fs::rename(&tmp, &path)?;
     Ok(path)
+}
+
+/// `dir` and any missing parent, created owner-only (0700) as pi creates
+/// its agent dir: `~/.moneyball` holds auth.json, sessions and bug
+/// reports. A directory that already exists keeps its mode.
+pub(crate) fn create_private_dir(dir: &std::path::Path) -> std::io::Result<()> {
+    let mut builder = std::fs::DirBuilder::new();
+    builder.recursive(true);
+    #[cfg(unix)]
+    std::os::unix::fs::DirBuilderExt::mode(&mut builder, 0o700);
+    builder.create(dir)
 }
 
 pub fn store_meta_token(token: &str) -> Result<()> {
@@ -213,10 +224,13 @@ mod tests {
     /// Hermetic round trip through the MONEYBALL_AUTH_PATH seam - the
     /// user's real ~/.moneyball/auth.json is never touched. (Replaces
     /// the old moneyball-tui keychain test that rewrote the real file.)
+    /// The seam, not a temp HOME: other tests read HOME concurrently.
     #[test]
     fn round_trip_persists_via_override_path() {
-        let dir = std::env::temp_dir().join(format!("mb-secrets-test-{}", std::process::id()));
-        std::fs::create_dir_all(&dir).unwrap();
+        // A fresh home: the first save creates its .moneyball.
+        let home = std::env::temp_dir().join(format!("mb-secrets-test-{}", std::process::id()));
+        std::fs::remove_dir_all(&home).ok();
+        let dir = home.join(".moneyball");
         let file = dir.join("auth.json");
         std::env::set_var("MONEYBALL_AUTH_PATH", &file);
 
@@ -272,8 +286,10 @@ mod tests {
         #[cfg(unix)]
         {
             use std::os::unix::fs::PermissionsExt;
-            let mode = std::fs::metadata(&file).unwrap().permissions().mode();
-            assert_eq!(mode & 0o777, 0o600);
+            let mode =
+                |p: &std::path::Path| std::fs::metadata(p).unwrap().permissions().mode() & 0o777;
+            assert_eq!(mode(&dir), 0o700, "~/.moneyball is owner-only");
+            assert_eq!(mode(&file), 0o600, "auth.json stays owner-only");
         }
         clear_llm_key("test_provider").unwrap();
         assert_eq!(load_llm_key("test_provider"), None);
@@ -285,6 +301,6 @@ mod tests {
         assert_eq!(std::fs::read_to_string(&file).unwrap(), "{ not json");
 
         std::env::remove_var("MONEYBALL_AUTH_PATH");
-        std::fs::remove_dir_all(&dir).ok();
+        std::fs::remove_dir_all(&home).ok();
     }
 }

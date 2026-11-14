@@ -80,7 +80,7 @@ pub fn reports_dir() -> Result<PathBuf> {
         std::fs::rename(&legacy, &dir)
             .with_context(|| format!("migrate {} -> {}", legacy.display(), dir.display()))?;
     }
-    std::fs::create_dir_all(&dir).with_context(|| format!("mkdir {}", dir.display()))?;
+    crate::secrets::create_private_dir(&dir).with_context(|| format!("mkdir {}", dir.display()))?;
     Ok(dir)
 }
 

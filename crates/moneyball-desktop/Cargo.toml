@@ -16,8 +16,13 @@ path = "src/main.rs"
 
 [features]
 # Test only: the WebdriverIO plugins that let e2e/ drive the real app over
-# a loopback WebDriver port. Never on in a normal build (e2e/README.md).
-e2e = ["dep:tauri-plugin-wdio", "dep:tauri-plugin-wdio-webdriver"]
+# a loopback WebDriver port, and core's stand-in Meta base URL. Never on in
+# a normal build (e2e/README.md).
+e2e = [
+    "dep:tauri-plugin-wdio",
+    "dep:tauri-plugin-wdio-webdriver",
+    "moneyball-core/e2e",
+]
 
 [build-dependencies]
 tauri-build.workspace = true

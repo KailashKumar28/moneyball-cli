@@ -67,7 +67,7 @@ pub fn fetch_and_write(
     let ids: Vec<&str> = ads.keys().map(String::as_str).collect();
     let mut rows: Vec<CreativeRow> = Vec::with_capacity(ids.len());
     for chunk in ids.chunks(IDS_PER_BATCH) {
-        let req = client.get(format!("{}/", super::META_GRAPH_BASE)).query(&[
+        let req = client.get(format!("{}/", super::graph_base())).query(&[
             ("access_token", token),
             ("ids", &chunk.join(",")),
             ("fields", AD_FIELDS),
@@ -168,7 +168,7 @@ fn resolve_full_res(
         for chunk in hashes.chunks(IDS_PER_BATCH) {
             let hashes_json = serde_json::to_string(chunk).unwrap_or_default();
             let req = client
-                .get(format!("{}/{}/adimages", super::META_GRAPH_BASE, act))
+                .get(format!("{}/{}/adimages", super::graph_base(), act))
                 .query(&[
                     ("access_token", token),
                     ("hashes", &hashes_json),

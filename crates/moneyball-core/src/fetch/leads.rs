@@ -60,7 +60,7 @@ pub fn fetch_and_write(
 
 fn pull_ad(client: &reqwest::blocking::Client, token: &str, ad_id: &str) -> Result<Vec<LeadRow>> {
     let first = client
-        .get(format!("{}/{}/leads", super::META_GRAPH_BASE, ad_id))
+        .get(format!("{}/{}/leads", super::graph_base(), ad_id))
         .query(&[
             ("access_token", token),
             ("fields", "id,created_time,field_data"),

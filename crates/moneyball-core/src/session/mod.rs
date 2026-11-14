@@ -147,7 +147,12 @@ pub fn sessions_dir(root: Option<&Path>) -> Result<PathBuf> {
             .join(".moneyball")
             .join("sessions"),
     };
-    std::fs::create_dir_all(&dir).with_context(|| format!("mkdir {}", dir.display()))?;
+    // ~/.moneyball is owner-only; a workspace's dot-dir keeps its own mode.
+    let made = match root {
+        Some(_) => std::fs::create_dir_all(&dir),
+        None => crate::secrets::create_private_dir(&dir),
+    };
+    made.with_context(|| format!("mkdir {}", dir.display()))?;
     Ok(dir)
 }
 

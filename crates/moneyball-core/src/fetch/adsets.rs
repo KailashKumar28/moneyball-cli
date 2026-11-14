@@ -37,7 +37,7 @@ pub fn fetch_and_write(
 
     let mut by_id: BTreeMap<String, Value> = BTreeMap::new();
     for chunk in ids.chunks(IDS_PER_BATCH) {
-        let req = client.get(format!("{}/", super::META_GRAPH_BASE)).query(&[
+        let req = client.get(format!("{}/", super::graph_base())).query(&[
             ("access_token", token),
             ("ids", &chunk.join(",")),
             ("fields", ADSET_FIELDS),

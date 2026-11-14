@@ -26,7 +26,7 @@ use chrono::{Duration, Local};
 use crate::config::AppConfig;
 use crate::error::{Error, Result};
 
-use crate::meta::META_GRAPH_BASE;
+use crate::meta::graph_base;
 
 /// Per-ad daily fields we request. Matches `snapshot::AdsDailyRow` so the
 /// reader parses every row without loss.
@@ -283,7 +283,7 @@ fn fetch_account_rows(
     let act = act_id(account_id);
     let time_range = format!("{{\"since\":\"{}\",\"until\":\"{}\"}}", since, until);
     let first = client
-        .get(format!("{}/{}/insights", META_GRAPH_BASE, act))
+        .get(format!("{}/{}/insights", graph_base(), act))
         .query(&[
             ("access_token", token),
             ("level", "ad"),

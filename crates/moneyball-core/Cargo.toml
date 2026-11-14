@@ -6,6 +6,11 @@ rust-version.workspace = true
 license.workspace = true
 authors.workspace = true
 
+[features]
+# Test only: meta::graph_base reads MB_E2E_META_BASE so the Mac app's
+# end-to-end run can talk to a stand-in Meta. Never on in a normal build.
+e2e = []
+
 [dependencies]
 serde.workspace = true
 serde_json.workspace = true

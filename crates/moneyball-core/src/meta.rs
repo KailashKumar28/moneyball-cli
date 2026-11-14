@@ -15,10 +15,20 @@ use serde_json::Value;
 
 use crate::error::{Error, Result};
 
-pub(crate) const META_GRAPH_BASE: &str = "https://graph.facebook.com";
+/// Where every Graph GET goes. Only a build with core's `e2e` feature (the
+/// Mac app's end-to-end run) reads `MB_E2E_META_BASE`, to talk to a
+/// stand-in Meta; a normal build never reads it. Never a config key: the
+/// token goes wherever this points.
 // NOTE: do NOT pin a version segment (e.g. /v18.0/) - calls should use the
 // version configured in the user's Meta developer app, so we hit the base
 // URL with no version prefix.
+pub(crate) fn graph_base() -> String {
+    #[cfg(feature = "e2e")]
+    if let Ok(base) = std::env::var("MB_E2E_META_BASE") {
+        return base;
+    }
+    "https://graph.facebook.com".to_string()
+}
 
 #[derive(Debug, Clone, Deserialize, PartialEq)]
 pub struct AdAccount {
@@ -46,7 +56,7 @@ struct ApiError {
 /// Validate a Meta Marketing API access token by calling /me.
 pub fn validate_token(token: &str) -> Result<()> {
     let req = http_client()?
-        .get(format!("{}/me", META_GRAPH_BASE))
+        .get(format!("{}/me", graph_base()))
         .query(&[("access_token", token), ("fields", "id,name")]);
     // The wizard waits on these: enter again is their retry.
     fetch_json(req, "the token check", None).map(drop)
@@ -56,7 +66,7 @@ pub fn validate_token(token: &str) -> Result<()> {
 pub fn list_ad_accounts(token: &str) -> Result<Vec<AdAccount>> {
     let client = http_client()?;
     let first = client
-        .get(format!("{}/me/adaccounts", META_GRAPH_BASE))
+        .get(format!("{}/me/adaccounts", graph_base()))
         .query(&[
             ("access_token", token),
             ("fields", "id,name,account_status"),

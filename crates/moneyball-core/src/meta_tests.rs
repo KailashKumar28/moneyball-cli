@@ -153,3 +153,16 @@ fn get_all_follows_every_page() {
     let rows = super::get_all(&client, first, "leads", None).unwrap();
     assert_eq!(rows, vec![1, 2, 3]);
 }
+
+/// The stand-in Meta is an e2e build's alone: a normal build never reads
+/// the override, so no environment can send the token elsewhere. Nothing
+/// else reads this variable, so setting it cannot disturb another test.
+#[test]
+fn only_an_e2e_build_reads_the_stand_in_base() {
+    std::env::set_var("MB_E2E_META_BASE", "http://127.0.0.1:1");
+    let want = match cfg!(feature = "e2e") {
+        true => "http://127.0.0.1:1",
+        false => "https://graph.facebook.com",
+    };
+    assert_eq!(super::graph_base(), want);
+}
