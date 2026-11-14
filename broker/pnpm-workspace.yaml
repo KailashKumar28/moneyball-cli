@@ -1,0 +1,5 @@
+# Install scripts nothing here needs: esbuild and workerd find their
+# platform binaries through optional dependencies.
+allowBuilds:
+  esbuild: false
+  workerd: false
