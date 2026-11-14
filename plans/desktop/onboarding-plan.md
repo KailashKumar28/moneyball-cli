@@ -18,7 +18,7 @@ changes the steps that name it.
 | # | Decision | Default in this plan | Alternative |
 |---|---|---|---|
 | D1 | Who owns onboarding | The Mac app. The terminal wizard stays, built on the same core steps. | Keep setup terminal-only. |
-| D2 | How Meta connects | A guided system-user token: paste once per Mac, checked at once, never expires. | Facebook login (OAuth): needs a server, Meta App Review and Business Verification. |
+| D2 | How Meta connects | **Replaced 2026-11-14 by the owner:** no pasted tokens; "Continue with Facebook" through Moneyball's own Meta app and a stateless broker. Design: [auth-plan.md](auth-plan.md). | (was: a pasted system-user token) |
 | D3 | Where a client lives | `~/Moneyball/<Client name>`, made for you; "Change..." for another folder; existing folders still open with Cmd-O. | Always ask for a folder. |
 | D4 | What is required | Meta and the client's ad accounts. Everything else (goals, CRM, morning refresh, advisor key) is a checklist, asked when first needed. | A longer linear wizard. |
 | D5 | CRM in the app | The preset CRMs (LeadZump, LeadSquared) as a form with a test pull. "Another CRM" (drafted by the model from a pasted request) stays in the terminal for now. | All CRMs in the app. |
