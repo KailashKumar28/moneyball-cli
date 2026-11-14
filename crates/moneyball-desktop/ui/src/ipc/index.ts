@@ -67,7 +67,8 @@ export const turnStart = (text: string, onEvent: (ev: TurnEvent) => void) =>
 export const turnCancel = () => call<void>("turn_cancel");
 export const copyText = (text: string) => call<void>("copy_text", { text });
 export const onboardingState = () => call<OnboardingState>("onboarding_state");
-export const metaConnect = (token: string) => call<MetaConnected>("meta_connect", { token });
+export const metaConnect = () => call<MetaConnected>("meta_connect");
+export const metaConnectCancel = () => call<void>("meta_connect_cancel");
 export const clientFolder = (name: string) => call<Folder>("client_folder", { name });
 export const clientFolderPick = () => call<Folder | null>("client_folder_pick");
 export const clientAccounts = (name: string) => call<AccountChoice[]>("client_accounts", { name });

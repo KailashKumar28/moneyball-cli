@@ -1,6 +1,7 @@
 //! Meta Graph API client (read-only): every Graph GET goes through
 //! get_json / get_all, and the token checks and account list of setup
-//! live here (their words in `token`).
+//! live here (their words in `token`; Continue with Facebook in
+//! `connect`).
 //!
 //! Per the project hard contract: moneyball-core NEVER writes to Meta.
 //! This module is read-only and only ever calls graph.facebook.com.
@@ -15,22 +16,34 @@ use serde_json::Value;
 
 use crate::error::{Error, Result};
 
+mod connect;
+#[cfg(feature = "e2e")]
+mod follow;
 mod token;
+pub use connect::{connect, APP_ID, BROKER, CONFIG_ID, SCOPES, VERSION};
+#[cfg(feature = "e2e")]
+pub use follow::follow_dialog;
 pub use token::TokenCheck;
 
-/// Where every Graph GET goes. Only a build with core's `e2e` feature (the
-/// Mac app's end-to-end run) reads `MB_E2E_META_BASE`, to talk to a
-/// stand-in Meta; a normal build never reads it. Never a config key: the
-/// token goes wherever this points.
+/// `value`, or in a build with core's `e2e` feature (the Mac app's
+/// end-to-end run) the stand-in's from `var`, when set. A normal build
+/// never reads `var`. Never a config key: the token goes wherever these
+/// point.
+#[cfg(feature = "e2e")]
+fn or_stand_in(var: &str, value: &str) -> String {
+    std::env::var(var).unwrap_or_else(|_| value.to_string())
+}
+#[cfg(not(feature = "e2e"))]
+fn or_stand_in(_: &str, value: &str) -> String {
+    value.to_string()
+}
+
+/// Where every Graph GET goes (`MB_E2E_META_BASE` in the e2e build).
 // NOTE: do NOT pin a version segment (e.g. /v18.0/) - calls should use the
 // version configured in the user's Meta developer app, so we hit the base
 // URL with no version prefix.
 pub(crate) fn graph_base() -> String {
-    #[cfg(feature = "e2e")]
-    if let Ok(base) = std::env::var("MB_E2E_META_BASE") {
-        return base;
-    }
-    "https://graph.facebook.com".to_string()
+    or_stand_in("MB_E2E_META_BASE", "https://graph.facebook.com")
 }
 
 #[derive(Debug, Clone, Deserialize, PartialEq)]
@@ -65,11 +78,9 @@ pub fn validate_token(token: &str) -> Result<()> {
     fetch_json(req, "the token check", None).map(drop)
 }
 
-/// Check a token before it is stored (onboarding Step 1): its shape with
-/// no network, then Meta's `/me` (whose it is), `debug_token` (expiry and
-/// scopes) and the ad accounts it sees. Stores nothing.
+/// What Meta says about a token (onboarding Step 1): `/me` (whose it
+/// is), `debug_token` (expiry and scopes) and the ad accounts it sees.
 pub fn check_token(token: &str) -> Result<TokenCheck> {
-    token::check_shape(token)?;
     let client = http_client()?;
     let get = |path: &str, query: &[(&str, &str)]| {
         let req = client.get(format!("{}/{}", graph_base(), path));

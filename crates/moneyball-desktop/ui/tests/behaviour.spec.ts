@@ -317,13 +317,34 @@ test("Cancel and Escape close the sheet and write nothing", async ({ page }) => 
   for (const close of ["Cancel", "Escape"]) {
     await page.getByRole("button", { name: "Add a Client" }).click();
     const sheet = page.getByRole("dialog");
-    await sheet.getByLabel("System user token").fill("EAAdemo");
+    await expect(sheet.getByRole("button", { name: "Continue with Facebook" })).toBeVisible();
     if (close === "Cancel") await sheet.getByRole("button", { name: "Cancel" }).click();
     else await page.keyboard.press("Escape");
     await expect(sheet).toHaveCount(0);
   }
-  for (const cmd of ["meta_connect", "client_create"]) expect(await calls(page, cmd)).toHaveLength(0);
+  for (const cmd of ["meta_connect", "meta_connect_cancel", "client_create"]) expect(await calls(page, cmd)).toHaveLength(0);
   await expect(page.getByRole("heading", { name: "Add your first client" })).toBeVisible();
+});
+
+test("while the browser is out, Cancel stops the wait and keeps the sheet; Escape stops it and closes", async ({ page }) => {
+  await open(page, "noworkspace");
+  await page.getByRole("button", { name: "Add a Client" }).click();
+  const sheet = page.getByRole("dialog");
+  const facebook = sheet.getByRole("button", { name: "Continue with Facebook" });
+  await facebook.click();
+  await expect(sheet.getByRole("status")).toContainText("Finish in your browser");
+  await sheet.getByRole("button", { name: "Cancel" }).click();
+  // back where it started, nothing said: the person chose to stop
+  await expect(facebook).toBeVisible();
+  await expect(sheet.locator(".err")).toHaveCount(0);
+  expect(await calls(page, "meta_connect_cancel")).toHaveLength(1);
+
+  await facebook.click();
+  await expect(sheet.getByRole("status")).toContainText("Finish in your browser");
+  await page.keyboard.press("Escape");
+  await expect(sheet).toHaveCount(0);
+  await expect.poll(() => calls(page, "meta_connect_cancel")).toHaveLength(2);
+  expect(await calls(page, "meta_connect")).toEqual([{}, {}]);
 });
 
 test("a token Meta stopped accepting sends the sheet back to Connect Meta, with its reason", async ({ page }) => {
@@ -333,7 +354,7 @@ test("a token Meta stopped accepting sends the sheet back to Connect Meta, with 
   await expect(sheet.getByRole("heading", { name: "Connect Meta" })).toBeVisible();
   await expect(sheet).toContainText("Step 1 of 2");
   await expect(sheet.locator(".err")).toHaveText(fx.errors.meta_auth!.reason);
-  await expect(sheet.getByLabel("System user token")).toBeFocused();
+  await expect(sheet.getByRole("button", { name: "Continue with Facebook" })).toBeFocused();
 });
 
 test("while the sheet is up the window's shortcuts wait", async ({ page }) => {

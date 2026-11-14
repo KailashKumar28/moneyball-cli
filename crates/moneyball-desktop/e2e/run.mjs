@@ -1,8 +1,8 @@
 // The one command: build the app with the e2e feature, give it a home and
-// a workspace of its own, start the stand-in model and the stand-in Meta,
-// and drive the real binary three times: twice on the demo workspace (the
-// second launch proves a session survives a restart), then once on a new,
-// empty home, where it onboards a client.
+// a workspace of its own, start the stand-in model, the stand-in Meta and
+// the stand-in broker, and drive the real binary three times: twice on the
+// demo workspace (the second launch proves a session survives a restart),
+// then once on a new, empty home, where it onboards a client.
 //
 //   node run.mjs                         build, then run every launch
 //   node run.mjs --no-build              run the binary already built
@@ -12,6 +12,7 @@ import { chmodSync, cpSync, existsSync, mkdirSync, mkdtempSync, readdirSync, rea
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { startMockBroker } from "./mock-broker.mjs";
 import { startMockMeta } from "./mock-meta.mjs";
 import { startMockModel } from "./mock-model.mjs";
 
@@ -94,10 +95,11 @@ async function main() {
   const mock = await startMockModel();
   // Each daily pull held 3 s: long enough to watch the first refresh run.
   const meta = await startMockMeta({ slowMs: 3000 });
+  const broker = await startMockBroker(meta.url);
   const dirs = hermetic(mock.url);
   rmSync(join(here, "shots"), { recursive: true, force: true });
   mkdirSync(join(here, "shots"));
-  const env = cleanEnv({ MB_E2E_APP: app, MB_E2E_WORKSPACE: dirs.workspace, MB_E2E_MOCK: mock.url, MB_E2E_META: meta.url });
+  const env = cleanEnv({ MB_E2E_APP: app, MB_E2E_WORKSPACE: dirs.workspace, MB_E2E_MOCK: mock.url, MB_E2E_META: meta.url, MB_E2E_BROKER: broker.url });
 
   // One launch per spec file, in this order, each on its home.
   const launches = [
@@ -116,6 +118,7 @@ async function main() {
   } finally {
     mock.close();
     meta.close();
+    broker.close();
     if (code === 0) rmSync(dirs.root, { recursive: true, force: true });
     else console.error(`\nFailed. The home and workspace are kept for a look: ${dirs.root}`);
   }

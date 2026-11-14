@@ -33,6 +33,8 @@ export function install() {
   let turnCh: Chan<TurnEvent> | null = null;
   let refreshing: RefreshState | null = flags.has("running") ? fx.refreshStateRunning : null;
   let turnBusy = false;
+  // Continue with Facebook in flight: it waits for the browser until it is answered or cancelled.
+  let connecting: ((e: AppError) => void) | null = null;
   // The shell's session: no id until its first turn creates the file.
   let current: SessionSnapshot = flags.has("markers") ? fx.sessionMarkers : fx.session;
   const replies = window.__replies ?? {};
@@ -132,7 +134,15 @@ export function install() {
       case "onboarding_state":
         return fx.onboardingState;
       case "meta_connect":
-        return fx.metaConnected;
+        // the person finishes in the browser a moment later; with `manual`, never
+        return new Promise((done, fail) => {
+          connecting = fail;
+          if (!flags.has("manual")) setTimeout(() => done(fx.metaConnected), 1500);
+        });
+      case "meta_connect_cancel":
+        connecting?.({ kind: "authorization", reason: "Cancelled, so nothing was connected.", fix: null });
+        connecting = null;
+        return;
       case "client_folder": {
         // the generated folder, renamed after what was typed
         const swap = (s: string) => s.replace(/[^/]*$/, String(a.name));

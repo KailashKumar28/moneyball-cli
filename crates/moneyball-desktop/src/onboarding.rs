@@ -1,9 +1,11 @@
 //! Onboarding a client (plans/desktop/onboarding-plan.md Steps 0 to 3):
 //! where the first-launch screen stands, Connect Meta, and Add a Client.
-//! Thin wrappers over core's `onboarding` and `meta::check_token`. The
-//! sheet is where each of these errors is fixed, so none carries a fix.
+//! Thin wrappers over core's `onboarding` and `meta::connect`. The sheet
+//! is where each of these errors is fixed, so none carries a fix.
 
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
 
 use moneyball_core::config::Product;
 use moneyball_core::onboarding::{self, clients, StepState};
@@ -12,7 +14,7 @@ use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, State};
 
 use crate::error::AppError;
-use crate::state::AppState;
+use crate::state::{lock, AppState};
 use crate::workspace::{self, Workspace};
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -50,7 +52,7 @@ pub struct NewProduct {
 
 /// A core error as the sheet shows it: core's sentence, and no terminal
 /// fix, since the sheet itself is the fix.
-fn in_sheet(e: moneyball_core::Error) -> AppError {
+pub fn in_sheet(e: moneyball_core::Error) -> AppError {
     AppError {
         fix: None,
         ..e.into()
@@ -64,16 +66,31 @@ pub fn folder(path: &Path) -> Folder {
     }
 }
 
-/// Check `token` with Meta, and store it only once Meta accepts it.
-pub fn connect(
-    token: &str,
-    check: impl FnOnce(&str) -> moneyball_core::Result<TokenCheck>,
-    store: impl FnOnce(&str) -> moneyball_core::Result<()>,
-) -> Result<TokenCheck, AppError> {
-    let token = token.trim();
-    let checked = check(token).map_err(in_sheet)?;
-    store(token).map_err(in_sheet)?;
-    Ok(checked)
+/// The cancel flag of a new Continue with Facebook. One still waiting
+/// stops: only the latest is the one on screen.
+pub fn begin_connect(state: &AppState) -> Arc<AtomicBool> {
+    let fresh = Arc::new(AtomicBool::new(false));
+    let old = std::mem::replace(&mut *lock(&state.connecting), fresh.clone());
+    old.store(true, Ordering::SeqCst);
+    fresh
+}
+
+/// Meta's dialog in the system browser, never a webview (auth-plan.md,
+/// protocol step 2). The opener runs here, in Rust: the page has no
+/// permission to open anything.
+#[cfg(not(feature = "e2e"))]
+fn open_dialog(app: &AppHandle, url: &str) -> Result<(), String> {
+    use tauri_plugin_opener::OpenerExt;
+    app.opener()
+        .open_url(url, None::<&str>)
+        .map_err(|e| e.to_string())
+}
+
+/// The e2e build has nobody at the browser: core's stand-in follows the
+/// dialog to the stand-in broker itself.
+#[cfg(feature = "e2e")]
+fn open_dialog(_: &AppHandle, url: &str) -> Result<(), String> {
+    meta::follow_dialog(url)
 }
 
 /// The picker's rows: core's choices under Meta's own ids, the accounts
@@ -96,7 +113,7 @@ pub fn account_choices(name: &str, all: Vec<onboarding::AccountChoice>) -> Vec<A
 pub fn not_connected() -> AppError {
     AppError::new(
         "meta_auth",
-        "Meta is not connected on this Mac yet: paste the system user's token first.",
+        "Meta is not connected on this Mac yet: Continue with Facebook first.",
     )
 }
 
@@ -123,7 +140,8 @@ pub fn onboarding_state() -> OnboardingState {
 
 /// Core's Meta calls block on a client of their own, which panics when it
 /// is dropped on one of the async runtime's threads (where an `async`
-/// command runs): a command that calls Meta runs them on a blocking one.
+/// command runs), and Continue with Facebook waits minutes for the
+/// person: a command that calls Meta runs them on a blocking thread.
 async fn calling_meta<T: Send + 'static>(
     work: impl FnOnce() -> Result<T, AppError> + Send + 'static,
 ) -> Result<T, AppError> {
@@ -137,9 +155,26 @@ async fn calling_meta<T: Send + 'static>(
         })?
 }
 
+/// Continue with Facebook: returns once the person has finished in the
+/// browser (up to five minutes), declined, or Cancel was pressed.
 #[tauri::command]
-pub async fn meta_connect(token: String) -> Result<TokenCheck, AppError> {
-    calling_meta(move || connect(&token, meta::check_token, secrets::store_meta_token)).await
+pub async fn meta_connect(
+    app: AppHandle,
+    state: State<'_, AppState>,
+) -> Result<TokenCheck, AppError> {
+    let cancel = begin_connect(&state);
+    let open = move |url: &str| open_dialog(&app, url);
+    calling_meta(move || meta::connect(open, &cancel).map_err(in_sheet)).await
+}
+
+#[tauri::command]
+pub fn meta_connect_cancel(state: State<'_, AppState>) {
+    cancel_connect(&state);
+}
+
+/// Stop the Continue with Facebook on screen; nothing is stored.
+pub fn cancel_connect(state: &AppState) {
+    lock(&state.connecting).store(true, Ordering::SeqCst);
 }
 
 /// Where `client_create` puts `name` unless the user picks a folder.

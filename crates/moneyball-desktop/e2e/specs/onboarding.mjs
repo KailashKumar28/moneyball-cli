@@ -1,9 +1,11 @@
 // Third launch, on a new and empty home: the app onboards a client against
-// the stand-in Meta (mock-meta.mjs), in the words of plans/desktop/IPC.md
-// "Onboarding (wave 2)": Add a Client, Connect Meta with a pasted token,
-// the client named and its suggested account ticked, Create Client, the
-// first refresh live, then the day's report on Today.
-import { readFileSync } from "node:fs";
+// the stand-in Meta (mock-meta.mjs) and the stand-in broker
+// (mock-broker.mjs), in the words of plans/desktop/IPC.md "Onboarding":
+// Add a Client, Continue with Facebook (the e2e build follows Meta's
+// dialog itself, standing in for the person), the client named and its
+// suggested account ticked, Create Client, the first refresh live, then
+// the day's report on Today.
+import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { ACCOUNTS, CLIENT, TOKEN, USER } from "../mock-meta.mjs";
 import { open, pixels, shot } from "./helpers.mjs";
@@ -51,6 +53,11 @@ function dataDay() {
 }
 
 const metaLog = async () => (await fetch(`${process.env.MB_E2E_META}/__log`)).json();
+/** How the stand-in's next dialog answers: { error } as a person who declines, { hold_ms } as one still choosing. */
+const nextDialog = (answer) => fetch(`${process.env.MB_E2E_META}/__next_dialog?${new URLSearchParams(answer)}`);
+/** The broker swapping a code for the token: the one POST Meta sees, and not the app's. */
+const isSwap = (line) => /^POST \/v[\d.]+\/oauth\/access_token$/.test(line);
+const AUTH = () => join(process.env.MB_E2E_HOME, ".moneyball/auth.json");
 
 describe("Moneyball for Mac, a new Mac onboarding its first client", () => {
   it("first launch offers to add the first client", async () => {
@@ -63,29 +70,50 @@ describe("Moneyball for Mac, a new Mac onboarding its first client", () => {
     await shot("20-onboarding-first-launch");
   });
 
-  it("Connect Meta refuses a dead token and accepts the pasted one", async () => {
+  it("Continue with Facebook: Cancel and a decline store nothing, then it connects", async () => {
     await $("button=Add a Client").click();
     await sees("Step 1 of 2");
-    const token = field("System user token");
-    await token.waitForDisplayed();
-    // Masked: a token is never shown.
-    await expect(token).toHaveAttribute("type", "password");
+    // A function: the button is a new element each time the page comes back to it.
+    const facebook = () => $("button=Continue with Facebook");
+    await facebook().waitForDisplayed();
+    // Nothing to paste: no field on the page at all.
+    expect(await $$("dialog input")).toHaveLength(0);
     await shot("21-onboarding-connect");
 
-    // A token Meta no longer knows: core's sentence, and nothing stored.
-    await token.setValue("EAAThisTokenWasRevokedLongAgo0000000000000000");
-    await $("button=Connect").click();
-    await sees("code 190");
-    await expect($("button=Next")).not.toBeDisplayed();
-    await shot("22-onboarding-connect-refused");
+    // Still choosing on Facebook: the app waits, and Cancel stops it. The
+    // dialog's late answer then finds no one listening, so nothing lands.
+    await nextDialog({ hold_ms: 2000 });
+    await facebook().click();
+    await sees("Finish in your browser");
+    await shot("22-onboarding-connect-waiting");
+    await $("button=Cancel").click();
+    await facebook().waitForDisplayed();
+    await expect($("dialog")).toBeDisplayed();
+    await browser.waitUntil(async () => (await metaLog()).some(isSwap), { timeoutMsg: "the held dialog never came back" });
+    await browser.pause(500); // the broker's page posting to the closed listener
+    expect(existsSync(AUTH())).toBe(false);
 
-    await token.setValue(TOKEN);
-    await $("button=Connect").click();
+    // The person declines on Facebook: the broker's words, nothing stored.
+    await nextDialog({ error: "access_denied" });
+    await facebook().click();
+    await sees("Facebook sign-in was cancelled, so nothing was connected.");
+    await expect($("button=Next")).not.toBeDisplayed();
+    expect(existsSync(AUTH())).toBe(false);
+    await shot("23-onboarding-connect-declined");
+
+    await facebook().click();
     // Who the token is (Meta's /me) and how long it lasts (debug_token).
     await sees(USER.name);
     await sees("Never expires");
     await expect($("button=Next")).toBeDisplayed();
-    await shot("23-onboarding-connected");
+    // Stored where the terminal reads it too; the page never had it.
+    expect(JSON.parse(readFileSync(AUTH(), "utf8")).meta_access_token).toBe(TOKEN);
+    expect(await shown()).not.toContain(TOKEN);
+    // Three trips through Meta's dialog; two codes swapped (the cancelled one's and this one).
+    const log = await metaLog();
+    expect(log.filter((l) => l.endsWith("/dialog/oauth"))).toHaveLength(3);
+    expect(log.filter(isSwap)).toHaveLength(2);
+    await shot("24-onboarding-connected");
   });
 
   it("Add a Client ticks the account whose name holds the client's", async () => {
@@ -102,7 +130,7 @@ describe("Moneyball for Mac, a new Mac onboarding its first client", () => {
     for (const a of OTHERS) await expect(field(a.name, true)).not.toBeSelected();
     await expect($("button=Back")).toBeDisplayed();
     await expect($("button=Cancel")).toBeDisplayed();
-    await shot("24-onboarding-add-client");
+    await shot("25-onboarding-add-client");
   });
 
   it("Create Client starts the first refresh, live, and Meta lands with CRM not connected", async () => {
@@ -112,7 +140,7 @@ describe("Moneyball for Mac, a new Mac onboarding its first client", () => {
     const rows = steps.$$("tbody tr");
     await expect(rows).toBeElementsArrayOfSize(4);
     await expect(rows[0]).not.toHaveText(expect.stringContaining("done"));
-    await shot("25-onboarding-refresh-live");
+    await shot("26-onboarding-refresh-live");
 
     await browser.waitUntil(async () => (await rows[3].getText()).includes("no CRM"), { timeout: 30_000, timeoutMsg: "the first refresh never wrote its report" });
     await expect(rows[0]).toHaveText(expect.stringContaining("done"));
@@ -120,14 +148,14 @@ describe("Moneyball for Mac, a new Mac onboarding its first client", () => {
     await expect(rows[1]).toHaveText(expect.stringContaining("done"));
     await expect(rows[2]).toHaveText(expect.stringContaining("skipped"));
     await expect(rows[2]).toHaveText(expect.stringMatching(/not connected|no CRM connected/));
-    await shot("26-onboarding-refresh-done");
+    await shot("27-onboarding-refresh-done");
 
     // The client on disk: its folder, the one ticked account as its product.
     const config = JSON.parse(readFileSync(join(process.env.MB_E2E_HOME, "Moneyball", CLIENT, ".moneyball/config.json"), "utf8"));
     expect(config.products.map((p) => p.ad_account)).toEqual([SUGGESTED.id.replace("act_", "")]);
-    // Read only, and only the ticked account was pulled.
+    // Read only (the broker's code swaps aside), and only the ticked account was pulled.
     const log = await metaLog();
-    expect(log.filter((l) => !l.startsWith("GET "))).toEqual([]);
+    expect(log.filter((l) => !l.startsWith("GET ") && !isSwap(l))).toEqual([]);
     for (const a of OTHERS) expect(log).not.toContain(`GET /${a.id}/insights`);
   });
 
@@ -142,6 +170,6 @@ describe("Moneyball for Mac, a new Mac onboarding its first client", () => {
       timeoutMsg: "Today's report rendered without its styles",
     });
     await expect(today.$("button=Open in Browser")).toBeEnabled();
-    await shot("27-onboarding-today-report");
+    await shot("28-onboarding-today-report");
   });
 });

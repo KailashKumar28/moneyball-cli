@@ -21,6 +21,7 @@ pub mod ledger;
 pub mod llm;
 pub mod logo;
 pub mod meta;
+pub mod oauth;
 pub mod onboarding;
 pub mod product;
 pub mod provider;

@@ -306,8 +306,10 @@ dialog.sheet::backdrop{background:rgba(23,20,15,.3)}
 .sheet footer{flex:none;display:flex;justify-content:flex-end;gap:var(--s2);padding:var(--s3) var(--s5);border-top:1px solid var(--rule)}
 .sheet footer .back{margin-right:auto}
 .lead{margin:0;color:var(--soft)}
-.guide{margin:var(--s3) 0 0;padding-left:18px;color:var(--soft)}
-.guide li+li{margin-top:2px}
+.btn.connect{margin-top:var(--s4)}
+.sheet .waiting{margin-top:var(--s4)}
+.waiting .inl{margin:0 0 2px}
+.waiting b{font-weight:600}
 .field{display:block;font-size:12px;color:var(--soft);margin:var(--s4) 0 6px}
 .input{height:26px;padding:0 10px;border:1px solid var(--rule);border-radius:var(--r-ctl);background:var(--card);color:var(--ink);font:13px var(--sans);min-width:0}
 .input:disabled{color:var(--faint);background:transparent}

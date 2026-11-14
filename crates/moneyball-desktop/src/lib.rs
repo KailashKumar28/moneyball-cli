@@ -68,6 +68,7 @@ pub fn run() {
             clipboard::copy_text,
             onboarding::onboarding_state,
             onboarding::meta_connect,
+            onboarding::meta_connect_cancel,
             onboarding::client_folder,
             onboarding::client_folder_pick,
             onboarding::client_accounts,

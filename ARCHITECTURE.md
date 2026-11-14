@@ -35,6 +35,11 @@ against a loopback server), `fetch/` (explicit snapshot pull:
 (model calls; `llm/sse.rs` and `llm/wire.rs` are its pure JSON halves,
 `llm/tests.rs` builds requests), `crm/fetch.rs` (explicit CRM pull driven by the
 declarative crm.toml spec). Nothing ever writes to Meta or the CRM.
+Connecting an account by authorization adds no client: `oauth.rs` only
+listens on 127.0.0.1 for the token a broker's page POSTs back, and
+`meta/connect.rs` builds Meta's dialog URL for the system browser
+(plans/desktop/auth-plan.md); `meta/follow.rs`, compiled only with core's
+`e2e` feature, is the e2e build's stand-in for the person at the browser.
 Enforced by `tests/arch_contract.rs` (this is the canonical statement;
 AGENTS.md's intro summarizes it). Fetch callers resolve the Meta token
 at the edge and pass it in - core never reads ambient secrets for it,

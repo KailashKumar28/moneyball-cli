@@ -1,8 +1,11 @@
 // WebdriverIO against the real app. run.mjs sets the MB_E2E_* variables
 // and starts this once per launch; the service spawns the binary and
 // talks to the WebDriver server the e2e feature compiles into it.
-const { MB_E2E_APP, MB_E2E_HOME, MB_E2E_META } = process.env;
-if (!MB_E2E_APP || !MB_E2E_HOME || !MB_E2E_META) throw new Error("Start the tests with `node run.mjs`: it prepares the app's home and workspace.");
+import { APP_ID, CONFIG_ID } from "./mock-meta.mjs";
+
+const { MB_E2E_APP, MB_E2E_HOME, MB_E2E_META, MB_E2E_BROKER } = process.env;
+if (!MB_E2E_APP || !MB_E2E_HOME || !MB_E2E_META || !MB_E2E_BROKER)
+  throw new Error("Start the tests with `node run.mjs`: it prepares the app's home and workspace.");
 
 export const config = {
   runner: "local",
@@ -16,9 +19,19 @@ export const config = {
         driverProvider: "embedded",
         // HOME is what moneyball-core reads; CFFIXED_USER_HOME moves the
         // webview's own storage (~/Library) into the temp home as well.
-        // MB_E2E_META_BASE points every Graph call at the stand-in Meta
-        // (read only by the e2e build: meta::graph_base).
-        env: { HOME: MB_E2E_HOME, CFFIXED_USER_HOME: MB_E2E_HOME, MB_E2E_META_BASE: MB_E2E_META },
+        // MB_E2E_META_BASE points every Graph call at the stand-in Meta,
+        // and the rest Continue with Facebook at its dialog, the stand-in
+        // broker and the stand-in's app (read only by the e2e build:
+        // meta::graph_base, meta::connect).
+        env: {
+          HOME: MB_E2E_HOME,
+          CFFIXED_USER_HOME: MB_E2E_HOME,
+          MB_E2E_META_BASE: MB_E2E_META,
+          MB_E2E_META_DIALOG: MB_E2E_META,
+          MB_E2E_BROKER,
+          MB_E2E_META_APP_ID: APP_ID,
+          MB_E2E_META_CONFIG_ID: CONFIG_ID,
+        },
         captureBackendLogs: true,
         captureFrontendLogs: true,
       },

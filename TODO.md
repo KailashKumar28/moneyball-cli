@@ -38,6 +38,11 @@ bottom after a release-sized batch.)
         Wave 2 done 2026-11-14: `meta::check_token`, the six onboarding
         commands, the first-launch screen and the Add a Client sheet
         (Connect Meta, then the client), the first refresh on screen.
+        Continue with Facebook replaced the pasted token 2026-11-14
+        (plans/desktop/auth-plan.md): core `oauth` (the loopback
+        listener) and `meta::connect`, `meta_connect_cancel`, e2e against
+        a stand-in dialog and broker. Waits on the owner's Meta app:
+        `meta::APP_ID`, `CONFIG_ID` and `BROKER` are placeholders.
   - [ ] In-step refresh progress (core reports a step beginning and
         ending only).
   - [ ] Rupee sign in the app (core words money as "Rs."; the client

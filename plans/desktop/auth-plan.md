@@ -48,10 +48,12 @@ Onboarding needs only Meta now. The others land with their data sources.
    answers with a page that POSTs `token` and `state` (or `error`) to
    `http://127.0.0.1:<port>/meta/done` by itself, so the token never sits
    in a URL or the browser history. It keeps nothing.
-5. The app accepts only a POST whose `state` matches, stores the token
-   (`secrets::store_meta_token`), reads it back with `meta::check_token`
-   (name, accounts, scopes, expiry), answers the browser with "Connected.
-   You can close this tab.", and closes the listener.
+5. The app accepts only a urlencoded POST whose `state` matches (anything
+   else is refused and the wait goes on), answers the browser with
+   "Connected. You can close this tab." (or the error), closes the
+   listener, then stores the token (`secrets::store_meta_token`) and
+   reads it back with `meta::check_token` (name, accounts, scopes,
+   expiry).
 6. Cancel closes the listener; it also closes itself after 5 minutes. An
    `error` (the user declined) is said in words and nothing is stored.
 

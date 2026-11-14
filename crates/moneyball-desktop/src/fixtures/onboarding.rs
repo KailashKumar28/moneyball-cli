@@ -6,21 +6,23 @@ use std::path::Path;
 
 use moneyball_core::config::{Product, WorkspaceConfig};
 use moneyball_core::onboarding::{self, StepState};
-use moneyball_core::{config, meta, AdAccount, AppConfig, TokenCheck};
+use moneyball_core::{config, meta, AdAccount, AppConfig, Error, TokenCheck};
 use serde_json::{json, Value};
 
 use super::Pins;
-use crate::onboarding::{account_choices, connect, create, folder, not_connected, OnboardingState};
+use crate::onboarding::{
+    account_choices, create, folder, in_sheet, not_connected, OnboardingState,
+};
 
 /// Where the fixtures say the home folder is.
 const SHOWN_HOME: &str = "/Users/demo";
 
-/// A token Meta accepted, as `meta_connect` returns it: the clean one,
-/// and one that expires and can write.
+/// A token Meta accepted, as `meta_connect` returns it (core's
+/// `check_token` reads `debug_token` so): with what Moneyball asks for,
+/// and one that expires and can also write.
 fn connected(scopes: Value, expires_at: i64) -> TokenCheck {
     let debug = json!({"is_valid": true, "expires_at": expires_at, "scopes": scopes});
-    let check = |_: &str| TokenCheck::read("Acme Homes System User", 5, &debug);
-    connect("EAAdemo", check, |_| Ok(())).unwrap()
+    TokenCheck::read("Acme Homes System User", 5, &debug).unwrap()
 }
 
 /// The accounts the demo's token sees, beside a known client (Fincity)
@@ -61,7 +63,7 @@ pub fn shapes(pins: &mut Pins, cfg: &AppConfig) {
         clients: 0,
     };
     pins.add("onboarding_state", cfg, first);
-    pins.add("meta_connected", cfg, connected(json!(["ads_read"]), 0));
+    pins.add("meta_connected", cfg, connected(json!(meta::SCOPES), 0));
     // Noon UTC on Mon 11 Jan 2027: the same day in every zone the demo runs in.
     let writes = json!(["ads_read", "ads_management", "business_management"]);
     let warned = connected(writes, 1799668800);
@@ -74,12 +76,15 @@ pub fn shapes(pins: &mut Pins, cfg: &AppConfig) {
 
 /// The refusals the sheet shows, keyed as errors.json keys them.
 pub fn errors(state: &crate::state::AppState) -> [(&'static str, Value); 3] {
-    let shape = connect("1234567890", meta::check_token, |_| Ok(())).unwrap_err();
+    // Declined on Facebook: the broker's words (broker/src/index.js),
+    // passed on as they come.
+    let declined = "Facebook sign-in was cancelled, so nothing was connected.";
+    let declined = in_sheet(Error::Authorization(declined.into()));
     // Refused before anything is written: no account was ticked.
     let make = || onboarding::create_client(None, "Acme Homes", vec![]);
     let none_ticked = create(state, make, |_: &Path| Ok(())).unwrap_err();
     [
-        ("meta_token_shape", json!(shape)),
+        ("meta_declined", json!(declined)),
         ("meta_auth", json!(not_connected())),
         ("client_create", json!(none_ticked)),
     ]

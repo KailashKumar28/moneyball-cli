@@ -640,10 +640,11 @@ async function openSheet(page: Page) {
   await page.getByRole("button", { name: "Add a Client" }).click();
   await expect(sheet(page)).toBeVisible();
 }
+const facebook = (page: Page) => sheet(page).getByRole("button", { name: "Continue with Facebook" });
+/** Continue with Facebook; with no reply set, the shell keeps waiting for the browser. */
 async function connect(page: Page) {
   await openSheet(page);
-  await sheet(page).getByLabel("System user token").fill("EAAdemo");
-  await sheet(page).getByRole("button", { name: "Connect" }).click();
+  await facebook(page).click();
 }
 /** The Connect Meta lines: who, how many accounts, the expiry, and core's warnings. */
 async function expectConnected(page: Page, m: typeof fx.metaConnected) {
@@ -651,15 +652,26 @@ async function expectConnected(page: Page, m: typeof fx.metaConnected) {
   for (const line of [m.name, String(m.accounts), m.expiry, ...m.warnings]) await expect(got).toContainText(line);
   await expect(got.getByText("Read-only")).toHaveCount(m.read_only ? 1 : 0);
   await expect(sheet(page).getByRole("button", { name: "Next" })).toBeEnabled();
+  await expect(facebook(page)).toHaveCount(0);
 }
 
 state("connect-meta", "noworkspace", async (page) => {
   await openSheet(page);
   await expect(sheet(page).getByRole("heading", { name: "Connect Meta" })).toBeVisible();
   await expect(sheet(page)).toContainText("Step 1 of 2");
-  await expect(sheet(page).getByLabel("System user token")).toHaveAttribute("type", "password");
-  await expect(sheet(page).getByLabel("System user token")).toBeFocused();
-  await expect(sheet(page).getByRole("button", { name: "Next" })).toHaveCount(0); // only once Meta accepts a token
+  // What Moneyball will be allowed to do, before the click.
+  await expect(sheet(page).locator(".lead")).toContainText("read the ads, and the leads");
+  await expect(facebook(page)).toBeFocused();
+  await expect(sheet(page).getByRole("textbox")).toHaveCount(0); // nothing to paste
+  await expect(sheet(page).getByRole("button", { name: "Next" })).toHaveCount(0); // only once connected
+});
+
+state("connect-meta-waiting", "noworkspace", async (page) => {
+  await connect(page);
+  await expect(sheet(page).getByRole("status")).toContainText("Finish in your browser");
+  await expect(facebook(page)).toHaveCount(0);
+  await expect(sheet(page).getByRole("button", { name: "Cancel" })).toBeVisible();
+  await expect(sheet(page).getByRole("button", { name: "Next" })).toHaveCount(0);
 });
 
 state(
@@ -667,23 +679,23 @@ state(
   "noworkspace",
   async (page) => {
     await connect(page);
-    const field = sheet(page).getByLabel("System user token");
-    const err = sheet(page).locator(".err");
-    await expect(err).toHaveText(fx.errors.meta_token_shape!.reason);
-    await expect(field).toHaveValue("EAAdemo"); // what was typed stays
-    await expect(field).toHaveAttribute("aria-invalid", "true");
-    await field.pressSequentially("x");
-    await expect(err).toHaveCount(0); // the next edit clears the error
-    await sheet(page).getByRole("button", { name: "Connect" }).click();
-    await expect(err).toBeVisible();
+    // Declined on Facebook: the words, and the button to try again.
+    await expect(sheet(page).locator(".err")).toHaveText(fx.errors.meta_declined!.reason);
+    await expect(facebook(page)).toBeVisible();
+    await expect(sheet(page).getByRole("button", { name: "Next" })).toHaveCount(0);
   },
-  { meta_connect: { __fail: fx.errors.meta_token_shape } },
+  { meta_connect: { __fail: fx.errors.meta_declined } },
 );
 
-state("connect-meta-done", "noworkspace", async (page) => {
-  await connect(page);
-  await expectConnected(page, fx.metaConnected);
-});
+state(
+  "connect-meta-done",
+  "noworkspace",
+  async (page) => {
+    await connect(page);
+    await expectConnected(page, fx.metaConnected);
+  },
+  { meta_connect: fx.metaConnected },
+);
 
 state(
   "connect-meta-warnings",
@@ -709,16 +721,21 @@ async function expectAccounts(page: Page) {
   }
 }
 
-state("add-client-step", "noworkspace", async (page) => {
-  await connect(page);
-  await sheet(page).getByRole("button", { name: "Next" }).click();
-  await expect(sheet(page).getByRole("heading", { name: "Add a Client" })).toBeVisible();
-  await expect(sheet(page)).toContainText("Step 2 of 2");
-  await sheet(page).getByLabel("Client name").fill("Acme Homes");
-  await expect(sheet(page).locator(".where")).toContainText("~/Moneyball/Acme Homes");
-  await expectAccounts(page);
-  for (const name of ["Back", "Cancel", "Create Client", "Change..."]) await expect(sheet(page).getByRole("button", { name })).toBeVisible();
-});
+state(
+  "add-client-step",
+  "noworkspace",
+  async (page) => {
+    await connect(page);
+    await sheet(page).getByRole("button", { name: "Next" }).click();
+    await expect(sheet(page).getByRole("heading", { name: "Add a Client" })).toBeVisible();
+    await expect(sheet(page)).toContainText("Step 2 of 2");
+    await sheet(page).getByLabel("Client name").fill("Acme Homes");
+    await expect(sheet(page).locator(".where")).toContainText("~/Moneyball/Acme Homes");
+    await expectAccounts(page);
+    for (const name of ["Back", "Cancel", "Create Client", "Change..."]) await expect(sheet(page).getByRole("button", { name })).toBeVisible();
+  },
+  { meta_connect: fx.metaConnected },
+);
 
 state(
   "add-client",

@@ -2,6 +2,7 @@
 //! workspace, the advisor session and the refresh in flight. The webview
 //! holds none of it, so a reload re-reads a snapshot of each.
 
+use std::sync::atomic::AtomicBool;
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 
 use moneyball_core::agent::Session;
@@ -43,6 +44,8 @@ pub struct AppState {
     session: Mutex<Option<SharedSession>>,
     /// Shared with the refresh forwarder, which keeps it current.
     pub refresh: Arc<Mutex<RefreshRun>>,
+    /// The cancel flag of the latest Continue with Facebook.
+    pub connecting: Mutex<Arc<AtomicBool>>,
 }
 
 impl AppState {

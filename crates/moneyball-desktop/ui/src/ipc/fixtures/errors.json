@@ -12,12 +12,12 @@
   "meta_auth": {
     "fix": null,
     "kind": "meta_auth",
-    "reason": "Meta is not connected on this Mac yet: paste the system user's token first."
+    "reason": "Meta is not connected on this Mac yet: Continue with Facebook first."
   },
-  "meta_token_shape": {
+  "meta_declined": {
     "fix": null,
-    "kind": "meta_token_shape",
-    "reason": "That looks like an app id (only digits), not a token. Paste the token generated for the system user: it is much longer and starts with EAA."
+    "kind": "authorization",
+    "reason": "Facebook sign-in was cancelled, so nothing was connected."
   },
   "no_data": {
     "fix": {

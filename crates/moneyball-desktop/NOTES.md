@@ -48,7 +48,7 @@ dependency of `ui/` (`pnpm add -D @tauri-apps/cli@^2`).
 | `run_view.rs` | `StepView` / `RunView`, shared by Today and Refresh |
 | `refresh.rs`, `refresh_end.rs` | refresh commands, forwarder, the finished event |
 | `turn.rs` | turn commands, forwarder with delta coalescing |
-| `onboarding.rs` | first launch, Connect Meta, Add a Client: the six onboarding commands over core's `onboarding` and `meta::check_token` |
+| `onboarding.rs` | first launch, Connect Meta, Add a Client: the seven onboarding commands over core's `onboarding` and `meta::connect` (Continue with Facebook) |
 | `fixtures/` (tests only) | the pinned IPC fixtures and the no-slash-command check |
 
 Every command is a thin `#[tauri::command]` over a plain function that
@@ -89,13 +89,21 @@ forwarder thread that drains core's `Receiver` and returns at once.
   fn`s that run core on `spawn_blocking`: core's blocking HTTP client
   panics when it is dropped on an async runtime thread, which is where an
   `(async)` command runs. Found by the real-app run (the call never
-  answered); the mocked UI tests cannot see it.
+  answered); the mocked UI tests cannot see it. `meta_connect` also waits
+  there for the person in the browser, up to five minutes;
+  `meta_connect_cancel` sets its flag (`AppState.connecting`), and a new
+  `meta_connect` cancels the one before.
 
 Safety.
 
 - No command returns or logs a token or key. The Meta token is read in
   `refresh::start` and `client_accounts` and handed to core only;
-  `meta_connect` stores it (trimmed) only once Meta accepts it.
+  `meta_connect` never sees it: core's `meta::connect` takes it from the
+  broker's POST to its loopback listener and stores it.
+- Meta's dialog opens in the system browser through the opener, from
+  Rust (never a webview). The e2e build swaps the opener for core's
+  `meta::follow_dialog` (core's `e2e` feature), which follows the stand-in
+  dialog itself.
 - `report_open_in_browser` canonicalizes the path and the workspace's
   `.moneyball/reports/`, and opens only an `.html` file under it.
 - The opener and the folder dialog are called from Rust. The capability
@@ -147,8 +155,9 @@ network. The clock is held at 2026-10-09: the health reading's `today`,
 `modified_at`, the report's generated-at stamp and the temp path are
 pinned. `errors.json` has one extra key, `no_workspace`. The onboarding
 shapes (`fixtures/onboarding.rs`) need Meta: its answers are built by hand
-and go through `connect`, `TokenCheck::read`, `onboarding::choices` and
-`account_choices`, so the words are core's; `client_folder` shows the
+and go through `TokenCheck::read`, `onboarding::choices` and
+`account_choices`, so the words are core's (`meta_declined` is the
+broker's sentence, passed on as it comes); `client_folder` shows the
 home as `/Users/demo`.
 
 `ui/src/ipc/fixtures.ts` checks every file against `types.ts` under `tsc`.
