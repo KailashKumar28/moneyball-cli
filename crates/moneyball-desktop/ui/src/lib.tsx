@@ -49,6 +49,9 @@ export function useNow(active: boolean): number {
   return now;
 }
 
+/** A sheet is up: the window's own shortcuts wait until it closes. */
+export const sheetOpen = () => document.querySelector("dialog[open]") !== null;
+
 // ---------- formatting (layout only: never arithmetic on figures) ----------
 
 const int = new Intl.NumberFormat("en-US", { maximumFractionDigits: 0 });

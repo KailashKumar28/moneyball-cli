@@ -13,7 +13,7 @@ import {
   type TurnEvent,
   type ViewItem,
 } from "../ipc";
-import { ActionView, ErrorNote, Glyph, Loading, useAsync, useNow, when, type OnAction } from "../lib";
+import { ActionView, ErrorNote, Glyph, Loading, sheetOpen, useAsync, useNow, when, type OnAction } from "../lib";
 
 /** A line the app adds to the log itself: a failure, a dead worker, a save that missed. */
 type Note = { type: "note"; text: string };
@@ -183,7 +183,7 @@ export function Advisor({ hidden, newSession, onAction }: Props) {
   useEffect(() => {
     if (hidden || !active) return;
     const onKey = (e: globalThis.KeyboardEvent) => {
-      if (e.key === "Escape") stop();
+      if (e.key === "Escape" && !sheetOpen()) stop();
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);

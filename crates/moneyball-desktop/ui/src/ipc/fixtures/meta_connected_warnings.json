@@ -1,0 +1,10 @@
+{
+  "name": "Acme Homes System User",
+  "accounts": 5,
+  "expiry": "Expires Mon 11 Jan",
+  "read_only": false,
+  "warnings": [
+    "This token expires on Mon 11 Jan, and refreshes stop then. Generate one with the expiry set to Never.",
+    "This token can change ads or settings (ads_management, business_management). Moneyball only reads: a token with ads_read alone is enough."
+  ]
+}

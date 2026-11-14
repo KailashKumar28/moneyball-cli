@@ -7,6 +7,7 @@
 //!     MB_UPDATE_FIXTURES=1 cargo test -p moneyball-desktop fixtures
 
 pub(crate) mod demo;
+mod onboarding;
 mod streams;
 mod wording;
 
@@ -33,10 +34,15 @@ impl Pins {
     /// Pin `value` under `name`, with the temp workspace's path replaced
     /// by one that does not change from run to run.
     pub fn add(&mut self, name: &'static str, cfg: &AppConfig, value: impl Serialize) {
+        self.add_at(name, &cfg.data_root, SHOWN_ROOT, value);
+    }
+
+    /// Pin `value` with the path `real` shown as `shown`.
+    pub fn add_at(&mut self, name: &'static str, real: &Path, shown: &str, value: impl Serialize) {
         let json = serde_json::to_string_pretty(&value).unwrap();
-        let root = cfg.data_root.display().to_string();
+        let real = real.display().to_string();
         self.0
-            .push((name, format!("{}\n", json.replace(&root, SHOWN_ROOT))));
+            .push((name, format!("{}\n", json.replace(&real, shown))));
     }
 }
 
@@ -99,6 +105,7 @@ fn screens(pins: &mut Pins) {
 
     streams::refresh(pins, &cfg, &nocrm);
     streams::sessions(pins, &cfg);
+    onboarding::shapes(pins, &cfg);
     pins.add("errors", &cfg, errors(&cfg));
     for cfg in [cfg, nocrm] {
         demo::remove(&cfg);
@@ -120,7 +127,7 @@ fn errors(cfg: &AppConfig) -> Value {
     let unknown = TurnRefused::UnknownProvider {
         provider: "acme".into(),
     };
-    json!({
+    let mut all = json!({
         "busy": crate::turn::refused(TurnRefused::Busy),
         "no_model": crate::turn::refused(TurnRefused::NoModel),
         "unknown_provider": crate::turn::refused(unknown),
@@ -131,7 +138,11 @@ fn errors(cfg: &AppConfig) -> Value {
         "no_data": AppError::no_data(),
         "refresh_busy": report::refresh_busy(),
         "snapshot": fault.expect("a snapshot that will not parse is a fault"),
-    })
+    });
+    for (key, error) in onboarding::errors(&state) {
+        all[key] = error;
+    }
+    all
 }
 
 #[test]

@@ -35,6 +35,9 @@ bottom after a release-sized batch.)
         `onboarding` (steps, create_client, accounts, checklist, client
         list), `config::update`, the CRM preset as steps, optional goals,
         `meta::graph_base` behind core's `e2e` feature; TUI unchanged.
+        Wave 2 done 2026-11-14: `meta::check_token`, the six onboarding
+        commands, the first-launch screen and the Add a Client sheet
+        (Connect Meta, then the client), the first refresh on screen.
   - [ ] In-step refresh progress (core reports a step beginning and
         ending only).
   - [ ] Rupee sign in the app (core words money as "Rs."; the client

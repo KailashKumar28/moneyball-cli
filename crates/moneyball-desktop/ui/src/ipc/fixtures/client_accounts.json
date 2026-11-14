@@ -1,0 +1,37 @@
+[
+  {
+    "id": "act_101",
+    "name": "Acme Homes - Namma Mane",
+    "status": "active",
+    "suggested": true,
+    "used_by": null
+  },
+  {
+    "id": "act_202",
+    "name": "Acme Homes - Cityville",
+    "status": "active",
+    "suggested": true,
+    "used_by": null
+  },
+  {
+    "id": "act_303",
+    "name": "Fincity Plots",
+    "status": "active",
+    "suggested": false,
+    "used_by": "used by Fincity"
+  },
+  {
+    "id": "act_404",
+    "name": "Acme Homes Archive",
+    "status": "disabled",
+    "suggested": true,
+    "used_by": null
+  },
+  {
+    "id": "act_505",
+    "name": "Lakeside Villas",
+    "status": "unsettled",
+    "suggested": false,
+    "used_by": null
+  }
+]

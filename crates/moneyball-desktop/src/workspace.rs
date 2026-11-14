@@ -1,9 +1,10 @@
 //! The workspace the app has open: the one remembered from last time,
-//! or the folder the user picks. No setup here (v1): a folder without a
-//! workspace config is an error that names the terminal.
+//! or the folder the user picks. A folder without a workspace config is
+//! an error; a new client is made in `onboarding`.
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
+use moneyball_core::onboarding::clients;
 use moneyball_core::{text, workspace, AppConfig};
 use serde::Serialize;
 use tauri::{AppHandle, State};
@@ -65,6 +66,35 @@ pub fn pick(
     Ok(shown)
 }
 
+/// Remember `dir` for the next launch and keep it on the client list;
+/// both are tried, whichever fails.
+pub fn keep(dir: &Path) -> moneyball_core::Result<()> {
+    workspace::remember(dir).and(clients::add(dir))
+}
+
+/// Refused while a refresh runs: its events go to the screen of the
+/// workspace that started it.
+pub fn not_while_refreshing(state: &AppState, doing: &str) -> Result<(), AppError> {
+    match state.refresh_running() {
+        true => Err(AppError::busy(&format!(
+            "A refresh is running. Wait for it to finish, or cancel it, before {}.",
+            doing
+        ))),
+        false => Ok(()),
+    }
+}
+
+/// The native folder dialog; None when cancelled.
+pub fn pick_folder(app: &AppHandle) -> Result<Option<PathBuf>, AppError> {
+    let Some(picked) = app.dialog().file().blocking_pick_folder() else {
+        return Ok(None);
+    };
+    picked
+        .into_path()
+        .map(Some)
+        .map_err(|e| AppError::new("io", format!("That folder cannot be opened: {}", e)))
+}
+
 /// The open workspace as it reads on disk now (its name and products
 /// may have changed in the terminal); before one is open, the
 /// remembered one, opened. None on a first run.
@@ -85,19 +115,11 @@ pub fn workspace_pick(
     app: AppHandle,
     state: State<'_, AppState>,
 ) -> Result<Option<Workspace>, AppError> {
-    // Its events go to the screen of the workspace that started it.
-    if state.refresh_running() {
-        return Err(AppError::busy(
-            "A refresh is running. Wait for it to finish, or cancel it, before opening another workspace.",
-        ));
-    }
-    let Some(picked) = app.dialog().file().blocking_pick_folder() else {
+    not_while_refreshing(&state, "opening another workspace")?;
+    let Some(dir) = pick_folder(&app)? else {
         return Ok(None);
     };
-    let dir = picked
-        .into_path()
-        .map_err(|e| AppError::new("io", format!("That folder cannot be opened: {}", e)))?;
-    pick(&state, &dir, workspace::remember).map(Some)
+    pick(&state, &dir, keep).map(Some)
 }
 
 #[cfg(test)]

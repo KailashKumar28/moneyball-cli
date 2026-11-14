@@ -238,3 +238,14 @@ export type Ev =
   | { type: "failed"; error: string };
 
 export type TurnEvent = Ev | { type: "died"; message: string } | { type: "save_failed"; message: string };
+
+// ---- onboarding (IPC.md "Onboarding (wave 2)") ----
+/** From disk only: is a Meta token stored, and how many known clients still exist. */
+export type OnboardingState = { meta: "hidden" | "in_progress" | "complete"; clients: number };
+/** A token Meta accepted (core meta::TokenCheck). Never the token itself. */
+export type MetaConnected = { name: string; accounts: number; expiry: string; read_only: boolean; warnings: string[] };
+/** Where a client's folder is; `display` is its "~" form. */
+export type Folder = { path: string; display: string };
+/** An ad account the stored token sees. `used_by` is core's words ("used by Fincity"); `suggested` arrives ticked. */
+export type AccountChoice = { id: string; name: string; status: string; used_by: string | null; suggested: boolean };
+export type NewProduct = { account_id: string; name: string };

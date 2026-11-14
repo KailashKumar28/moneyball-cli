@@ -4,6 +4,21 @@
     "kind": "busy",
     "reason": "The advisor is still answering."
   },
+  "client_create": {
+    "fix": null,
+    "kind": "config",
+    "reason": "Pick at least one ad account for Acme Homes."
+  },
+  "meta_auth": {
+    "fix": null,
+    "kind": "meta_auth",
+    "reason": "Meta is not connected on this Mac yet: paste the system user's token first."
+  },
+  "meta_token_shape": {
+    "fix": null,
+    "kind": "meta_token_shape",
+    "reason": "That looks like an app id (only digits), not a token. Paste the token generated for the system user: it is much longer and starts with EAA."
+  },
   "no_data": {
     "fix": {
       "does": "pulls Meta, then CRM, then writes yesterday's report (about 2 minutes)",
@@ -29,13 +44,9 @@
     "reason": "No workspace is open."
   },
   "no_workspace_config": {
-    "fix": {
-      "command": "moneyball",
-      "does": "then open its setup - it sets the workspace up; run it in that folder",
-      "kind": "terminal"
-    },
+    "fix": null,
     "kind": "no_workspace_config",
-    "reason": "This folder is not a Moneyball workspace: it has no .moneyball/config.json."
+    "reason": "This folder is not a Moneyball client: it has no .moneyball/config.json. Add a Client sets one up."
   },
   "not_a_command": {
     "fix": null,

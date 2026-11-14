@@ -32,6 +32,12 @@ const RULES: Rule[] = [
   { key: "name", what: "StepView.name", when: (o) => "word" in o, allowed: members<T.StepView["name"]>({ meta: true, assets: true, crm: true, report: true }) },
   { key: "status", what: "RunStep.status", when: (o) => "counts" in o, allowed: members<T.RunStep["status"]>({ done: true, partial: true, failed: true, skipped: true }) },
   { key: "status", what: "ToolStatus", when: (o) => "call_id" in o, allowed: members<T.ToolStatus>({ pending: true, ok: true, failed: true }) },
+  {
+    key: "meta",
+    what: "OnboardingState.meta",
+    when: (o) => "clients" in o,
+    allowed: members<T.OnboardingState["meta"]>({ hidden: true, in_progress: true, complete: true }),
+  },
   { key: "trigger", what: "trigger", allowed: members<T.RunView["trigger"]>({ manual: true, schedule: true }) },
   { key: "source", what: "DayNumber.source", allowed: members<NonNullable<T.DayNumber["source"]>>({ meta: true, crm: true }) },
   { key: "outcome", what: "RunRecord.outcome", when: (o) => "schema" in o, allowed: members<T.RunRecord["outcome"]>({ running: true, ok: true, degraded: true, failed: true }) },

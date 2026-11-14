@@ -129,6 +129,22 @@ export function install() {
         return;
       case "report_open_in_browser":
         return;
+      case "onboarding_state":
+        return fx.onboardingState;
+      case "meta_connect":
+        return fx.metaConnected;
+      case "client_folder": {
+        // the generated folder, renamed after what was typed
+        const swap = (s: string) => s.replace(/[^/]*$/, String(a.name));
+        return { path: swap(fx.clientFolder.path), display: swap(fx.clientFolder.display) };
+      }
+      case "client_folder_pick":
+        return flags.has("pickcancel") ? null : fx.clientFolder;
+      case "client_accounts":
+        return fx.clientAccounts;
+      case "client_create":
+        if (refreshing) fail(fx.errors.refresh_busy);
+        return fx.workspace;
       default:
         throw { kind: "unknown_command", reason: `The mock has no command '${cmd}'.`, fix: null } satisfies AppError;
     }

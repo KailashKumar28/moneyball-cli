@@ -48,6 +48,7 @@ dependency of `ui/` (`pnpm add -D @tauri-apps/cli@^2`).
 | `run_view.rs` | `StepView` / `RunView`, shared by Today and Refresh |
 | `refresh.rs`, `refresh_end.rs` | refresh commands, forwarder, the finished event |
 | `turn.rs` | turn commands, forwarder with delta coalescing |
+| `onboarding.rs` | first launch, Connect Meta, Add a Client: the six onboarding commands over core's `onboarding` and `meta::check_token` |
 | `fixtures/` (tests only) | the pinned IPC fixtures and the no-slash-command check |
 
 Every command is a thin `#[tauri::command]` over a plain function that
@@ -88,7 +89,8 @@ forwarder thread that drains core's `Receiver` and returns at once.
 Safety.
 
 - No command returns or logs a token or key. The Meta token is read in
-  `refresh::start` and handed to core only.
+  `refresh::start` and `client_accounts` and handed to core only;
+  `meta_connect` stores it (trimmed) only once Meta accepts it.
 - `report_open_in_browser` canonicalizes the path and the workspace's
   `.moneyball/reports/`, and opens only an `.html` file under it.
 - The opener and the folder dialog are called from Rust. The capability
@@ -131,13 +133,17 @@ brought up to on 2026-11-12, review finding 9). Change the three together.
 
 ## Fixtures
 
-`ui/src/ipc/fixtures/*.json`, 22 files, with the UI helper's file names
+`ui/src/ipc/fixtures/*.json`, 27 files, with the UI helper's file names
 (`fixtures.ts` on `desktop-ui`). Built by `src/fixtures/` from a temp copy
 of `fixtures/` through the command bodies. Refresh and turn streams are
 core events fed by hand to the real forwarders, since a real run needs the
 network. The clock is held at 2026-10-09: the health reading's `today`,
 `state` and `refreshed_at` are set in the test, and `staleness`,
 `modified_at`, the report's generated-at stamp and the temp path are
-pinned. `errors.json` has one extra key, `no_workspace`.
+pinned. `errors.json` has one extra key, `no_workspace`. The onboarding
+shapes (`fixtures/onboarding.rs`) need Meta: its answers are built by hand
+and go through `connect`, `TokenCheck::read`, `onboarding::choices` and
+`account_choices`, so the words are core's; `client_folder` shows the
+home as `/Users/demo`.
 
 `ui/src/ipc/fixtures.ts` checks every file against `types.ts` under `tsc`.

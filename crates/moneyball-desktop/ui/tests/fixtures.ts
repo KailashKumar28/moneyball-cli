@@ -35,6 +35,11 @@ export const fx = {
   turnEvents: load<T.TurnEvent[]>("turn_events"),
   turnEventsOther: load<T.TurnEvent[]>("turn_events_other"),
   errors: load<Record<string, T.AppError>>("errors"),
+  onboardingState: load<T.OnboardingState>("onboarding_state"),
+  metaConnected: load<T.MetaConnected>("meta_connected"),
+  metaConnectedWarnings: load<T.MetaConnected>("meta_connected_warnings"),
+  clientFolder: load<T.Folder>("client_folder"),
+  clientAccounts: load<T.AccountChoice[]>("client_accounts"),
 };
 /** The first event of that type in a stream. */
 export function event<E extends { type: string }, K extends E["type"]>(events: E[], type: K): Extract<E, { type: K }> {
@@ -150,6 +155,9 @@ export const reportDaysLateMonth: T.ReportDay[] = fx.reportDays.map((d) => ({
 
 /** HAND-WRITTEN. A turn failed while the window was reloading: only the snapshot says so. */
 export const sessionFailed: T.SessionSnapshot = { ...fx.session, failed: event(fx.turnEventsOther, "failed").error };
+
+/** HAND-WRITTEN. Meta connected and one client known: the sheet opens on Add a Client, with no step line. */
+export const onboardingDone: T.OnboardingState = { ...fx.onboardingState, meta: "complete", clients: 1 };
 
 /** HAND-WRITTEN. The workspace after setup ran in the terminal: renamed, with one more product. */
 export const workspaceChanged: T.Workspace = { ...fx.workspace, name: "acme-homes-2", products: [...fx.workspace.products, "Lakeside"] };
