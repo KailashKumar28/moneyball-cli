@@ -2,6 +2,7 @@
 //! serialize (CRM figures null without CRM data), with the sentences
 //! around the table worded here so the interface composes none.
 
+use chrono::NaiveDate;
 use moneyball_core::brief::{self, Loaded, ProductRowsAndFeasibility};
 use moneyball_core::text::commas;
 use serde::Serialize;
@@ -51,15 +52,23 @@ fn feasibility_line(b: &ProductRowsAndFeasibility) -> String {
     )
 }
 
+fn staleness(snapshot_date: &str) -> Option<String> {
+    let days = brief::stale_days(snapshot_date)?;
+    let pulled = NaiveDate::parse_from_str(snapshot_date, "%Y-%m-%d").ok()?;
+    Some(format!(
+        "These numbers were pulled {} days ago, on {}. Refresh before acting on them.",
+        days,
+        pulled.format("%d %b")
+    ))
+}
+
 /// `crm_note`: the CRM sentence in this app's words
 /// (`front_end::crm_note`), not the terminal's that `loaded` carries.
 pub fn brief_view(loaded: Loaded, crm_note: Option<String>) -> BriefView {
     let b = loaded.brief.as_ref();
     BriefView {
-        // Core marks the warning for a terminal; the interface has its own.
-        staleness: b
-            .and_then(|b| brief::staleness_warning(&b.snapshot_date))
-            .map(|w| w.trim_start_matches("!! ").to_string()),
+        // Core words the warning for a terminal; this one names the button.
+        staleness: b.and_then(|b| staleness(&b.snapshot_date)),
         cpl_order: b.and_then(|b| brief::cpl_order(&b.rows)),
         caption: b.map(caption),
         feasibility_line: b.map(feasibility_line),

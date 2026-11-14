@@ -341,14 +341,19 @@ pub struct ProductRowsAndFeasibility {
 /// Shared by the CLI brief, the TUI cell, and the model-facing tool
 /// output so staleness is surfaced proactively, not on challenge.
 pub fn staleness_warning(snapshot_date: &str) -> Option<String> {
-    let d = NaiveDate::parse_from_str(snapshot_date, "%Y-%m-%d").ok()?;
-    let days = (chrono::Local::now().date_naive() - d).num_days();
-    (days >= crate::health::STALE_DAYS).then(|| {
+    stale_days(snapshot_date).map(|days| {
         format!(
             "!! snapshot is {} days old (dated {}) - fetch fresh data before acting on it",
             days, snapshot_date
         )
     })
+}
+
+/// Days since the snapshot was pulled, once that is old enough to warn.
+pub fn stale_days(snapshot_date: &str) -> Option<i64> {
+    let d = NaiveDate::parse_from_str(snapshot_date, "%Y-%m-%d").ok()?;
+    let days = (chrono::Local::now().date_naive() - d).num_days();
+    (days >= crate::health::STALE_DAYS).then_some(days)
 }
 
 pub fn run(cfg: &AppConfig, date: Option<&str>) -> Result<()> {

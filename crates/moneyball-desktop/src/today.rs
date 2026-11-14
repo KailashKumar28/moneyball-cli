@@ -3,7 +3,7 @@
 //! every path left out. Recomputed on each call (it reads the clock).
 
 use moneyball_core::brief::{self, Loaded};
-use moneyball_core::health::{Health, State as Fresh, STALE_DAYS};
+use moneyball_core::health::Health;
 use moneyball_core::landing::{self, DayBlock, DayReport, Headline};
 use moneyball_core::words::Tint;
 use moneyball_core::{schedule, AppConfig};
@@ -138,16 +138,14 @@ fn change(c: landing::Change) -> ChangeView {
     }
 }
 
-/// The footer's two lines, in the words of the TUI's context bar.
+/// The footer's two lines: the data day and the CRM day. How old the
+/// data is lives in the state above and on Today and Brief; an age here
+/// would not fit the line.
 fn footer(h: &Health) -> [String; 2] {
-    let (Some(day), Some(age)) = (h.data_day(), h.age_days()) else {
+    let Some(day) = h.data_day() else {
         return ["No data yet".into(), String::new()];
     };
-    let data = if age >= STALE_DAYS && h.state != Fresh::Pinned {
-        format!("Data {}, {} days old", day.format("%d %b"), age)
-    } else {
-        format!("Data {}", day.format(DAY))
-    };
+    let data = format!("Data {}", day.format(DAY));
     let crm = match (h.crm_connected, h.crm_day()) {
         (_, Some(d)) => format!("CRM {}", d.format("%d %b")),
         (false, None) => "CRM not connected".into(),

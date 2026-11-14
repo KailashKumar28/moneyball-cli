@@ -57,7 +57,7 @@ function Body({ v, onAction }: { v: BriefView; onAction: OnAction }) {
               {crm && <td>{num(r.rs_per_q)}</td>}
               {crm && <td>{pct(r.l_to_q)}</td>}
               <td>{num(r.goal)}</td>
-              {crm && <td>{num(r.gap, 1)}</td>}
+              {crm && <td>{num(r.gap, 2)}</td>}
             </tr>
           ))}
         </tbody>

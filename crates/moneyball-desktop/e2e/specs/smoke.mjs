@@ -24,6 +24,8 @@ describe("Moneyball for Mac, first launch", () => {
     const table = brief.$("table.t");
     await expect(table).toHaveText(expect.stringContaining("Namma Mane"));
     await expect(table).toHaveText(expect.stringContaining("Cityville"));
+    // The demo data is weeks old by the real clock: the warning names the button.
+    await expect(brief.$(".notice")).toHaveText(expect.stringContaining("Refresh before acting on them."));
     await shot("02-brief");
   });
 
@@ -110,7 +112,10 @@ describe("Moneyball for Mac, first launch", () => {
     await expect(said.$("strong")).toHaveText("Keep it running");
     // The tool row holds what the real brief tool returned.
     await tool.click();
-    await expect(advisor.$("pre.out")).toHaveText(expect.stringContaining("Namma Mane"));
+    const out = await advisor.$("pre.out");
+    await expect(out).toHaveText(expect.stringContaining("Namma Mane"));
+    // Long lines wrap: nothing hides behind a sideways scroll.
+    expect(await browser.execute((el) => el.scrollWidth <= el.clientWidth, out)).toBe(true);
     expect((await modelCalls()) - before).toBe(2);
     await expect(advisor.$(".sess button b")).toHaveText(QUESTION);
     await shot("11-advisor-answer");

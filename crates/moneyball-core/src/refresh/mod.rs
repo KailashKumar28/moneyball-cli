@@ -127,7 +127,7 @@ pub fn run(
                     cfg,
                     &mut run,
                     on_step,
-                    skipped("crm", "so CRM stays matched to the same day as Meta"),
+                    skipped("crm", "Meta failed; CRM waits so both stay on one day"),
                 );
                 push(cfg, &mut run, on_step, skipped("report", "no new data"));
                 return finish(cfg, run, Outcome::Failed);
